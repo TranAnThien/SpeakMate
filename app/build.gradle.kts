@@ -42,6 +42,10 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 androidComponents {
@@ -64,9 +68,6 @@ androidComponents {
                 BuildConfigField("String", "\"$escaped\"", null)
             }
         checkNotNull(variant.buildConfigFields).put(keyName, geminiApiKey)
-    }
-    testOptions {
-        unitTests.isReturnDefaultValues = true
     }
 }
 
