@@ -21,8 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.ui.call.components.CallAvatar
 import com.project.speakmate.ui.call.components.CallControls
 import com.project.speakmate.ui.call.components.CallEndConfirmation
@@ -54,17 +56,47 @@ fun CallScreen(
     onPlayDictionaryWord: () -> Unit,
     onSaveDictionaryWord: () -> Unit,
     modifier: Modifier = Modifier,
-    transcriptScrollState: ScrollState = rememberScrollState()
+    transcriptScrollState: ScrollState = rememberScrollState(),
+    onResumeCall: () -> Unit = {},
+    durationContent: @Composable () -> Unit = {},
+    audioMeter: @Composable (Modifier) -> Unit = {}
 ) {
     BoxWithConstraints(modifier.fillMaxSize().background(DesignColor.RoutingBackground)) {
         if (state.presentation == CallPresentation.FAILED) {
-            CallFailureContent(onRetry, onExit)
+            CallFailureContent(
+                description = stringResource(when (state.failure) {
+                    CallFailure.CONFIGURATION -> R.string.call_failure_configuration
+                    CallFailure.ACCESS -> R.string.call_failure_access
+                    CallFailure.QUOTA -> R.string.call_failure_quota
+                    CallFailure.MODEL -> R.string.call_failure_model
+                    CallFailure.TIMEOUT -> R.string.call_failure_timeout
+                    CallFailure.PROTOCOL -> R.string.call_failure_protocol
+                    CallFailure.MICROPHONE_PERMISSION -> R.string.call_failure_microphone
+                    CallFailure.AUDIO -> R.string.call_failure_audio
+                    CallFailure.PLAYBACK_BACKLOG -> R.string.call_failure_playback_backlog
+                    CallFailure.PAUSE_EXPIRED -> R.string.call_failure_pause_expired
+                    CallFailure.NETWORK, null -> R.string.call_failure_description
+                }),
+                isConnectionFailure = state.failure == CallFailure.NETWORK || state.failure == null,
+                retryLabel = when (state.failure) {
+                    CallFailure.CONFIGURATION, CallFailure.ACCESS, CallFailure.MODEL -> null
+                    CallFailure.MICROPHONE_PERMISSION -> stringResource(R.string.call_recheck_permission)
+                    else -> stringResource(R.string.call_retry_connection)
+                },
+                onRetry = onRetry,
+                onExit = onExit
+            )
         } else {
             val contentHeight = maxHeight.coerceAtLeast(720.dp)
             val isConnecting = state.presentation == CallPresentation.CONNECTING
+            val isPaused = state.presentation == CallPresentation.PAUSED
+            val isReady = state.presentation == CallPresentation.READY
             Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).height(contentHeight)) {
-                CallStatusHeader(state.title, state.durationLabel, state.presentation)
+                CallStatusHeader(state.title, state.presentation, durationContent = durationContent)
                 CallAvatar(state.presentation, Modifier.align(Alignment.Center).offset(y = if (isConnecting) (-16).dp else (-9.5).dp))
+                if (!isReady && !isConnecting && !isPaused) {
+                    audioMeter(Modifier.align(Alignment.Center).offset(y = 158.dp))
+                }
                 if (state.presentation == CallPresentation.BARGE_IN || state.presentation == CallPresentation.AUDIO_UNCLEAR) {
                     Text(stringResource(if (state.presentation == CallPresentation.BARGE_IN) R.string.call_barge_in_notice else R.string.call_audio_unclear_notice),
                         style = if (state.presentation == CallPresentation.BARGE_IN) DesignTypography.CallStatus else DesignTypography.Detail,
@@ -75,14 +107,30 @@ fun CallScreen(
                             .background(if (state.presentation == CallPresentation.BARGE_IN) DesignColor.PaleBlue else DesignColor.SecondaryButton,
                                 RoundedCornerShape(16.dp)).padding(16.dp))
                 }
-                if (state.presentation == CallPresentation.READY) {
+                if (isReady || isPaused) {
                     Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        PrimaryButton(stringResource(R.string.call_start), onStartCall)
-                        CallSecondaryButton(stringResource(R.string.call_return_to_preparation), onReturnToPreparation)
+                        when {
+                            isReady -> {
+                                PrimaryButton(stringResource(R.string.call_start), onStartCall)
+                                CallSecondaryButton(
+                                    stringResource(if (state.isStandaloneCall) R.string.call_exit else R.string.call_return_to_preparation),
+                                    onReturnToPreparation
+                                )
+                            }
+                            state.isResuming -> Text(
+                                stringResource(R.string.call_resuming),
+                                Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                style = DesignTypography.Body,
+                                color = DesignColor.Muted,
+                                textAlign = TextAlign.Center
+                            )
+                            else -> PrimaryButton(stringResource(R.string.call_continue), onResumeCall)
+                        }
+                        if (isPaused) CallSecondaryButton(stringResource(R.string.call_end), onEndCall)
                     }
                 } else {
-                    CallControls(state.presentation == CallPresentation.MUTED, isConnecting, onToggleMute, onEndCall,
+                    CallControls(state.isMuted, isConnecting, onToggleMute, onEndCall,
                         onOpenTranscript, Modifier.align(Alignment.BottomCenter), isTranscriptAvailable = state.isTranscriptAvailable)
                 }
             }
@@ -90,7 +138,16 @@ fun CallScreen(
                 CallTranscriptSheet(state.messages, state.dictionary, transcriptScrollState, onCloseTranscript, onSelectTranscriptWord,
                     onCloseDictionary, onPlayDictionaryWord, onSaveDictionaryWord)
             }
-            if (state.isEndConfirmationVisible) CallEndConfirmation(onConfirmEndCall, onContinueCall)
+            if (state.isEndConfirmationVisible) {
+                CallEndConfirmation(
+                    description = stringResource(
+                        if (state.isStandaloneCall) R.string.call_end_live_description else R.string.call_end_confirmation_description
+                    ),
+                    dismissLabel = stringResource(if (isPaused) R.string.call_back else R.string.call_continue),
+                    onConfirmEndCall = onConfirmEndCall,
+                    onContinueCall = onContinueCall
+                )
+            }
         }
     }
 }
