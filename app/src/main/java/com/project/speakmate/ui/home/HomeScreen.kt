@@ -23,11 +23,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AppBottomBar
 import com.project.speakmate.ui.components.LoadErrorDialog
@@ -56,7 +59,7 @@ fun HomeScreen(
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
         Column(Modifier.fillMaxSize()) {
-            HomeHeader(state.presentation == HomePresentation.LOADING, onOpenProfile)
+            HomeHeader(state.presentation == HomePresentation.LOADING, state.avatarUrl, onOpenProfile)
             Box(Modifier.weight(1f)) {
                 when (state.presentation) {
                     HomePresentation.LOADING -> HomeLoadingContent()
@@ -66,7 +69,7 @@ fun HomeScreen(
                     else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                         .padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (state.hasProfileSummary) HomeProfileCard(state.displayName, state.email, onOpenProfile)
+                        if (state.hasProfileSummary) HomeProfileCard(state.displayName, state.email, state.avatarUrl, onOpenProfile)
                         HomeLevelCard(state.level, state.presentation == HomePresentation.UNASSESSED)
                         when (state.presentation) {
                             HomePresentation.UNASSESSED -> HomeAssessmentCard(onStartAssessment)
@@ -101,26 +104,49 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(isLoading: Boolean, onOpenProfile: () -> Unit) {
+private fun HomeHeader(isLoading: Boolean, avatarUrl: String?, onOpenProfile: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Text(stringResource(R.string.app_name), style = DesignTypography.Brand, color = DesignColor.Primary)
-        Box(Modifier.size(40.dp).background(if (isLoading) DesignColor.Skeleton else DesignColor.IconBlue, CircleShape)
+        Box(Modifier.size(40.dp).background(if (isLoading) DesignColor.Skeleton else if (!avatarUrl.isNullOrEmpty()) DesignColor.Surface else DesignColor.IconBlue, CircleShape)
+            .clip(CircleShape)
             .clickable(enabled = !isLoading, onClick = onOpenProfile), contentAlignment = Alignment.Center) {
-            if (!isLoading) Image(painterResource(R.drawable.ic_navigation_profile), null, Modifier.size(24.dp),
-                colorFilter = ColorFilter.tint(DesignColor.Primary))
+            if (!isLoading) {
+                if (!avatarUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Image(painterResource(R.drawable.ic_navigation_profile), null, Modifier.size(24.dp),
+                        colorFilter = ColorFilter.tint(DesignColor.Primary))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun HomeProfileCard(displayName: String, email: String, onOpenProfile: () -> Unit) {
+private fun HomeProfileCard(displayName: String, email: String, avatarUrl: String?, onOpenProfile: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp))
         .clickable(onClick = onOpenProfile).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(48.dp).background(DesignColor.IconBlue, CircleShape), contentAlignment = Alignment.Center) {
-            Image(painterResource(R.drawable.ic_navigation_profile), null, Modifier.size(24.dp), colorFilter = ColorFilter.tint(DesignColor.Primary))
+
+        if (!avatarUrl.isNullOrEmpty()) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(48.dp).clip(CircleShape).background(DesignColor.Surface)
+            )
+        } else {
+            Box(Modifier.size(48.dp).background(DesignColor.IconBlue, CircleShape), contentAlignment = Alignment.Center) {
+                Image(painterResource(R.drawable.ic_navigation_profile), null, Modifier.size(24.dp), colorFilter = ColorFilter.tint(DesignColor.Primary))
+            }
         }
+
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(displayName, style = DesignTypography.Title, color = DesignColor.Text)
             Text(email, style = DesignTypography.Detail, color = DesignColor.Muted)
@@ -187,10 +213,10 @@ private fun HomeCompletionCard(
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.home_path_completed, level), style = DesignTypography.Title, color = DesignColor.Text)
         Text(if (isHighestLevel) stringResource(R.string.home_highest_level_description)
-            else stringResource(R.string.home_path_completed_description, nextLevel),
+        else stringResource(R.string.home_path_completed_description, nextLevel),
             style = DesignTypography.Detail, color = DesignColor.Muted)
         PrimaryButton(if (isHighestLevel) stringResource(R.string.home_review_content)
-            else stringResource(R.string.home_reassess, nextLevel), if (isHighestLevel) onReviewPath else onStartReassessment)
+        else stringResource(R.string.home_reassess, nextLevel), if (isHighestLevel) onReviewPath else onStartReassessment)
     }
 }
 

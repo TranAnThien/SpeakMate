@@ -81,7 +81,7 @@ private fun ProfileLongNameBottomScreenPreview() {
 private fun rememberProfilePreviewState(isLongName: Boolean): ProfileUiState = ProfileUiState(
     displayName = stringResource(if (isLongName) R.string.profile_preview_long_name else R.string.profile_preview_display_name),
     email = stringResource(R.string.profile_preview_email),
-    avatarRes = if (isLongName) null else R.drawable.img_profile_avatar,
+    avatarUrl = null,
     levelLabel = "A2",
     assessmentDescription = stringResource(R.string.profile_preview_assessment_description),
     skills = listOf(

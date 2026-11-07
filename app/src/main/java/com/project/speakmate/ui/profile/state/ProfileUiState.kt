@@ -9,7 +9,7 @@ import androidx.compose.runtime.Immutable
 data class ProfileUiState(
     val displayName: String = "",
     val email: String = "",
-    @param:DrawableRes val avatarRes: Int? = null,
+    val avatarUrl: String? = null,
     val levelLabel: String = "",
     val assessmentDescription: String = "",
     val skills: List<ProfileSkillUiState> = emptyList()
