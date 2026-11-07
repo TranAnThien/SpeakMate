@@ -27,7 +27,12 @@ import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
-fun CallStatusHeader(title: String, durationLabel: String, presentation: CallPresentation, modifier: Modifier = Modifier) {
+fun CallStatusHeader(
+    title: String,
+    presentation: CallPresentation,
+    modifier: Modifier = Modifier,
+    durationContent: @Composable () -> Unit
+) {
     Column(modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(title, style = DesignTypography.SectionTitle, color = DesignColor.Primary, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
@@ -35,7 +40,7 @@ fun CallStatusHeader(title: String, durationLabel: String, presentation: CallPre
             Box(Modifier.size(8.dp).background(when (presentation) {
                 CallPresentation.READY -> DesignColor.Placeholder
                 CallPresentation.CONNECTING, CallPresentation.PROCESSING -> DesignColor.CallBusy
-                CallPresentation.MUTED -> DesignColor.CallMuted
+                CallPresentation.MUTED, CallPresentation.PAUSED -> DesignColor.CallMuted
                 CallPresentation.AUDIO_UNCLEAR -> DesignColor.CallWarning
                 else -> DesignColor.CallActive
             }, CircleShape))
@@ -45,6 +50,7 @@ fun CallStatusHeader(title: String, durationLabel: String, presentation: CallPre
                 CallPresentation.PROCESSING -> R.string.call_processing
                 CallPresentation.SPEAKING -> R.string.call_speaking
                 CallPresentation.MUTED -> R.string.call_muted
+                CallPresentation.PAUSED -> R.string.call_paused
                 CallPresentation.BARGE_IN -> R.string.call_barge_in
                 CallPresentation.AUDIO_UNCLEAR -> R.string.call_audio_unclear
                 else -> R.string.call_listening
@@ -57,6 +63,13 @@ fun CallStatusHeader(title: String, durationLabel: String, presentation: CallPre
                 Image(painterResource(R.drawable.ic_placement_schedule), null, Modifier.size(20.dp))
                 Text(stringResource(R.string.call_timer_after_connection), style = DesignTypography.Navigation, color = DesignColor.Primary)
             }
-        } else Text(durationLabel, style = DesignTypography.CallTimer, color = DesignColor.Primary)
+        } else {
+            durationContent()
+        }
     }
+}
+
+@Composable
+fun CallDurationLabel(label: String, modifier: Modifier = Modifier) {
+    Text(label, modifier, style = DesignTypography.CallTimer, color = DesignColor.Primary)
 }

@@ -34,7 +34,13 @@ import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
-fun CallEndConfirmation(onConfirmEndCall: () -> Unit, onContinueCall: () -> Unit, modifier: Modifier = Modifier) {
+fun CallEndConfirmation(
+    description: String,
+    dismissLabel: String,
+    onConfirmEndCall: () -> Unit,
+    onContinueCall: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Surface(modifier.fillMaxSize(), color = DesignColor.Scrim) {
         Box(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
             Column(Modifier.widthIn(max = 348.dp).fillMaxWidth().offset(y = (-16).dp).verticalScroll(rememberScrollState())
@@ -46,14 +52,14 @@ fun CallEndConfirmation(onConfirmEndCall: () -> Unit, onContinueCall: () -> Unit
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.call_end_confirmation_title), style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.call_end_confirmation_description), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+                Text(description, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp)).background(DesignColor.CallDanger)
                     .clickable(onClick = onConfirmEndCall).padding(16.dp), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.call_confirm_end), style = DesignTypography.Button, color = DesignColor.Surface, textAlign = TextAlign.Center)
                 }
                 Spacer(Modifier.height(12.dp))
-                CallSecondaryButton(stringResource(R.string.call_continue), onContinueCall)
+                CallSecondaryButton(dismissLabel, onContinueCall)
             }
         }
     }

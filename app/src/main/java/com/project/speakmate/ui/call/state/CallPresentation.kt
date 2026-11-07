@@ -7,6 +7,7 @@ enum class CallPresentation {
     PROCESSING,
     SPEAKING,
     MUTED,
+    PAUSED,
     BARGE_IN,
     AUDIO_UNCLEAR,
     FAILED

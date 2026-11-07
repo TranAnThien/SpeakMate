@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.ui.call.components.CallDurationLabel
 import com.project.speakmate.ui.call.state.CallDictionaryUiState
 import com.project.speakmate.ui.call.state.CallPresentation
 import com.project.speakmate.ui.call.state.CallTranscriptMessageUiState
@@ -17,6 +18,7 @@ private fun CallReadyScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.READY),
+            durationContent = { CallDurationLabel("00:00") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -65,6 +67,7 @@ private fun CallListeningScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.LISTENING),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -89,6 +92,7 @@ private fun CallProcessingScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.PROCESSING),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -113,6 +117,7 @@ private fun CallSpeakingScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.SPEAKING),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -137,6 +142,7 @@ private fun CallMutedScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.MUTED),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -161,6 +167,7 @@ private fun CallBargeInScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.BARGE_IN),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -185,6 +192,7 @@ private fun CallAudioUnclearScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.AUDIO_UNCLEAR),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -233,6 +241,7 @@ private fun CallEndConfirmationScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.LISTENING).copy(isEndConfirmationVisible = true),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -257,6 +266,7 @@ private fun CallTranscriptScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.LISTENING).copy(isTranscriptVisible = true),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -281,6 +291,7 @@ private fun CallTranscriptBottomScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.LISTENING).copy(isTranscriptVisible = true),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -306,6 +317,7 @@ private fun CallDictionaryScreenPreview() {
     SpeakMateTheme {
         CallScreen(
             state = getCallPreviewState(CallPresentation.LISTENING).copy(isTranscriptVisible = true, dictionary = getCallDictionaryPreviewState()),
+            durationContent = { CallDurationLabel("02:18") },
             onStartCall = {},
             onReturnToPreparation = {},
             onToggleMute = {},
@@ -325,14 +337,50 @@ private fun CallDictionaryScreenPreview() {
     }
 }
 
+@Preview(name = "Voice Call / Paused", widthDp = 412, heightDp = 851, showBackground = true)
+@Composable
+private fun CallPausedScreenPreview() {
+    CallPausePreview(isResuming = false)
+}
+
+@Preview(name = "Voice Call / Resuming", widthDp = 412, heightDp = 851, showBackground = true)
+@Composable
+private fun CallResumingScreenPreview() {
+    CallPausePreview(isResuming = true)
+}
+
+@Composable
+private fun CallPausePreview(isResuming: Boolean) {
+    SpeakMateTheme {
+        CallScreen(
+            state = getCallPreviewState(CallPresentation.PAUSED).copy(
+                isTranscriptAvailable = false,
+                isStandaloneCall = true,
+                isResuming = isResuming
+            ),
+            durationContent = { CallDurationLabel("00:24") },
+            onStartCall = {},
+            onReturnToPreparation = {},
+            onToggleMute = {},
+            onEndCall = {},
+            onConfirmEndCall = {},
+            onContinueCall = {},
+            onRetry = {},
+            onExit = {},
+            onOpenTranscript = {},
+            onCloseTranscript = {},
+            onSelectTranscriptWord = { _, _, _ -> },
+            onCloseDictionary = {},
+            onPlayDictionaryWord = {},
+            onSaveDictionaryWord = {}
+        )
+    }
+}
+
 private fun getCallPreviewState(presentation: CallPresentation): CallUiState = CallUiState(
     presentation = presentation,
+    isMuted = presentation == CallPresentation.MUTED,
     title = "Điều chỉnh đơn gọi món",
-    durationLabel = when (presentation) {
-        CallPresentation.READY -> "00:00"
-        CallPresentation.CONNECTING -> ""
-        else -> "02:18"
-    },
     messages = listOf(
         CallTranscriptMessageUiState("turn_1", "Hello! How can I help you with your order?", false),
         CallTranscriptMessageUiState("turn_2", "Could I change my iced latte to a large?", true),
