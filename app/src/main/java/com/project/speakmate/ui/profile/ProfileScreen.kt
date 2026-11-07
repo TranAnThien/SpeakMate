@@ -49,7 +49,11 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "profile-summary", contentType = ProfileUiState::class) {
                 Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    ProfileIdentity(state.displayName, state.email, state.avatarRes)
+                    ProfileIdentity(
+                        displayName = state.displayName,
+                        email = state.email,
+                        avatarUrl = state.avatarUrl
+                    )
                     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(stringResource(R.string.profile_estimated_level, state.levelLabel), style = DesignTypography.Title, color = DesignColor.Text)

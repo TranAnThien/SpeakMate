@@ -1,5 +1,11 @@
 package com.project.speakmate.ui.home.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,8 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -30,9 +38,24 @@ import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun HomeLoadingContent(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "loading_rotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "loading_icon_rotation"
+    )
+
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
         Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Image(painterResource(R.drawable.ic_placement_progress), null, Modifier.size(16.dp))
+            Image(
+                painter = painterResource(R.drawable.ic_placement_progress),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp).rotate(rotation)
+            )
             Text(stringResource(R.string.home_loading), style = DesignTypography.Navigation, color = DesignColor.Muted)
         }
         Row(Modifier.fillMaxWidth().height(82.dp).background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),

@@ -13,7 +13,8 @@ data class HomeUiState(
     val unitTitle: String = "",
     val unitDescription: String = "",
     val displayName: String = "",
-    val email: String = ""
+    val email: String = "",
+    val avatarUrl: String? = null
 ) {
     val hasProfileSummary: Boolean get() = displayName.isNotBlank() || email.isNotBlank()
     val hasContinueAction: Boolean get() = presentation == HomePresentation.ACTIVE
