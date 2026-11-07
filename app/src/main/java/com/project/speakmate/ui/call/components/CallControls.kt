@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,6 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -46,7 +51,9 @@ fun CallControls(
             stringResource(if (isMuted) R.string.call_unmute else R.string.call_mute),
             if (isMuted) R.drawable.ic_placement_microphone else R.drawable.ic_placement_microphone_off,
             if (isMuted) DesignColor.IconBlue else DesignColor.Surface, DesignColor.Text, 56.dp, 24.dp, onToggleMute,
-            if (isTranscriptAvailable) Modifier.weight(1f) else Modifier.size(width = 108.dp, height = 110.dp)
+            if (isTranscriptAvailable) Modifier.weight(1f) else Modifier.size(width = 108.dp, height = 110.dp),
+            isToggled = isMuted,
+            toggleDescription = stringResource(R.string.call_mute)
         )
         CallControlItem(stringResource(if (isConnecting) R.string.call_cancel_connection else R.string.call_end),
             R.drawable.ic_call_end, DesignColor.CallDanger, DesignColor.Surface, 72.dp, 36.dp, onEndCall,
@@ -65,15 +72,27 @@ private fun CallControlItem(
     buttonSize: Dp,
     iconSize: Dp,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isToggled: Boolean? = null,
+    toggleDescription: String? = null
 ) {
-    Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+    val actionModifier = if (isToggled == null) modifier.clickable(onClick = onClick)
+    else modifier.toggleable(value = isToggled, role = Role.Switch, onValueChange = { onClick() })
+    val labeledModifier = if (toggleDescription == null) actionModifier
+    else actionModifier.semantics { contentDescription = toggleDescription }
+    Column(labeledModifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(80.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.size(buttonSize).background(background, CircleShape), contentAlignment = Alignment.Center) {
                 Image(painterResource(iconRes), null, Modifier.size(iconSize), colorFilter = ColorFilter.tint(iconColor))
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text(label, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+        Text(
+            label,
+            modifier = if (toggleDescription == null) Modifier else Modifier.clearAndSetSemantics {},
+            style = DesignTypography.Body,
+            color = DesignColor.Muted,
+            textAlign = TextAlign.Center
+        )
     }
 }

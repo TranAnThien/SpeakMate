@@ -29,9 +29,20 @@ import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
-fun CallFailureContent(onRetry: () -> Unit, onExit: () -> Unit, modifier: Modifier = Modifier) {
+fun CallFailureContent(
+    description: String,
+    isConnectionFailure: Boolean,
+    retryLabel: String?,
+    onRetry: () -> Unit,
+    onExit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        CallPageHeader(stringResource(R.string.call_failure_header), onExit, isClose = true)
+        CallPageHeader(
+            stringResource(if (isConnectionFailure) R.string.call_failure_header else R.string.call_failure_general_header),
+            onExit,
+            isClose = true
+        )
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val contentHeight = maxHeight
             Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
@@ -39,13 +50,15 @@ fun CallFailureContent(onRetry: () -> Unit, onExit: () -> Unit, modifier: Modifi
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     Image(painterResource(R.drawable.img_call_error), null, Modifier.size(200.dp))
                     Text(stringResource(R.string.call_failure_title), style = DesignTypography.Heading, color = DesignColor.Primary, textAlign = TextAlign.Center)
-                    Text(stringResource(R.string.call_failure_description), style = DesignTypography.Body, color = DesignColor.Text, textAlign = TextAlign.Center)
-                    Text(stringResource(R.string.call_failure_note), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+                    Text(description, style = DesignTypography.Body, color = DesignColor.Text, textAlign = TextAlign.Center)
+                    if (isConnectionFailure) {
+                        Text(stringResource(R.string.call_failure_note), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+                    }
                 }
             }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            PrimaryButton(stringResource(R.string.call_retry_connection), onRetry)
+            if (retryLabel != null) PrimaryButton(retryLabel, onRetry)
             CallSecondaryButton(stringResource(R.string.call_exit), onExit)
         }
     }

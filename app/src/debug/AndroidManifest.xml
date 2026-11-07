@@ -9,11 +9,6 @@
             android:exported="true"
             android:label="@string/call_debug_launcher"
             android:launchMode="singleTask"
-            android:taskAffinity="${applicationId}.debugcall">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:taskAffinity="${applicationId}.debugcall" />
     </application>
 </manifest>
