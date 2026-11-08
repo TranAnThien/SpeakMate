@@ -6,6 +6,8 @@ import androidx.compose.runtime.Immutable
 @Keep
 @Immutable
 data class UnitPreparationUiState(
+    val status: TrainingContentStatus = TrainingContentStatus.LOADING,
+    val errorMessage: String = "",
     val section: PreparationSection = PreparationSection.OVERVIEW,
     val contextLabel: String = "",
     val title: String = "",

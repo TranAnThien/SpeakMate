@@ -7,6 +7,7 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class TrainingPathUiState(
     val status: TrainingContentStatus = TrainingContentStatus.LOADING,
+    val errorMessage: String = "",
     val level: String = "",
     val goals: List<TrainingGoalUiState> = emptyList(),
     val canContinue: Boolean = false

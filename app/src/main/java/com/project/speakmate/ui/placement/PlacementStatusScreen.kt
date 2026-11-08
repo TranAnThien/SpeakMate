@@ -27,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
 import com.project.speakmate.ui.placement.components.PlacementAppBar
 import com.project.speakmate.ui.placement.components.PlacementBadge
 import com.project.speakmate.ui.placement.components.PlacementSecondaryButton
@@ -54,11 +55,15 @@ fun PlacementStatusScreen(
                     .background(DesignColor.Surface, RoundedCornerShape(24.dp)).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(64.dp).background(DesignColor.IconBlue, CircleShape), contentAlignment = Alignment.Center) {
-                        Image(painterResource(when (state.status) {
-                            PlacementStatus.PROCESSING -> R.drawable.ic_placement_progress
-                            PlacementStatus.CONFIRMATION -> R.drawable.ic_placement_pending
-                            PlacementStatus.INSUFFICIENT_EVIDENCE -> R.drawable.ic_placement_microphone_off
-                        }), null, Modifier.size(32.dp))
+                        if (state.status == PlacementStatus.PROCESSING) {
+                            SpeakMateLoadingIndicator(size = 32.dp)
+                        } else {
+                            Image(painterResource(when (state.status) {
+                                PlacementStatus.CONFIRMATION -> R.drawable.ic_placement_pending
+                                PlacementStatus.INSUFFICIENT_EVIDENCE -> R.drawable.ic_placement_microphone_off
+                                PlacementStatus.PROCESSING -> error("Handled above")
+                            }), null, Modifier.size(32.dp))
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
                     if (state.status != PlacementStatus.PROCESSING) {

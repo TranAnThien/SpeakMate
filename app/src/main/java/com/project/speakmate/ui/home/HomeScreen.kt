@@ -2,6 +2,7 @@ package com.project.speakmate.ui.home
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AppBottomBar
+import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.StateIllustration
@@ -93,7 +95,13 @@ fun HomeScreen(
                     } else PrimaryButton(stringResource(R.string.home_continue_path), onContinuePath)
                 }
             }
-            AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile)
+            AppBottomBar(
+                onOpenTrainingPath = onOpenTrainingPath,
+                onOpenPractice = onOpenPractice,
+                onOpenHistory = onOpenHistory,
+                onOpenProfile = onOpenProfile,
+                selectedDestination = AppDestination.TRAINING
+            )
         }
         if (state.presentation == HomePresentation.ERROR_DIALOG) {
             LoadErrorDialog(stringResource(R.string.home_error_dialog_title), stringResource(R.string.home_error_dialog_description),

@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -28,10 +29,11 @@ import com.project.speakmate.ui.auth.GoogleSignInScreen
 import com.project.speakmate.ui.history.HistoryScreen
 import com.project.speakmate.ui.history.state.HistoryUiState
 import com.project.speakmate.ui.home.HomeScreen
-import com.project.speakmate.ui.home.state.HomePresentation
-import com.project.speakmate.ui.home.state.HomeUiState
+import com.project.speakmate.ui.home.HomeViewModel
+import com.project.speakmate.ui.practice.PracticeViewModel
 import com.project.speakmate.ui.practice.ScenarioCatalogScreen
-import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
+import com.project.speakmate.ui.practice.ScenarioPreparationScreen
+import com.project.speakmate.ui.practice.ScenarioPreparationViewModel
 import com.project.speakmate.ui.profile.ProfileScreen
 import com.project.speakmate.ui.profile.ProfileViewModel
 import com.project.speakmate.ui.profile.SettingsScreen
@@ -39,8 +41,14 @@ import com.project.speakmate.ui.profile.state.ProfileSkillUiState
 import com.project.speakmate.ui.profile.state.ProfileUiState
 import com.project.speakmate.ui.profile.state.SettingsUiState
 import com.project.speakmate.ui.training.TrainingPathScreen
+import com.project.speakmate.ui.training.TrainingViewModel
+import com.project.speakmate.ui.training.UnitPreparationScreen
+import com.project.speakmate.ui.training.GoalDetailScreen
+import com.project.speakmate.ui.training.components.TrainingUnavailableContent
+import com.project.speakmate.ui.training.state.GoalDetailUiState
 import com.project.speakmate.ui.training.state.TrainingContentStatus
-import com.project.speakmate.ui.training.state.TrainingPathUiState
+import com.project.speakmate.ui.training.state.TrainingProgressStatus
+import com.project.speakmate.ui.call.CallRoute
 
 @Composable
 fun AppNavigation(
@@ -73,6 +81,7 @@ fun AppNavigation(
             val context = LocalContext.current
             val webClientId = stringResource(id = R.string.default_web_client_id)
 
+            @Suppress("DEPRECATION")
             val gso = remember {
                 GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                     .requestIdToken(webClientId)
@@ -125,38 +134,22 @@ fun AppNavigation(
         }
 
         composable("home") {
-            val homeUiState = remember(userProfile) {
-                val user = userProfile
-                if (user == null) {
-                    HomeUiState(presentation = HomePresentation.LOADING)
-                } else if (user.level == SpeakingLevel.NOT_ASSESSED) {
-                    HomeUiState(
-                        presentation = HomePresentation.UNASSESSED,
-                        level = user.level.name,
-                        displayName = user.displayName,
-                        email = user.email,
-                        avatarUrl = user.photoUrl
-                    )
-                } else {
-                    HomeUiState(
-                        presentation = HomePresentation.ACTIVE,
-                        level = user.level.name,
-                        displayName = user.displayName,
-                        email = user.email,
-                        avatarUrl = user.photoUrl
-                    )
-                }
+            val homeViewModel: HomeViewModel = hiltViewModel()
+            val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+
+            LaunchedEffect(userProfile) {
+                homeViewModel.updateUserData(userProfile)
             }
 
             HomeScreen(
                 state = homeUiState,
                 onStartAssessment = {},
-                onContinuePath = { navController.navigate("home") { launchSingleTop = true } },
+                onContinuePath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onStartReassessment = {},
-                onReviewPath = { navController.navigate("home") { launchSingleTop = true } },
+                onReviewPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onSelectScenario = { navController.navigate("practice") { launchSingleTop = true } },
-                onRetry = {},
-                onOpenTrainingPath = { navController.navigate("home") { launchSingleTop = true } },
+                onRetry = homeViewModel::retry,
+                onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
@@ -164,21 +157,30 @@ fun AppNavigation(
         }
 
         composable("training_path") {
-            val trainingState = remember(userProfile) {
-                TrainingPathUiState(
-                    status = TrainingContentStatus.CONTENT,
-                    level = userProfile?.level?.name ?: "CHƯA ĐÁNH GIÁ"
-                )
+            val trainingViewModel: TrainingViewModel = hiltViewModel()
+            val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
+
+            LaunchedEffect(userProfile) {
+                trainingViewModel.updateUserData(userProfile)
             }
+
             TrainingPathScreen(
                 state = trainingState,
-                onToggleGoal = {},
-                onOpenGoal = {},
-                onOpenUnit = {},
-                onContinuePath = {},
+                onToggleGoal = { goalId -> trainingViewModel.toggleGoalExpansion(goalId) },
+                onOpenGoal = { goalId -> navController.navigate("training_goal/$goalId") },
+                onOpenUnit = { unitId ->
+                    if (!unitId.startsWith("assessment:")) navController.navigate("training_unit/$unitId")
+                },
+                onContinuePath = {
+                    trainingState.goals.asSequence()
+                        .flatMap { it.units.asSequence() }
+                        .firstOrNull { it.status == TrainingProgressStatus.CURRENT && !it.isAssessment }
+                        ?.id
+                        ?.let { unitId -> navController.navigate("training_unit/$unitId") }
+                },
                 onShowLevelInformation = {},
-                onRetry = {},
-                onOpenTrainingPath = { navController.navigate("home") { launchSingleTop = true } },
+                onRetry = trainingViewModel::retry,
+                onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
@@ -186,17 +188,105 @@ fun AppNavigation(
         }
 
         composable("practice") {
+            val practiceViewModel: PracticeViewModel = hiltViewModel()
+            val practiceState by practiceViewModel.uiState.collectAsStateWithLifecycle()
+
             ScenarioCatalogScreen(
-                state = ScenarioCatalogUiState(),
-                onSelectCategory = {},
-                onSelectScenario = {},
-                onRetry = {},
+                state = practiceState,
+                onSelectCategory = { categoryId -> practiceViewModel.onCategorySelected(categoryId) },
+                onSelectScenario = { practiceId -> navController.navigate("practice_preparation/$practiceId") },
+                onRetry = practiceViewModel::loadCatalog,
                 onDismissError = {},
-                onOpenTrainingPath = { navController.navigate("home") { launchSingleTop = true } },
+                onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
             )
+        }
+
+        composable("training_unit/{unitId}") { entry ->
+            val unitId = entry.arguments?.getString("unitId").orEmpty()
+            val trainingViewModel: TrainingViewModel = hiltViewModel()
+            val preparationState by trainingViewModel.preparationState.collectAsStateWithLifecycle()
+            LaunchedEffect(unitId) { trainingViewModel.loadUnitPreparation(unitId) }
+            when (preparationState.status) {
+                TrainingContentStatus.CONTENT -> UnitPreparationScreen(
+                    state = preparationState,
+                    onBack = navController::popBackStack,
+                    onSelectSection = trainingViewModel::selectPreparationSection,
+                    onStartRoleplay = {},
+                    onPlayWord = {},
+                    onPlayPattern = {},
+                    onPlayExample = {}
+                )
+                TrainingContentStatus.LOADING -> TrainingUnavailableContent(isLoading = true, onRetry = { trainingViewModel.loadUnitPreparation(unitId) })
+                else -> TrainingUnavailableContent(isLoading = false, onRetry = { trainingViewModel.loadUnitPreparation(unitId) })
+            }
+        }
+
+        composable("training_goal/{goalId}") { entry ->
+            val goalId = entry.arguments?.getString("goalId").orEmpty()
+            val pathEntry = remember(entry) { navController.getBackStackEntry("training_path") }
+            val trainingViewModel: TrainingViewModel = hiltViewModel(pathEntry)
+            val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
+            val goal = trainingState.goals.firstOrNull { it.id == goalId }
+            val detailState = goal?.let {
+                GoalDetailUiState(
+                    title = it.title,
+                    description = it.summary,
+                    units = it.units,
+                    canPrepareCurrentUnit = it.units.any { unit ->
+                        unit.status == TrainingProgressStatus.CURRENT && !unit.isAssessment
+                    }
+                )
+            } ?: GoalDetailUiState()
+            GoalDetailScreen(
+                state = detailState,
+                onBack = navController::popBackStack,
+                onOpenUnit = { unitId ->
+                    if (!unitId.startsWith("assessment:")) navController.navigate("training_unit/$unitId")
+                },
+                onPrepareCurrentUnit = {
+                    goal?.units?.firstOrNull { unit ->
+                        unit.status == TrainingProgressStatus.CURRENT && !unit.isAssessment
+                    }?.id?.let { unitId -> navController.navigate("training_unit/$unitId") }
+                },
+                onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
+                onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
+                onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
+                onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
+            )
+        }
+
+        composable("practice_preparation/{practiceId}") { entry ->
+            val practiceId = entry.arguments?.getString("practiceId").orEmpty()
+            val preparationViewModel: ScenarioPreparationViewModel = hiltViewModel()
+            val preparationState by preparationViewModel.uiState.collectAsStateWithLifecycle()
+            ScenarioPreparationScreen(
+                state = preparationState,
+                onBack = navController::popBackStack,
+                onStartCall = {
+                    preparationViewModel.onStartCallPressed()
+                    navController.navigate("free_practice_call/$practiceId")
+                },
+                onRetry = preparationViewModel::loadScenarioDetails
+            )
+        }
+
+        composable("free_practice_call/{practiceId}") {
+            val preparationViewModel: ScenarioPreparationViewModel = hiltViewModel()
+            val preparationState by preparationViewModel.uiState.collectAsStateWithLifecycle()
+            val scenario = preparationState.scenario
+            if (scenario == null) {
+                ScenarioPreparationScreen(
+                    state = preparationState,
+                    onBack = navController::popBackStack,
+                    onStartCall = {},
+                    onRetry = preparationViewModel::loadScenarioDetails
+                )
+            } else {
+                CallRoute(scenario = scenario, onExit = navController::popBackStack)
+            }
         }
 
         composable("history") {
@@ -207,7 +297,7 @@ fun AppNavigation(
                 onStartPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onRetry = {},
                 onDismissError = {},
-                onOpenTrainingPath = { navController.navigate("home") { launchSingleTop = true } },
+                onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
@@ -217,55 +307,23 @@ fun AppNavigation(
         composable("profile") {
             val profileUiState = remember(userProfile) {
                 val user = userProfile
-
                 val skillsList = if (user?.latestAssessmentCriteria != null) {
                     val criteria = user.latestAssessmentCriteria
                     listOf(
-                        ProfileSkillUiState(
-                            id = "range",
-                            title = "Range (Từ vựng)",
-                            isPassed = criteria.rangeMet,
-                            description = "Sử dụng từ vựng đa dạng, linh hoạt"
-                        ),
-                        ProfileSkillUiState(
-                            id = "accuracy",
-                            title = "Accuracy (Chính xác)",
-                            isPassed = criteria.accuracyMet,
-                            description = "Ngữ pháp và phát âm đúng chuẩn"
-                        ),
-                        ProfileSkillUiState(
-                            id = "fluency",
-                            title = "Fluency (Trôi chảy)",
-                            isPassed = criteria.fluencyMet,
-                            description = "Khả năng duy trì lời nói tương đối trôi chảy"
-                        ),
-                        ProfileSkillUiState(
-                            id = "interaction",
-                            title = "Interaction (Tương tác)",
-                            isPassed = criteria.interactionMet,
-                            description = "Khả năng phản hồi và dẫn dắt"
-                        ),
-                        ProfileSkillUiState(
-                            id = "coherence",
-                            title = "Coherence (Gắn kết)",
-                            isPassed = criteria.coherenceMet,
-                            description = "Tính liên kết giữa các câu"
-                        )
+                        ProfileSkillUiState(id = "range", title = "Range (Từ vựng)", isPassed = criteria.rangeMet, description = "Sử dụng từ vựng đa dạng"),
+                        ProfileSkillUiState(id = "accuracy", title = "Accuracy (Chính xác)", isPassed = criteria.accuracyMet, description = "Ngữ pháp và phát âm chuẩn"),
+                        ProfileSkillUiState(id = "fluency", title = "Fluency (Trôi chảy)", isPassed = criteria.fluencyMet, description = "Khả năng duy trì lời nói"),
+                        ProfileSkillUiState(id = "interaction", title = "Interaction (Tương tác)", isPassed = criteria.interactionMet, description = "Khả năng phản hồi"),
+                        ProfileSkillUiState(id = "coherence", title = "Coherence (Gắn kết)", isPassed = criteria.coherenceMet, description = "Tính liên kết giữa các câu")
                     )
-                } else {
-                    emptyList()
-                }
+                } else emptyList()
 
                 ProfileUiState(
                     displayName = user?.displayName.orEmpty(),
                     email = user?.email.orEmpty(),
                     avatarUrl = user?.photoUrl,
                     levelLabel = user?.level?.name ?: "CHƯA ĐÁNH GIÁ",
-                    assessmentDescription = if (user?.level == SpeakingLevel.NOT_ASSESSED) {
-                        "Bạn chưa thực hiện bài đánh giá trình độ."
-                    } else {
-                        "Trình độ nói hiện tại của bạn."
-                    },
+                    assessmentDescription = if (user?.level == SpeakingLevel.NOT_ASSESSED) "Bạn chưa thực hiện bài đánh giá trình độ." else "Trình độ nói hiện tại của bạn.",
                     skills = skillsList
                 )
             }
@@ -274,7 +332,7 @@ fun AppNavigation(
                 state = profileUiState,
                 onOpenSettings = { navController.navigate("settings") },
                 onOpenVocabulary = {},
-                onOpenTrainingPath = { navController.navigate("home") { launchSingleTop = true } },
+                onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
@@ -285,13 +343,8 @@ fun AppNavigation(
             var isSignOutConfirmationVisible by remember { mutableStateOf(false) }
             val context = LocalContext.current
 
-            val settingsUiState = SettingsUiState(
-                languageLabel = "Tiếng Việt",
-                isSignOutConfirmationVisible = isSignOutConfirmationVisible
-            )
-
             SettingsScreen(
-                state = settingsUiState,
+                state = SettingsUiState(languageLabel = "Tiếng Việt", isSignOutConfirmationVisible = isSignOutConfirmationVisible),
                 onBack = { navController.popBackStack() },
                 onSelectLanguage = {},
                 onOpenPrivacyPolicy = {},
@@ -299,14 +352,11 @@ fun AppNavigation(
                 onRequestSignOut = { isSignOutConfirmationVisible = true },
                 onConfirmSignOut = {
                     isSignOutConfirmationVisible = false
+                    @Suppress("DEPRECATION")
                     val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
-                    val googleSignInClient = GoogleSignIn.getClient(context, gso)
-
-                    googleSignInClient.signOut().addOnCompleteListener {
+                    GoogleSignIn.getClient(context, gso).signOut().addOnCompleteListener {
                         profileViewModel.signOut {
-                            navController.navigate("auth") {
-                                popUpTo(0) { inclusive = true }
-                            }
+                            navController.navigate("auth") { popUpTo(0) { inclusive = true } }
                         }
                     }
                 },

@@ -1,11 +1,5 @@
 package com.project.speakmate.ui.auth
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,11 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -40,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.auth.state.GoogleSignInStatus
 import com.project.speakmate.ui.auth.state.GoogleSignInUiState
+import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.theme.SpeakMateTheme
@@ -105,17 +98,6 @@ fun GoogleSignInScreen(
 
 @Composable
 private fun GoogleSignInButton(status: GoogleSignInStatus, onSignIn: () -> Unit) {
-    val infiniteTransition = rememberInfiniteTransition(label = "loading_rotation")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "loading_icon_rotation"
-    )
-
     Row(
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
             .clip(RoundedCornerShape(16.dp)).background(DesignColor.Surface)
@@ -125,17 +107,11 @@ private fun GoogleSignInButton(status: GoogleSignInStatus, onSignIn: () -> Unit)
         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val iconModifier = if (status == GoogleSignInStatus.LOADING) {
-            Modifier.size(24.dp).rotate(rotation)
+        if (status == GoogleSignInStatus.LOADING) {
+            SpeakMateLoadingIndicator(size = 24.dp, strokeWidth = 2.dp)
         } else {
-            Modifier.size(24.dp)
+            Image(painterResource(R.drawable.ic_auth_google), null, Modifier.size(24.dp))
         }
-
-        Image(
-            painter = painterResource(if (status == GoogleSignInStatus.LOADING) R.drawable.ic_auth_progress else R.drawable.ic_auth_google),
-            contentDescription = null,
-            modifier = iconModifier
-        )
         Text(
             text = stringResource(if (status == GoogleSignInStatus.LOADING) R.string.auth_signing_in else R.string.auth_continue_with_google),
             color = DesignColor.Primary,

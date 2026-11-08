@@ -7,11 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
@@ -19,10 +19,13 @@ import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
 import com.project.speakmate.data.repository.AuthRepositoryImpl
 import com.project.speakmate.data.repository.UserRepositoryImpl
 import com.project.speakmate.ui.AppNavigation
+import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
 import com.project.speakmate.ui.auth.AuthViewModel
 import com.project.speakmate.ui.profile.ProfileViewModel
 import com.project.speakmate.ui.theme.SpeakMateTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val viewModelFactory = object : ViewModelProvider.Factory {
@@ -54,7 +57,7 @@ class MainActivity : ComponentActivity() {
 
                 if (currentUserId == "LOADING") {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        SpeakMateLoadingIndicator(size = 40.dp)
                     }
                 } else {
                     val startDest = if (currentUserId != null) "home" else "auth"
