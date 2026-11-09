@@ -273,19 +273,34 @@ fun AppNavigation(
             )
         }
 
-        composable("free_practice_call/{practiceId}") {
-            val preparationViewModel: ScenarioPreparationViewModel = hiltViewModel()
+        composable("free_practice_call/{practiceId}") { entry ->
+            val practiceId = entry.arguments?.getString("practiceId").orEmpty()
+            // Reuse the Preparation destination's ViewModel: the Scenario was loaded before
+            // navigation and its CTA state must be restored when the call closes.
+            val preparationEntry = remember(entry, practiceId) {
+                navController.getBackStackEntry("practice_preparation/$practiceId")
+            }
+            val preparationViewModel: ScenarioPreparationViewModel = hiltViewModel(preparationEntry)
             val preparationState by preparationViewModel.uiState.collectAsStateWithLifecycle()
             val scenario = preparationState.scenario
             if (scenario == null) {
                 ScenarioPreparationScreen(
                     state = preparationState,
-                    onBack = navController::popBackStack,
+                    onBack = {
+                        preparationViewModel.onCallExited()
+                        navController.popBackStack()
+                    },
                     onStartCall = {},
                     onRetry = preparationViewModel::loadScenarioDetails
                 )
             } else {
-                CallRoute(scenario = scenario, onExit = navController::popBackStack)
+                CallRoute(
+                    scenario = scenario,
+                    onExit = {
+                        preparationViewModel.onCallExited()
+                        navController.popBackStack()
+                    }
+                )
             }
         }
 

@@ -1,6 +1,5 @@
 package com.project.speakmate.ui.practice.state
 
-import androidx.annotation.DrawableRes
 import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 import com.project.speakmate.domain.model.Scenario
@@ -13,10 +12,8 @@ data class ScenarioPreparationUiState(
     val practiceId: String = "",
     val scenarioId: String = "",
     val title: String = "",
-    @param:DrawableRes val coverRes: Int? = null,
-    val context: String = "",
-    val aiRole: String = "",
-    val hint: String = "",
+    val description: String = "",
+    /** Retains the Scenario for call setup; promptTemplate is never rendered by this screen. */
     val scenario: Scenario? = null,
     val isInitializing: Boolean = false
 )

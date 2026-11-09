@@ -127,10 +127,7 @@ private fun ScenarioPreparationScreenPreview() {
         ScenarioPreparationScreen(
             state = ScenarioPreparationUiState(
                 title = stringResource(R.string.practice_preview_cafe_title),
-                coverRes = R.drawable.img_practice_cafe_cover,
-                context = stringResource(R.string.practice_preview_cafe_context),
-                aiRole = stringResource(R.string.practice_preview_cafe_ai_role),
-                hint = stringResource(R.string.practice_preview_cafe_hint),
+                description = stringResource(R.string.practice_preview_cafe_context),
                 isInitializing = false
             ),
             onBack = {},
@@ -146,10 +143,7 @@ private fun ScenarioInitializingScreenPreview() {
         ScenarioPreparationScreen(
             state = ScenarioPreparationUiState(
                 title = stringResource(R.string.practice_preview_cafe_title),
-                coverRes = R.drawable.img_practice_cafe_cover,
-                context = stringResource(R.string.practice_preview_cafe_context),
-                aiRole = stringResource(R.string.practice_preview_cafe_ai_role),
-                hint = stringResource(R.string.practice_preview_cafe_hint),
+                description = stringResource(R.string.practice_preview_cafe_context),
                 isInitializing = true
             ),
             onBack = {},

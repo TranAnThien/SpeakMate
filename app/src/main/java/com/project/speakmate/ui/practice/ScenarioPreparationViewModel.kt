@@ -48,10 +48,7 @@ class ScenarioPreparationViewModel @Inject constructor(
                     practiceId = practiceId,
                     scenarioId = scenario.scenarioId,
                     title = scenario.name,
-                    coverRes = null,
-                    context = scenario.description,
-                    aiRole = scenario.promptTemplate,
-                    hint = "Đọc bối cảnh và bắt đầu cuộc hội thoại khi bạn sẵn sàng.",
+                    description = scenario.description,
                     scenario = scenario,
                     isInitializing = false
                 )
@@ -65,6 +62,11 @@ class ScenarioPreparationViewModel @Inject constructor(
                 state.copy(isInitializing = true)
             } else state
         }
+    }
+
+    /** Restores the preparation CTA after its call destination has closed. */
+    fun onCallExited() {
+        _uiState.update { it.copy(isInitializing = false) }
     }
 
     private fun showError(error: Throwable) {

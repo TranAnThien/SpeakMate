@@ -339,8 +339,6 @@
     <string name="practice_error_dialog_description">Kiểm tra kết nối mạng rồi thử tải lại danh sách.</string>
     <string name="practice_preparation_header">Chuẩn bị nhập vai</string>
     <string name="practice_context_heading">Bối cảnh</string>
-    <string name="practice_ai_role_heading">Vai trò của AI</string>
-    <string name="practice_hint_heading">Gợi ý trước khi gọi</string>
     <string name="practice_start_call">Bắt đầu gọi</string>
     <string name="practice_summary_header">Tổng kết</string>
     <string name="practice_summary_title">Đã hoàn tất phiên luyện tập</string>
@@ -357,8 +355,6 @@
     <string name="history_today">HÔM NAY</string>
     <string name="history_yesterday">HÔM QUA</string>
     <string name="practice_preview_cafe_context">Bạn đang ở một quán cà phê và muốn gọi đồ uống theo sở thích.</string>
-    <string name="practice_preview_cafe_ai_role">Nhân viên quán</string>
-    <string name="practice_preview_cafe_hint">Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.</string>
     <string name="practice_preview_session_description">Thời lượng: 04:32\nTrạng thái: Đã lưu</string>
     <string name="practice_preview_cafe_title">Gọi món tại quán cà phê</string>
     <string name="practice_preview_cafe_role">AI · Nhân viên quán</string>
