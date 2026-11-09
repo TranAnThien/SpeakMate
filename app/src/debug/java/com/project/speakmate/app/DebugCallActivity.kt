@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
+import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.ui.call.CallRoute
 import com.project.speakmate.ui.theme.SpeakMateTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -21,7 +22,7 @@ class DebugCallActivity : ComponentActivity() {
         setContent {
             SpeakMateTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    CallRoute(scenario, onExit = ::finish, modifier = Modifier.padding(padding))
+                    CallRoute(scenario, CallActivityType.FREE_PRACTICE, onExit = ::finish, modifier = Modifier.padding(padding))
                 }
             }
         }

@@ -46,8 +46,8 @@ jobs:
       - name: Lint
         run: ./gradlew :app:lintDebug
 
-      - name: Unit test
-        run: ./gradlew :app:testDebugUnitTest
+      - name: Unit test + coverage
+        run: ./gradlew :app:createDebugUnitTestCoverageReport
 
       - name: Upload reports
         if: always()

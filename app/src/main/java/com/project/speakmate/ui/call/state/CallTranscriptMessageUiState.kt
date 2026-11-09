@@ -6,5 +6,7 @@ import androidx.compose.runtime.Immutable
 data class CallTranscriptMessageUiState(
     val id: String = "",
     val text: String = "",
-    val isUser: Boolean = false
+    val isUser: Boolean = false,
+    val isPartial: Boolean = false,
+    val isInterrupted: Boolean = false
 )

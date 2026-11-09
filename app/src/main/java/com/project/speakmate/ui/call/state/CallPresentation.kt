@@ -8,6 +8,8 @@ enum class CallPresentation {
     SPEAKING,
     MUTED,
     PAUSED,
+    RECONNECTING,
+    MICROPHONE_BLOCKED,
     BARGE_IN,
     AUDIO_UNCLEAR,
     FAILED

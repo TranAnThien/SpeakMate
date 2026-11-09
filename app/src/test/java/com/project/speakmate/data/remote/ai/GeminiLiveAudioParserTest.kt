@@ -37,6 +37,78 @@ class GeminiLiveAudioParserTest {
     }
 
     @Test
+    fun readsInputAndOutputTranscriptionInWireOrder() {
+        val frame = JSONObject(
+            """{"serverContent":{"outputTranscription":{"text":" Hello"},"inputTranscription":{"text":"Hi","finished":true}}}"""
+        )
+
+        assertEquals(
+            listOf(
+                GeminiLiveEvent.InputTranscription("Hi", true, GENERATION),
+                GeminiLiveEvent.OutputTranscription(" Hello", false, GENERATION)
+            ),
+            parser.readServerEvents(frame, GENERATION)
+        )
+    }
+
+    @Test
+    fun ignoresEmptyTranscriptionChunks() {
+        val frame = JSONObject("""{"serverContent":{"inputTranscription":{"text":""},"outputTranscription":{}}}""")
+
+        assertTrue(parser.readServerEvents(frame, GENERATION).isEmpty())
+    }
+
+    @Test
+    fun transcriptionOnlyFrameDoesNotEmitContent() {
+        val frame = JSONObject("""{"serverContent":{"outputTranscription":{"text":"Sure"}}}""")
+
+        assertNull(parser.readContent(frame, GENERATION))
+    }
+
+    @Test
+    fun readsInterruptionBeforeTurnCompletion() {
+        val frame = JSONObject("""{"serverContent":{"interrupted":true,"turnComplete":true}}""")
+        val events = parser.readServerEvents(frame, GENERATION)
+
+        assertEquals(GeminiLiveEvent.Interrupted(GENERATION), events.first())
+        assertTrue((events.last() as GeminiLiveEvent.Content).isTurnFinished)
+    }
+
+    @Test
+    fun readsGenerationCompleteAfterModelAudio() {
+        val frame = JSONObject(
+            """{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm","data":"AAA="}}]},"generationComplete":true}}"""
+        )
+        val events = parser.readServerEvents(frame, GENERATION)
+
+        assertTrue(events.first() is GeminiLiveEvent.Content)
+        assertEquals(GeminiLiveEvent.GenerationComplete(GENERATION), events.last())
+    }
+
+    @Test
+    fun readsResumptionHandleOnlyWhenResumable() {
+        val resumable = JSONObject("""{"sessionResumptionUpdate":{"newHandle":"handle-1","resumable":true}}""")
+        val pending = JSONObject("""{"sessionResumptionUpdate":{"resumable":false}}""")
+
+        assertEquals(GeminiLiveEvent.ResumptionUpdate("handle-1", true), parser.readResumptionUpdate(resumable))
+        assertEquals(GeminiLiveEvent.ResumptionUpdate("", false), parser.readResumptionUpdate(pending))
+    }
+
+    @Test
+    fun readsGoAwayTimeLeftAsMillis() {
+        assertEquals(GeminiLiveEvent.GoAway(9_500L), parser.readGoAway(JSONObject("""{"goAway":{"timeLeft":"9.5s"}}""")))
+        assertEquals(GeminiLiveEvent.GoAway(null), parser.readGoAway(JSONObject("""{"goAway":{}}""")))
+        assertEquals(GeminiLiveEvent.GoAway(null), parser.readGoAway(JSONObject("""{"goAway":{"timeLeft":"-1s"}}""")))
+    }
+
+    @Test
+    fun readsSetupCompleteAsFirstEvent() {
+        val frame = JSONObject("""{"setupComplete":{}}""")
+
+        assertEquals(listOf(GeminiLiveEvent.SetupComplete), parser.readServerEvents(frame, null))
+    }
+
+    @Test
     fun rejectsMisalignedPcm() {
         val frame = JSONObject(
             """{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AA=="}}]}}}"""
