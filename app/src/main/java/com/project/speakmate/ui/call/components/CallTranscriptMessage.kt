@@ -38,7 +38,7 @@ import com.project.speakmate.ui.theme.DesignTypography
 fun CallTranscriptMessage(
     message: CallTranscriptMessageUiState,
     dictionary: CallDictionaryUiState?,
-    onSelectWord: (String, String, Rect) -> Unit,
+    onSelectWord: (String, Int, String, Rect) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var textLayout by remember(message.id) { mutableStateOf<TextLayoutResult?>(null) }
@@ -51,7 +51,7 @@ fun CallTranscriptMessage(
             .background(if (message.isUser) DesignColor.TranscriptUser else DesignColor.ExampleSurface, RoundedCornerShape(16.dp)).padding(12.dp)) {
             BasicText(
                 text = message.text,
-                style = DesignTypography.Detail.copy(color = DesignColor.Text),
+                style = DesignTypography.Detail.copy(color = if (message.isPartial) DesignColor.Muted else DesignColor.Text),
                 onTextLayout = { textLayout = it },
                 modifier = Modifier.onGloballyPositioned { textCoordinates = it }.drawBehind {
                     val layout = textLayout
@@ -84,10 +84,13 @@ fun CallTranscriptMessage(
                         if (word.none { it.isLetterOrDigit() }) return@onLongPress
                         val bounds = layout.getBoundingBox(start)
                         val position = coordinates.localToWindow(Offset(bounds.left, bounds.top))
-                        onSelectWord(message.id, word, Rect(position.x, position.y, position.x + bounds.width, position.y + bounds.height))
+                        onSelectWord(message.id, start, word, Rect(position.x, position.y, position.x + bounds.width, position.y + bounds.height))
                     })
                 }
             )
+        }
+        if (message.isInterrupted) {
+            Text(stringResource(R.string.call_transcript_interrupted), style = DesignTypography.Caption, color = DesignColor.Muted)
         }
     }
 }

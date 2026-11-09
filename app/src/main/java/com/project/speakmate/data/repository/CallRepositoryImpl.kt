@@ -14,5 +14,7 @@ class CallRepositoryImpl @Inject constructor(private val session: CallSessionMan
     override fun setForeground(isForeground: Boolean) = session.setForeground(isForeground)
     override fun resumeCall() = session.resumeCall()
     override fun endCall() = session.endCall()
+    override fun playPronunciation(text: String) = session.playPronunciation(text)
+    override fun stopPronunciation() = session.stopPronunciation()
     override fun close() = session.close()
 }

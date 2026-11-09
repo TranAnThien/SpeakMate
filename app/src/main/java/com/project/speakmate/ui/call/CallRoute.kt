@@ -29,6 +29,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.ui.call.components.CallAudioVisualizer
 import com.project.speakmate.ui.call.components.CallDurationLabel
@@ -37,7 +38,7 @@ import com.project.speakmate.ui.call.state.MicrophonePermissionPresentation
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun CallRoute(scenario: Scenario, onExit: () -> Unit, modifier: Modifier = Modifier) {
+fun CallRoute(scenario: Scenario, activityType: CallActivityType, onExit: () -> Unit, modifier: Modifier = Modifier) {
     val viewModel: CallViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -61,7 +62,7 @@ fun CallRoute(scenario: Scenario, onExit: () -> Unit, modifier: Modifier = Modif
 
     fun startWithPermission() {
         shouldOpenSettings = false
-        viewModel.startCall(scenario)
+        viewModel.startCall(scenario, activityType)
     }
 
     fun requestStart() {
@@ -103,6 +104,8 @@ fun CallRoute(scenario: Scenario, onExit: () -> Unit, modifier: Modifier = Modif
         when {
             state.microphonePermission != null -> dismissPermission()
             state.isEndConfirmationVisible -> viewModel.dismissEndConfirmation()
+            state.dictionary != null -> viewModel.closeDictionary()
+            state.isTranscriptVisible -> viewModel.closeTranscript()
             state.presentation == CallPresentation.READY || state.presentation == CallPresentation.FAILED -> viewModel.exitCall()
             else -> viewModel.requestEndCall()
         }
@@ -148,14 +151,15 @@ fun CallRoute(scenario: Scenario, onExit: () -> Unit, modifier: Modifier = Modif
             onContinueCall = viewModel::dismissEndConfirmation,
             onRetry = ::requestStart,
             onExit = viewModel::exitCall,
-            onOpenTranscript = {},
-            onCloseTranscript = {},
-            onSelectTranscriptWord = { _, _, _ -> },
-            onCloseDictionary = {},
-            onPlayDictionaryWord = {},
+            onOpenTranscript = viewModel::openTranscript,
+            onCloseTranscript = viewModel::closeTranscript,
+            onSelectTranscriptWord = viewModel::selectWord,
+            onCloseDictionary = viewModel::closeDictionary,
+            onPlayDictionaryWord = viewModel::playDictionaryWord,
             onSaveDictionaryWord = {},
             modifier = modifier,
             onResumeCall = viewModel::resumeCall,
+            onRetryDictionary = viewModel::retryLookup,
             durationContent = {
                 if (state.presentation != CallPresentation.READY) {
                     CallLiveDuration(viewModel.durationLabel)
