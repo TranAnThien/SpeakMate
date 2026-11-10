@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
@@ -33,7 +34,16 @@ import com.project.speakmate.ui.training.state.PreparationSection
 @Composable
 fun PreparationOverviewContent(overview: PreparationOverviewUiState, onSelectSection: (PreparationSection) -> Unit) {
     Box(Modifier.fillMaxWidth().height(142.dp).clip(RoundedCornerShape(12.dp))) {
-        Image(painterResource(R.drawable.img_training_preparation_cafe), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        if (overview.imageUrl.isNotBlank()) {
+            AsyncImage(
+                model = overview.imageUrl,
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Image(painterResource(R.drawable.img_training_preparation_cafe), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        }
         Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 16.dp).padding(bottom = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(overview.scenarioTitle, style = DesignTypography.SectionTitle, color = DesignColor.Surface)

@@ -161,6 +161,10 @@ class TrainingViewModel @Inject constructor(
                 _preparationState.update { UnitPreparationUiState(status = TrainingContentStatus.ERROR, errorMessage = error.message.orEmpty()) }
                 return@launch
             }
+            val imageUrl = trainingRepository.getScenarioImageUrl(unit.scenarioId).getOrElse { error ->
+                _preparationState.update { UnitPreparationUiState(status = TrainingContentStatus.ERROR, errorMessage = error.message.orEmpty()) }
+                return@launch
+            }
 
             val vocabList = unit.preparation.vocabulary.map { vocab ->
                 PreparationVocabularyUiState(
@@ -206,6 +210,7 @@ class TrainingViewModel @Inject constructor(
                     overview = PreparationOverviewUiState(
                         scenarioTitle = scenario.name,
                         scenarioRoles = scenario.description,
+                        imageUrl = imageUrl,
                         communicativeFocus = unit.communicativeFocus,
                         modules = listOf(
                             PreparationModuleUiState(PreparationSection.VOCABULARY, "Từ vựng", "${vocabList.size} mục cần dùng"),

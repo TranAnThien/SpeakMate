@@ -12,7 +12,10 @@ data class ScenarioPreparationUiState(
     val practiceId: String = "",
     val scenarioId: String = "",
     val title: String = "",
-    val description: String = "",
+    val imageUrl: String = "",
+    val context: String = "",
+    val aiRole: String = "",
+    val preCallHint: String = "",
     /** Retains the Scenario for call setup; promptTemplate is never rendered by this screen. */
     val scenario: Scenario? = null,
     val isInitializing: Boolean = false

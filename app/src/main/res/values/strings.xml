@@ -339,6 +339,8 @@
     <string name="practice_error_dialog_description">Kiểm tra kết nối mạng rồi thử tải lại danh sách.</string>
     <string name="practice_preparation_header">Chuẩn bị nhập vai</string>
     <string name="practice_context_heading">Bối cảnh</string>
+    <string name="practice_ai_role_heading">Vai trò của AI</string>
+    <string name="practice_hint_heading">Gợi ý trước khi gọi</string>
     <string name="practice_start_call">Bắt đầu gọi</string>
     <string name="practice_summary_header">Tổng kết</string>
     <string name="practice_summary_title">Đã hoàn tất phiên luyện tập</string>

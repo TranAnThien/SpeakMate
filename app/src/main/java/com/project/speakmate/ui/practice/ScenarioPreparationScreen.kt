@@ -17,9 +17,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
@@ -66,7 +69,15 @@ fun ScenarioPreparationScreen(
             .padding(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Text(state.title, style = DesignTypography.Heading, color = DesignColor.Primary, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth())
-            PracticeTextCard(stringResource(R.string.practice_context_heading), state.description, false)
+            AsyncImage(
+                model = state.imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp))
+            )
+            PracticeTextCard(stringResource(R.string.practice_context_heading), state.context, false)
+            PracticeTextCard(stringResource(R.string.practice_ai_role_heading), state.aiRole, false)
+            PracticeTextCard(stringResource(R.string.practice_hint_heading), state.preCallHint, true)
         }
         Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp, vertical = 16.dp)) {
             if (state.isInitializing) {

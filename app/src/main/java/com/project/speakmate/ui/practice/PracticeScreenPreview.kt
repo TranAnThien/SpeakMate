@@ -127,7 +127,10 @@ private fun ScenarioPreparationScreenPreview() {
         ScenarioPreparationScreen(
             state = ScenarioPreparationUiState(
                 title = stringResource(R.string.practice_preview_cafe_title),
-                description = stringResource(R.string.practice_preview_cafe_context),
+                imageUrl = "https://images.unsplash.com/photo-1445116572660-236099ec97a0",
+                context = stringResource(R.string.practice_preview_cafe_context),
+                aiRole = "Nhân viên quán",
+                preCallHint = "Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.",
                 isInitializing = false
             ),
             onBack = {},
@@ -143,7 +146,10 @@ private fun ScenarioInitializingScreenPreview() {
         ScenarioPreparationScreen(
             state = ScenarioPreparationUiState(
                 title = stringResource(R.string.practice_preview_cafe_title),
-                description = stringResource(R.string.practice_preview_cafe_context),
+                imageUrl = "https://images.unsplash.com/photo-1445116572660-236099ec97a0",
+                context = stringResource(R.string.practice_preview_cafe_context),
+                aiRole = "Nhân viên quán",
+                preCallHint = "Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.",
                 isInitializing = true
             ),
             onBack = {},

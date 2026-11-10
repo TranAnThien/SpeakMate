@@ -36,8 +36,8 @@ class PracticeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(presentation = ScenarioCatalogPresentation.LOADING) }
 
-            allPractices = practiceRepository.getScenarioCatalog().getOrElse { error ->
-                _uiState.update { it.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
+            allPractices = practiceRepository.getScenarioCatalog().getOrElse {
+                _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
                 return@launch
             }
 
@@ -64,34 +64,33 @@ class PracticeViewModel @Inject constructor(
     }
 
     fun onCategorySelected(categoryId: String) {
-        _uiState.update { state ->
-            val filteredPractices = if (categoryId == "ALL") {
-                allPractices
-            } else {
-                allPractices.filter { it.category == categoryId }
-            }
-
-            state.copy(selectedCategoryId = categoryId)
-        }
+        _uiState.update { it.copy(selectedCategoryId = categoryId) }
         viewModelScope.launch {
             val filteredPractices = if (categoryId == "ALL") allPractices else allPractices.filter { it.category == categoryId }
             val filteredItems = mapToUiState(filteredPractices).getOrElse {
-                _uiState.update { it.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
+                _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
                 return@launch
             }
-            _uiState.update { it.copy(scenarios = filteredItems, presentation = if (filteredItems.isEmpty()) ScenarioCatalogPresentation.EMPTY else ScenarioCatalogPresentation.POPULATED) }
+            _uiState.update { state ->
+                state.copy(
+                    scenarios = filteredItems,
+                    presentation = if (filteredItems.isEmpty()) ScenarioCatalogPresentation.EMPTY else ScenarioCatalogPresentation.POPULATED
+                )
+            }
         }
     }
 
     private suspend fun mapToUiState(practices: List<com.project.speakmate.domain.model.FreePractice>): Result<List<ScenarioItemUiState>> = runCatching {
         coroutineScope { practices.map { fp -> async {
             val scenario = practiceRepository.getScenario(fp.scenarioId).getOrThrow()
+            val metadata = practiceRepository.getScenarioPreparationMetadata(scenario.scenarioId).getOrNull()
             ScenarioItemUiState(
                 id = fp.practiceId,
                 title = scenario.name,
                 categoryLabel = fp.category,
-                roleLabel = "Luyện hội thoại tự do",
+                roleLabel = metadata?.get("aiRole") ?: "Luyện hội thoại tự do",
                 description = scenario.description,
+                imageUrl = metadata?.get("imageUrl"),
                 imageRes = null
             )
         } }.awaitAll() }

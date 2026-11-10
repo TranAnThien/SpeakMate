@@ -42,13 +42,20 @@ class ScenarioPreparationViewModel @Inject constructor(
                 showError(error)
                 return@launch
             }
+            val metadata = practiceRepository.getScenarioPreparationMetadata(scenario.scenarioId).getOrElse { error ->
+                showError(error)
+                return@launch
+            }
             _uiState.update { state ->
                 state.copy(
                     presentation = com.project.speakmate.ui.practice.state.ScenarioPreparationPresentation.SUCCESS,
                     practiceId = practiceId,
                     scenarioId = scenario.scenarioId,
                     title = scenario.name,
-                    description = scenario.description,
+                    imageUrl = metadata.getValue("imageUrl"),
+                    context = metadata.getValue("uiContext"),
+                    aiRole = metadata.getValue("aiRole"),
+                    preCallHint = metadata.getValue("preCallHint"),
                     scenario = scenario,
                     isInitializing = false
                 )
