@@ -13,6 +13,7 @@ object AssessmentTestFixtures {
     const val AI_QUOTE = "We also have fresh orange juice."
     const val REQUIRED_ACTION_ID = "RA1_ORDER_DRINK"
     const val AUDIO_DURATION_MILLIS = 10_000L
+    const val AUDIO_ID = "0c47792b-559b-42de-8d20-cde570ca4040"
 
     fun getPassEvidenceSet(): Pair<AssessmentEvidence, SpeakingEvaluation> = getEvidence() to getEvaluation()
 
@@ -37,7 +38,8 @@ object AssessmentTestFixtures {
             getMessage("Thank you, that is all.", orderIndex = 3),
             getMessage(AI_QUOTE, SenderType.AI, orderIndex = 4)
         ),
-        audioDurationMillis = AUDIO_DURATION_MILLIS
+        audioDurationMillis = AUDIO_DURATION_MILLIS,
+        assessmentAudioId = AUDIO_ID
     )
 
     fun getMessage(

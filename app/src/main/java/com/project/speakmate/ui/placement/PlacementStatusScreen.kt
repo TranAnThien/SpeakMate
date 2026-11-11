@@ -58,35 +58,72 @@ fun PlacementStatusScreen(
                             PlacementStatus.PROCESSING -> R.drawable.ic_placement_progress
                             PlacementStatus.CONFIRMATION -> R.drawable.ic_placement_pending
                             PlacementStatus.INSUFFICIENT_EVIDENCE -> R.drawable.ic_placement_microphone_off
+                            PlacementStatus.UNDETERMINED -> R.drawable.ic_placement_microphone_off
                         }), null, Modifier.size(32.dp))
                     }
                     Spacer(Modifier.height(12.dp))
-                    if (state.status != PlacementStatus.PROCESSING) {
-                        PlacementBadge(stringResource(if (state.status == PlacementStatus.CONFIRMATION)
-                            R.string.placement_unconfirmed else R.string.placement_insufficient_evidence))
+                    val badgeRes = when (state.status) {
+                        PlacementStatus.PROCESSING -> null
+                        PlacementStatus.CONFIRMATION -> R.string.placement_unconfirmed
+                        PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_insufficient_evidence
+                        PlacementStatus.UNDETERMINED -> R.string.placement_undetermined_badge
+                    }
+                    if (badgeRes != null) {
+                        PlacementBadge(stringResource(badgeRes))
                         Spacer(Modifier.height(12.dp))
                     }
                     Text(stringResource(when (state.status) {
                         PlacementStatus.PROCESSING -> R.string.placement_processing_title
                         PlacementStatus.CONFIRMATION -> R.string.placement_confirmation_title
                         PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry_title
+                        PlacementStatus.UNDETERMINED -> R.string.placement_undetermined_title
                     }), style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
                     Text(stringResource(when (state.status) {
                         PlacementStatus.PROCESSING -> R.string.placement_processing_description
                         PlacementStatus.CONFIRMATION -> R.string.placement_confirmation_description
                         PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry_description
+                        PlacementStatus.UNDETERMINED -> R.string.placement_undetermined_description
                     }), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
-                    if (state.status != PlacementStatus.PROCESSING) {
+                    if (state.isTimeLimitReached) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(stringResource(R.string.placement_time_limit_notice), style = DesignTypography.Body,
+                            color = DesignColor.Muted, textAlign = TextAlign.Center)
+                    }
+                    val primaryTextRes = when (state.status) {
+                        PlacementStatus.PROCESSING -> null
+                        PlacementStatus.CONFIRMATION -> R.string.placement_continue
+                        PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry
+                        PlacementStatus.UNDETERMINED -> R.string.placement_home
+                    }
+                    if (primaryTextRes != null) {
                         Spacer(Modifier.height(12.dp))
                         PrimaryButton(
-                            text = stringResource(if (state.status == PlacementStatus.CONFIRMATION) R.string.placement_continue else R.string.placement_retry),
-                            onClick = if (state.status == PlacementStatus.CONFIRMATION) onContinueAssessment else onRetryAssessment
+                            text = stringResource(primaryTextRes),
+                            onClick = when (state.status) {
+                                PlacementStatus.PROCESSING -> onGoHome
+                                PlacementStatus.CONFIRMATION -> onContinueAssessment
+                                PlacementStatus.INSUFFICIENT_EVIDENCE -> onRetryAssessment
+                                PlacementStatus.UNDETERMINED -> onGoHome
+                            }
                         )
+                    }
+                    val secondaryTextRes = when (state.status) {
+                        PlacementStatus.PROCESSING -> null
+                        PlacementStatus.CONFIRMATION -> R.string.placement_later
+                        PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_home
+                        PlacementStatus.UNDETERMINED -> null
+                    }
+                    if (secondaryTextRes != null) {
                         Spacer(Modifier.height(12.dp))
                         PlacementSecondaryButton(
-                            text = stringResource(if (state.status == PlacementStatus.CONFIRMATION) R.string.placement_later else R.string.placement_home),
-                            onClick = if (state.status == PlacementStatus.CONFIRMATION) onDeferAssessment else onGoHome
+                            text = stringResource(secondaryTextRes),
+                            onClick = when (state.status) {
+                                PlacementStatus.PROCESSING -> onGoHome
+                                PlacementStatus.CONFIRMATION -> onDeferAssessment
+                                PlacementStatus.INSUFFICIENT_EVIDENCE -> onGoHome
+                                PlacementStatus.UNDETERMINED -> onGoHome
+                            }
                         )
                     }
                 }
@@ -116,5 +153,21 @@ private fun PlacementConfirmationScreenPreview() {
 private fun PlacementInsufficientEvidenceScreenPreview() {
     SpeakMateTheme {
         PlacementStatusScreen(PlacementStatusUiState(PlacementStatus.INSUFFICIENT_EVIDENCE), {}, {}, {}, {}, {})
+    }
+}
+
+@Preview(name = "Placement / Undetermined", widthDp = 412, heightDp = 835, showBackground = true)
+@Composable
+private fun PlacementUndeterminedScreenPreview() {
+    SpeakMateTheme {
+        PlacementStatusScreen(PlacementStatusUiState(PlacementStatus.UNDETERMINED), {}, {}, {}, {}, {})
+    }
+}
+
+@Preview(name = "Placement / Time limit", widthDp = 412, heightDp = 835, showBackground = true)
+@Composable
+private fun PlacementTimeLimitScreenPreview() {
+    SpeakMateTheme {
+        PlacementStatusScreen(PlacementStatusUiState(isTimeLimitReached = true), {}, {}, {}, {}, {})
     }
 }

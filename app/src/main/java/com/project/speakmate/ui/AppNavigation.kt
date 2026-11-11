@@ -13,10 +13,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navigation
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
@@ -32,6 +34,9 @@ import com.project.speakmate.ui.home.state.HomePresentation
 import com.project.speakmate.ui.home.state.HomeUiState
 import com.project.speakmate.ui.practice.ScenarioCatalogScreen
 import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
+import com.project.speakmate.ui.placement.PlacementDestination
+import com.project.speakmate.ui.placement.PlacementRoute
+import com.project.speakmate.ui.placement.PlacementViewModel
 import com.project.speakmate.ui.profile.ProfileScreen
 import com.project.speakmate.ui.profile.ProfileViewModel
 import com.project.speakmate.ui.profile.SettingsScreen
@@ -150,7 +155,7 @@ fun AppNavigation(
 
             HomeScreen(
                 state = homeUiState,
-                onStartAssessment = {},
+                onStartAssessment = { navController.navigate(PlacementDestination.GRAPH) { launchSingleTop = true } },
                 onContinuePath = { navController.navigate("home") { launchSingleTop = true } },
                 onStartReassessment = {},
                 onReviewPath = { navController.navigate("home") { launchSingleTop = true } },
@@ -161,6 +166,35 @@ fun AppNavigation(
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
             )
+        }
+
+        navigation(startDestination = PlacementDestination.INTRODUCTION, route = PlacementDestination.GRAPH) {
+            listOf(PlacementDestination.INTRODUCTION, PlacementDestination.CALL, PlacementDestination.STATUS, PlacementDestination.RESULT).forEach { destination ->
+                composable(destination) { entry ->
+                    val graphEntry = remember(entry) { navController.getBackStackEntry(PlacementDestination.GRAPH) }
+                    val placementViewModel: PlacementViewModel = hiltViewModel(graphEntry)
+                    PlacementRoute(
+                        viewModel = placementViewModel,
+                        currentDestination = destination,
+                        onNavigate = { nextDestination ->
+                            if (navController.currentBackStackEntry == entry) {
+                                navController.navigate(nextDestination) {
+                                    popUpTo(PlacementDestination.INTRODUCTION)
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        onHome = {
+                            if (navController.currentDestination?.parent?.route == PlacementDestination.GRAPH) {
+                                navController.navigate("home") {
+                                    popUpTo(PlacementDestination.GRAPH) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        }
+                    )
+                }
+            }
         }
 
         composable("training_path") {

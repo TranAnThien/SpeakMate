@@ -19,5 +19,8 @@ data class CallSessionState(
     val transcript: List<TranscriptMessage> = emptyList(),
     val interruption: CallInterruption? = null,
     val isFinalizing: Boolean = false,
-    val pronunciation: PronunciationState = PronunciationState.IDLE
+    val pronunciation: PronunciationState = PronunciationState.IDLE,
+    val assessmentAudioId: String? = null,
+    val assessmentAudioDurationMillis: Long? = null,
+    val hasReachedAssessmentAudioLimit: Boolean = false
 )

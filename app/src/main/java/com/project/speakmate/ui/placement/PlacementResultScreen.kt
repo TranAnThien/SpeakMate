@@ -61,7 +61,7 @@ fun PlacementResultScreen(
         }
         Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp)
             .padding(top = 16.dp, bottom = 24.dp)) {
-            PrimaryButton(stringResource(R.string.placement_start_training), onStartTrainingPath)
+            PrimaryButton(stringResource(R.string.placement_home), onStartTrainingPath)
         }
     }
 }

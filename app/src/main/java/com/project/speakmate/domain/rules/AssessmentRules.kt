@@ -40,7 +40,9 @@ object AssessmentRules {
             return InsufficientEvidenceReason.NOT_ENOUGH_SPEECH
         }
         val durationMillis = evidence.audioDurationMillis
-        if (durationMillis == null || durationMillis <= 0L) return InsufficientEvidenceReason.AUDIO_UNAVAILABLE
+        if (evidence.assessmentAudioId.isNullOrBlank() || durationMillis == null || durationMillis <= 0L) {
+            return InsufficientEvidenceReason.AUDIO_UNAVAILABLE
+        }
         return null
     }
 

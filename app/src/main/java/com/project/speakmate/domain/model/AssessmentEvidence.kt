@@ -8,5 +8,6 @@ data class AssessmentEvidence(
     val failure: CallFailure?,
     val hasUserSpeech: Boolean,
     val transcript: List<TranscriptMessage>,
-    val audioDurationMillis: Long?
+    val audioDurationMillis: Long?,
+    val assessmentAudioId: String? = null
 )

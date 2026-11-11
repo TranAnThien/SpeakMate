@@ -160,6 +160,17 @@ class AssessmentRulesTest {
     }
 
     @Test
+    fun durationWithoutAudioIdIsInsufficient() {
+        assertProblem(evidence.copy(assessmentAudioId = null), InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+        assertProblem(evidence.copy(assessmentAudioId = ""), InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+    }
+
+    @Test
+    fun audioIdWithoutDurationIsInsufficient() {
+        assertProblem(evidence.copy(audioDurationMillis = null), InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+    }
+
+    @Test
     fun zeroAndNegativeAudioAreInsufficient() {
         listOf(0L, -1L).forEach { assertProblem(evidence.copy(audioDurationMillis = it), InsufficientEvidenceReason.AUDIO_UNAVAILABLE) }
     }

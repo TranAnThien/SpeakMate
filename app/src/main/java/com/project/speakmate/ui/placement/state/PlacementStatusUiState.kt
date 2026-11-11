@@ -6,5 +6,6 @@ import androidx.compose.runtime.Immutable
 @Keep
 @Immutable
 data class PlacementStatusUiState(
-    val status: PlacementStatus = PlacementStatus.PROCESSING
+    val status: PlacementStatus = PlacementStatus.PROCESSING,
+    val isTimeLimitReached: Boolean = false
 )

@@ -81,7 +81,8 @@ class CallViewModel @Inject constructor(private val repository: CallRepository) 
                             (session.state == CallState.ACTIVE && !session.isFinalizing ||
                                 session.state == CallState.PAUSED && (it.presentation == CallPresentation.PAUSED ||
                                     it.presentation == CallPresentation.RECONNECTING)),
-                        isExitReady = it.isExiting && session.isClosed
+                        isExitReady = it.isExiting && session.isClosed,
+                        finishedSession = if (session.outcome != null) session else it.finishedSession
                     )
                 }
             }
@@ -104,11 +105,16 @@ class CallViewModel @Inject constructor(private val repository: CallRepository) 
         if (!isForeground) dismissEndConfirmation()
     }
 
-    fun startCall(scenario: Scenario, activityType: CallActivityType) {
+    fun startCall(scenario: Scenario, activityType: CallActivityType, communicativeGoal: String = "") {
         _uiState.update {
-            it.copy(microphonePermission = null, isTranscriptAvailable = activityType.isTranscriptAvailable)
+            it.copy(
+                microphonePermission = null,
+                isTranscriptAvailable = activityType.isTranscriptAvailable,
+                isStandaloneCall = activityType == CallActivityType.FREE_PRACTICE || activityType == CallActivityType.INITIAL_PLACEMENT,
+                finishedSession = null
+            )
         }
-        repository.startCall(scenario)
+        repository.startCall(scenario, activityType, communicativeGoal)
     }
 
     fun openTranscript() {

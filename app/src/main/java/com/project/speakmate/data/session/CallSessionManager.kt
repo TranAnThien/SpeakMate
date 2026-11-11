@@ -2,6 +2,7 @@ package com.project.speakmate.data.session
 
 import com.project.speakmate.data.remote.ai.GeminiLiveEvent
 import com.project.speakmate.domain.model.CallFailure
+import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.CallInterruption
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
@@ -69,12 +70,14 @@ class CallSessionManager(
         }
     }
 
-    fun startCall(scenario: Scenario) {
+    fun startCall(scenario: Scenario, activityType: CallActivityType, communicativeGoal: String) {
         val revision = mediaRevision.get()
         commands.trySend command@{
             if (!isMediaCurrent(revision) || !isForeground || session != null) return@command
             val media = try {
                 createMedia()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (_: Exception) {
                 mutableSessionState.value = CallSessionState(
                     state = CallState.FAILED,
@@ -83,10 +86,21 @@ class CallSessionManager(
                 )
                 return@command
             }
-            val current = CallSession(media, Channel(MAX_SERVER_EVENTS), createSessionScope(), nowMillis(), revision, scenario)
+            val current = CallSession(media, Channel(MAX_SERVER_EVENTS), createSessionScope(), nowMillis(), revision, scenario, activityType)
             session = current
             try {
+                current.media.configureAssessmentRecording(current.activityType) {
+                    commands.trySend {
+                        if (session === current && canOpenAudio(current)) {
+                            mutableSessionState.update { it.copy(hasReachedAssessmentAudioLimit = true) }
+                            requestEnd(current)
+                        }
+                    }
+                }
                 connect(current)
+            } catch (cancellation: CancellationException) {
+                finish(current)
+                throw cancellation
             } catch (_: Exception) {
                 finish(current, CallFailure.CONFIGURATION)
             }
@@ -763,7 +777,7 @@ class CallSessionManager(
         current.audioGeneration++
         current.connectionGeneration++
         activeAudioLevel.value = null
-        val terminalFailure = try {
+        var terminalFailure = try {
             current.media.close()
             failure
         } catch (cancellation: CancellationException) {
@@ -771,15 +785,26 @@ class CallSessionManager(
         } catch (_: Exception) {
             failure.default(CallFailure.AUDIO)
         }
+        var outcome = when {
+            terminalFailure != null -> CallOutcome.FAILED
+            isUserEnd && mutableSessionState.value.startedAtMillis != null && current.speechEvidence.hasUserSpeech -> CallOutcome.COMPLETED
+            else -> CallOutcome.CANCELLED
+        }
+        try {
+            current.media.finishAssessmentRecording(outcome)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            terminalFailure = terminalFailure.default(CallFailure.AUDIO)
+            outcome = CallOutcome.FAILED
+        }
         mutableSessionState.update {
             it.copy(
                 state = if (terminalFailure == null) CallState.ENDED else CallState.FAILED,
                 failure = terminalFailure,
-                outcome = when {
-                    terminalFailure != null -> CallOutcome.FAILED
-                    isUserEnd && it.startedAtMillis != null && current.speechEvidence.hasUserSpeech -> CallOutcome.COMPLETED
-                    else -> CallOutcome.CANCELLED
-                },
+                outcome = outcome,
+                assessmentAudioId = current.media.assessmentAudioId.takeIf { outcome == CallOutcome.COMPLETED },
+                assessmentAudioDurationMillis = current.media.assessmentAudioDurationMillis.takeIf { outcome == CallOutcome.COMPLETED },
                 isUserSpeaking = false,
                 isAiInterrupted = false,
                 hasUserSpeech = current.speechEvidence.hasUserSpeech,

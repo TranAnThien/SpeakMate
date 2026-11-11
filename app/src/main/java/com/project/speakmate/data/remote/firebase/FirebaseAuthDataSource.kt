@@ -6,9 +6,10 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import javax.inject.Inject
 
-class FirebaseAuthDataSource(
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+class FirebaseAuthDataSource @Inject constructor(
+    private val auth: FirebaseAuth
 ) {
     suspend fun signInWithGoogle(idToken: String): String {
         val credential = GoogleAuthProvider.getCredential(idToken, null)

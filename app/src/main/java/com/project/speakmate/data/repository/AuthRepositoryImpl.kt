@@ -3,9 +3,10 @@ package com.project.speakmate.data.repository
 import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.project.speakmate.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.Flow
+import javax.inject.Inject
 
-class AuthRepositoryImpl(
-    private val authDataSource: FirebaseAuthDataSource = FirebaseAuthDataSource()
+class AuthRepositoryImpl @Inject constructor(
+    private val authDataSource: FirebaseAuthDataSource
 ) : AuthRepository {
 
     override suspend fun signInWithGoogle(idToken: String): Result<String> {
