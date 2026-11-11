@@ -206,10 +206,8 @@ class TrainingViewModel @Inject constructor(
                     section = PreparationSection.OVERVIEW,
                     contextLabel = "Học liệu Bài học",
                     title = unit.title,
-                    description = unit.communicativeFocus,
+                    description = scenario.description,
                     overview = PreparationOverviewUiState(
-                        scenarioTitle = scenario.name,
-                        scenarioRoles = scenario.description,
                         imageUrl = imageUrl,
                         communicativeFocus = unit.communicativeFocus,
                         modules = listOf(

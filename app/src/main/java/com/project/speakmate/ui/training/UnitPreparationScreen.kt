@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -62,7 +63,8 @@ fun UnitPreparationScreen(
     val onOpenGrammar = remember(onSelectSection) { { onSelectSection(PreparationSection.GRAMMAR) } }
     val onOpenPatterns = remember(onSelectSection) { { onSelectSection(PreparationSection.SENTENCE_PATTERNS) } }
 
-    Column(modifier.fillMaxSize().background(DesignColor.Background)) {
+    // The app is edge-to-edge; reserve the status-bar area before rendering the app bar.
+    Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
         PreparationHeader(stringResource(when (state.section) {
             PreparationSection.OVERVIEW -> R.string.preparation_title
             PreparationSection.VOCABULARY -> R.string.preparation_vocabulary
@@ -88,11 +90,17 @@ fun UnitPreparationScreen(
 
             Text(state.contextLabel, style = DesignTypography.Label, color = DesignColor.Muted)
             Text(state.title, style = DesignTypography.PageTitle, color = DesignColor.Primary)
-            Text(state.description, style = DesignTypography.Detail, color = DesignColor.Muted)
+            if (state.section != PreparationSection.OVERVIEW) {
+                Text(state.description, style = DesignTypography.Detail, color = DesignColor.Muted)
+            }
             if (state.section != PreparationSection.OVERVIEW) PreparationTabs(state.section, onSelectSection)
 
             when (state.section) {
-                PreparationSection.OVERVIEW -> PreparationOverviewContent(state.overview, onSelectSection)
+                PreparationSection.OVERVIEW -> PreparationOverviewContent(
+                    overview = state.overview,
+                    context = state.description,
+                    onSelectSection = onSelectSection
+                )
                 PreparationSection.VOCABULARY -> {
                     PreparationNote(stringResource(R.string.preparation_audio_note))
                     state.vocabulary.forEach { word ->

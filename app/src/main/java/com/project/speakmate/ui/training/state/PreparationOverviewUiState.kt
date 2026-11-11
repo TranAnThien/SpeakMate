@@ -6,8 +6,6 @@ import androidx.compose.runtime.Immutable
 @Keep
 @Immutable
 data class PreparationOverviewUiState(
-    val scenarioTitle: String = "",
-    val scenarioRoles: String = "",
     val imageUrl: String = "",
     val communicativeFocus: String = "",
     val modules: List<PreparationModuleUiState> = emptyList(),

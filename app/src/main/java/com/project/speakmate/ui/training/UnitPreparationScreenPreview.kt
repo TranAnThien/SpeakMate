@@ -203,8 +203,6 @@ private fun getPreparationPreviewState(section: PreparationSection): UnitPrepara
 )
 
 private fun getPreparationOverviewPreviewState(): PreparationOverviewUiState = PreparationOverviewUiState(
-    scenarioTitle = "At the Coffee Shop",
-    scenarioRoles = "AI là nhân viên · Bạn là khách hàng",
     imageUrl = "https://images.unsplash.com/photo-1445116572660-236099ec97a0",
     communicativeFocus = "Yêu cầu thay đổi kích cỡ đồ uống hoặc nguyên liệu và xác nhận lại đơn sau khi điều chỉnh.",
     modules = listOf(

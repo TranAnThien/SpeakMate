@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,7 +61,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(state.presentation == HomePresentation.LOADING, state.avatarUrl, onOpenProfile)
             Box(Modifier.weight(1f)) {
                 when (state.presentation) {
