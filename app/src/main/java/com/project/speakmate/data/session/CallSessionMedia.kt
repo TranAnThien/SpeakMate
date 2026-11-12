@@ -3,11 +3,17 @@ package com.project.speakmate.data.session
 import com.project.speakmate.data.audio.PlaybackProgress
 import com.project.speakmate.data.remote.ai.GeminiLiveEvent
 import com.project.speakmate.domain.model.CallFailure
+import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.Scenario
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 
 interface CallSessionMedia {
+    val assessmentAudioId: String?
+    val assessmentAudioDurationMillis: Long?
+    fun configureAssessmentRecording(activityType: CallActivityType, onLimitReached: () -> Unit)
+    fun finishAssessmentRecording(outcome: CallOutcome)
     fun hasMicrophonePermission(): Boolean
     fun connect(scenario: Scenario, onEvent: (GeminiLiveEvent) -> Unit, onFailure: (CallFailure) -> Unit)
     fun reconnect(

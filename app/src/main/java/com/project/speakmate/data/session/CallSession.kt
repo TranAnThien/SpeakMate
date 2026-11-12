@@ -2,6 +2,7 @@ package com.project.speakmate.data.session
 
 import com.project.speakmate.data.remote.ai.GeminiLiveEvent
 import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.CallActivityType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -12,7 +13,8 @@ class CallSession(
     val scope: CoroutineScope,
     val callingAtMillis: Long,
     var mediaRevision: Long,
-    val scenario: Scenario
+    val scenario: Scenario,
+    val activityType: CallActivityType
 ) {
     var timeoutJob: Job? = null
     var resumeJob: Job? = null

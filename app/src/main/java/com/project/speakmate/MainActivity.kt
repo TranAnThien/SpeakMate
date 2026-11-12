@@ -18,6 +18,7 @@ import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
 import com.project.speakmate.data.repository.AuthRepositoryImpl
 import com.project.speakmate.data.repository.UserRepositoryImpl
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.project.speakmate.ui.AppNavigation
 import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
 import com.project.speakmate.ui.auth.AuthViewModel
@@ -27,35 +28,22 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    private val viewModelFactory = object : ViewModelProvider.Factory {
-        val authRepo = AuthRepositoryImpl(FirebaseAuthDataSource())
-        val userRepo = UserRepositoryImpl(FirestoreUserDataSource())
-
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
-                return AuthViewModel(authRepo, userRepo) as T
-            }
-            if (modelClass.isAssignableFrom(ProfileViewModel::class.java)) {
-                return ProfileViewModel(authRepo, userRepo) as T
-            }
-            throw IllegalArgumentException("Unknown ViewModel class")
-        }
+    companion object {
+        private const val LOADING_USER_ID = "LOADING"
     }
 
-    private val authViewModel: AuthViewModel by viewModels { viewModelFactory }
-    private val profileViewModel: ProfileViewModel by viewModels { viewModelFactory }
+    private val authViewModel: AuthViewModel by viewModels()
+    private val profileViewModel: ProfileViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             SpeakMateTheme {
-                val currentUserId by viewModelFactory.authRepo.getSignedInUserId()
-                    .collectAsState(initial = "LOADING")
+                val currentUserId by authViewModel.signedInUserId
+                    .collectAsStateWithLifecycle(initialValue = LOADING_USER_ID)
 
-                if (currentUserId == "LOADING") {
+                if (currentUserId == LOADING_USER_ID) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         SpeakMateLoadingIndicator(size = 40.dp)
                     }

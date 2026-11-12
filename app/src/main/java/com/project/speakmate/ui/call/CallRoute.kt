@@ -28,8 +28,11 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.ui.call.components.CallAudioVisualizer
 import com.project.speakmate.ui.call.components.CallDurationLabel
@@ -38,12 +41,22 @@ import com.project.speakmate.ui.call.state.MicrophonePermissionPresentation
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun CallRoute(scenario: Scenario, activityType: CallActivityType, onExit: () -> Unit, modifier: Modifier = Modifier) {
+fun CallRoute(
+    scenario: Scenario,
+    activityType: CallActivityType,
+    onExit: () -> Unit,
+    modifier: Modifier = Modifier,
+    communicativeGoal: String = "",
+    onCallFinished: ((CallSessionState) -> Unit)? = null
+) {
     val viewModel: CallViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = LocalActivity.current
     val onExitRequested by rememberUpdatedState(onExit)
+    val onFinished by rememberUpdatedState(onCallFinished)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val finishedSession = state.finishedSession
     val settingsUnavailable = stringResource(R.string.call_permission_settings_unavailable)
     val permission = Manifest.permission.RECORD_AUDIO
     var isAwaitingSettings by rememberSaveable { mutableStateOf(false) }
@@ -62,7 +75,7 @@ fun CallRoute(scenario: Scenario, activityType: CallActivityType, onExit: () -> 
 
     fun startWithPermission() {
         shouldOpenSettings = false
-        viewModel.startCall(scenario, activityType)
+        viewModel.startCall(scenario, activityType, communicativeGoal)
     }
 
     fun requestStart() {
@@ -99,6 +112,13 @@ fun CallRoute(scenario: Scenario, activityType: CallActivityType, onExit: () -> 
     }
     if (state.isExitReady) {
         LaunchedEffect(Unit) { onExitRequested() }
+    }
+    if (onCallFinished != null && finishedSession != null && !state.isExiting) {
+        LaunchedEffect(finishedSession, lifecycleOwner) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                onFinished?.invoke(finishedSession)
+            }
+        }
     }
     BackHandler {
         when {
@@ -141,8 +161,9 @@ fun CallRoute(scenario: Scenario, activityType: CallActivityType, onExit: () -> 
             modifier = modifier
         )
     } else {
+        val shouldShowDuration = state.presentation != CallPresentation.READY
         CallScreen(
-            state = remember(state, scenario.name) { state.copy(title = scenario.name) },
+            state = remember(state, scenario.name) { state.copy(title = scenario.name, finishedSession = null) },
             onStartCall = ::requestStart,
             onReturnToPreparation = viewModel::exitCall,
             onToggleMute = viewModel::toggleMute,
@@ -161,7 +182,7 @@ fun CallRoute(scenario: Scenario, activityType: CallActivityType, onExit: () -> 
             onResumeCall = viewModel::resumeCall,
             onRetryDictionary = viewModel::retryLookup,
             durationContent = {
-                if (state.presentation != CallPresentation.READY) {
+                if (shouldShowDuration) {
                     CallLiveDuration(viewModel.durationLabel)
                 }
             },

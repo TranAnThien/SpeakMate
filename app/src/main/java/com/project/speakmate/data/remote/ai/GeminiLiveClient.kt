@@ -36,7 +36,6 @@ class GeminiLiveClient(
         private const val PCM_MIME_TYPE = "audio/pcm"
         private const val INPUT_MIME_TYPE = "$PCM_MIME_TYPE;rate=${AppConstant.CALL_INPUT_SAMPLE_RATE}"
         private const val API_KEY_PARAMETER = "key"
-        private const val FREE_PRACTICE_INSTRUCTION = "Activity: Free Practice."
         private const val AUDIO_MODALITY = "AUDIO"
         private const val SETUP = "setup"
         private const val MODEL_FIELD = "model"
@@ -178,7 +177,7 @@ class GeminiLiveClient(
     }
 
     private fun buildSetup(scenario: Scenario, resumptionHandle: String?): String {
-        val instruction = "$FREE_PRACTICE_INSTRUCTION\n${scenario.name}\n" +
+        val instruction = "${scenario.name}\n" +
             "${scenario.description}\n${scenario.promptTemplate}"
         val generationConfig = JSONObject().put(RESPONSE_MODALITIES, JSONArray().put(AUDIO_MODALITY))
         val systemInstruction = JSONObject().put(PARTS, JSONArray().put(JSONObject().put(TEXT, instruction)))
