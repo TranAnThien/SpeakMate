@@ -70,9 +70,10 @@ class CallSessionMediaAdapter @Inject constructor(
             } catch (cancelled: CancellationException) {
                 try {
                     current.delete()
-                } finally {
-                    throw cancelled
+                } catch (deleteFailure: Exception) {
+                    cancelled.addSuppressed(deleteFailure)
                 }
+                throw cancelled
             } catch (failure: Exception) {
                 current.delete()
                 throw failure

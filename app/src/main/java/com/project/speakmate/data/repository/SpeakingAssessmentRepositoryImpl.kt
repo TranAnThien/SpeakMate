@@ -19,28 +19,19 @@ class SpeakingAssessmentRepositoryImpl @Inject constructor(
     private val client: GeminiAssessmentClient
 ) : SpeakingAssessmentRepository {
     override suspend fun evaluate(evidence: AssessmentEvidence): AssessmentOutcome = withContext(Dispatchers.IO) {
-        var cancellation: CancellationException? = null
-        try {
-            try {
-                evaluateEvidence(evidence)
-            } catch (cancelled: CancellationException) {
-                cancellation = cancelled
-                throw cancelled
-            } finally {
-                try {
-                    withContext(NonCancellable) {
-                        evidence.assessmentAudioId?.let(audioFiles::deleteAudio)
-                    }
-                } catch (cleanupFailure: Exception) {
-                    val cancelled = cancellation
-                    if (cancelled != null) throw cancelled
-                    throw cleanupFailure
-                }
-            }
+        val outcome = try {
+            evaluateEvidence(evidence)
         } catch (cancelled: CancellationException) {
+            deleteEvidenceAudio(evidence)
             throw cancelled
         } catch (_: Exception) {
+            null
+        }
+        val isAudioDeleted = deleteEvidenceAudio(evidence)
+        if (outcome == null || !isAudioDeleted) {
             AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED)
+        } else {
+            outcome
         }
     }
 
@@ -61,5 +52,16 @@ class SpeakingAssessmentRepositoryImpl @Inject constructor(
         }
         val evaluation = client.evaluate(evidence, wav)
         return AssessmentRules.assess(evidence, evaluation)
+    }
+
+    private suspend fun deleteEvidenceAudio(evidence: AssessmentEvidence): Boolean = withContext(NonCancellable) {
+        try {
+            evidence.assessmentAudioId?.let(audioFiles::deleteAudio)
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
     }
 }

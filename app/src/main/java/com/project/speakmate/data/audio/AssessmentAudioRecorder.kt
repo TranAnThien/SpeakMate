@@ -52,10 +52,11 @@ class AssessmentAudioRecorder(private val file: File) {
         } catch (failure: Exception) {
             try {
                 current.close()
-            } finally {
-                file.delete()
-                throw failure
+            } catch (closeFailure: Exception) {
+                failure.addSuppressed(closeFailure)
             }
+            file.delete()
+            throw failure
         }
     }
 
