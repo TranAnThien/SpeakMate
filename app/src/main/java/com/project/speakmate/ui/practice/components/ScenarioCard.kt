@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.practice.state.ScenarioItemUiState
 import com.project.speakmate.ui.theme.DesignColor
@@ -30,8 +31,16 @@ fun ScenarioCard(scenario: ScenarioItemUiState, onSelectScenario: () -> Unit, mo
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DesignColor.Surface)
         .clickable(onClick = onSelectScenario).padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        val imageUrl = scenario.imageUrl
         val imageRes = scenario.imageRes
-        if (imageRes != null) {
+        if (!imageUrl.isNullOrEmpty()) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+        } else if (imageRes != null) {
             Image(painterResource(imageRes), null, Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
         } else {
             Spacer(Modifier.size(72.dp))

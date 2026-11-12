@@ -13,6 +13,8 @@ class FirestoreAssessmentTaskDataSource @Inject constructor(private val firestor
     }
 
     suspend fun getAssessmentTasks(): List<AssessmentTaskDto> = withContext(Dispatchers.IO) {
-        firestore.collection(COLLECTION_NAME).get().await().documents.mapNotNull { it.toObject(AssessmentTaskDto::class.java) }
+        firestore.collection(COLLECTION_NAME).get().await().documents.mapNotNull { document ->
+            document.toObject(AssessmentTaskDto::class.java)?.withDocumentId(document.id)
+        }
     }
 }

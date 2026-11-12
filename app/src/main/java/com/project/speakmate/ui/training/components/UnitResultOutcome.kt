@@ -18,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.state.UnitResultPresentation
@@ -28,12 +29,12 @@ fun UnitResultOutcome(
     explanation: String,
     modifier: Modifier = Modifier
 ) {
-    val icon = when (presentation) {
+    val icon: Int? = when (presentation) {
         UnitResultPresentation.PASS -> R.drawable.ic_training_result_check
         UnitResultPresentation.PARTIAL -> R.drawable.ic_training_result_partial
         UnitResultPresentation.FAIL_REQUIRED_ACTION, UnitResultPresentation.FAIL_CRITERIA -> R.drawable.ic_call_close
         UnitResultPresentation.INSUFFICIENT_EVIDENCE -> R.drawable.ic_placement_microphone_off
-        UnitResultPresentation.PROCESSING -> R.drawable.ic_training_result_processing
+        UnitResultPresentation.PROCESSING -> null
     }
     val foreground = when (presentation) {
         UnitResultPresentation.PASS -> DesignColor.Success
@@ -49,7 +50,11 @@ fun UnitResultOutcome(
     }
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(56.dp).background(background, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(painterResource(icon), null, Modifier.size(32.dp), tint = foreground)
+            if (presentation == UnitResultPresentation.PROCESSING) {
+                SpeakMateLoadingIndicator(size = 32.dp)
+            } else {
+                Icon(painterResource(requireNotNull(icon)), null, Modifier.size(32.dp), tint = foreground)
+            }
         }
         Spacer(Modifier.height(12.dp))
         Text(stringResource(when (presentation) {

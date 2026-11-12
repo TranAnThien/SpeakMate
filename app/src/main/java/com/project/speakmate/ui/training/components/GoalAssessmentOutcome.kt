@@ -17,6 +17,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.state.GoalAssessmentPresentation
@@ -28,9 +29,9 @@ fun GoalAssessmentOutcome(
     description: String,
     modifier: Modifier = Modifier
 ) {
-    val icon = when (presentation) {
+    val icon: Int? = when (presentation) {
         GoalAssessmentPresentation.INTRODUCTION -> R.drawable.ic_training_assessment_coffee
-        GoalAssessmentPresentation.PROCESSING -> R.drawable.ic_training_result_processing
+        GoalAssessmentPresentation.PROCESSING -> null
         GoalAssessmentPresentation.PARTIAL -> R.drawable.ic_training_result_partial
         GoalAssessmentPresentation.FAIL_CRITERIA, GoalAssessmentPresentation.FAIL_REQUIRED_ACTION -> R.drawable.ic_call_close
         GoalAssessmentPresentation.INSUFFICIENT_EVIDENCE -> R.drawable.ic_placement_microphone_off
@@ -51,7 +52,11 @@ fun GoalAssessmentOutcome(
     }
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(56.dp).background(background, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(painterResource(icon), null, Modifier.size(32.dp), tint = foreground)
+            if (presentation == GoalAssessmentPresentation.PROCESSING) {
+                SpeakMateLoadingIndicator(size = 32.dp)
+            } else {
+                Icon(painterResource(requireNotNull(icon)), null, Modifier.size(32.dp), tint = foreground)
+            }
         }
         Spacer(Modifier.height(12.dp))
         Text(title, style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)

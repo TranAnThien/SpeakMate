@@ -12,5 +12,6 @@ data class ScenarioItemUiState(
     val categoryLabel: String = "",
     val roleLabel: String = "",
     val description: String = "",
+    val imageUrl: String? = null,
     @param:DrawableRes val imageRes: Int? = null
 )

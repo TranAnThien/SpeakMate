@@ -8,6 +8,8 @@ data class ScenarioDto(
     val description: String = "",
     val promptTemplate: String = ""
 ) {
+    fun withDocumentId(documentId: String): ScenarioDto = copy(scenarioId = scenarioId.ifBlank { documentId })
+
     fun toDomain(): Scenario? {
         if (scenarioId.isBlank() || name.isBlank() || description.isBlank() || promptTemplate.isBlank()) return null
         return Scenario(scenarioId, name, description, promptTemplate)

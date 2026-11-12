@@ -10,6 +10,8 @@ data class AssessmentTaskDto(
     val targetLevel: String = "",
     val communicativeGoal: String = ""
 ) {
+    fun withDocumentId(documentId: String): AssessmentTaskDto = copy(taskId = taskId.ifBlank { documentId })
+
     fun toDomain(): AssessmentTask? {
         if (taskId.isBlank() || scenarioId.isBlank()) return null
         val level = SpeakingLevel.entries.firstOrNull { it.name == targetLevel && it != SpeakingLevel.NOT_ASSESSED }

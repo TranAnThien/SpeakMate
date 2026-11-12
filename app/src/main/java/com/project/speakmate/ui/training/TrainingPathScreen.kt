@@ -31,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AppBottomBar
+import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.training.components.TrainingGoalCard
@@ -78,7 +79,11 @@ fun TrainingPathScreen(
                         }
                     }
                     TrainingContentStatus.LOADING -> TrainingUnavailableContent(isLoading = true, onRetry = onRetry)
-                    TrainingContentStatus.ERROR -> TrainingUnavailableContent(isLoading = false, onRetry = onRetry)
+                    TrainingContentStatus.ERROR -> TrainingUnavailableContent(
+                        isLoading = false,
+                        onRetry = onRetry,
+                        errorMessage = state.errorMessage
+                    )
                     TrainingContentStatus.ERROR_DIALOG -> Unit
                 }
             }
@@ -88,7 +93,13 @@ fun TrainingPathScreen(
                     PrimaryButton(stringResource(R.string.home_continue_path), onContinuePath)
                 }
             }
-            AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile)
+            AppBottomBar(
+                onOpenTrainingPath = onOpenTrainingPath,
+                onOpenPractice = onOpenPractice,
+                onOpenHistory = onOpenHistory,
+                onOpenProfile = onOpenProfile,
+                selectedDestination = AppDestination.TRAINING
+            )
         }
         if (state.status == TrainingContentStatus.ERROR_DIALOG) {
             LoadErrorDialog(stringResource(R.string.training_error_dialog_title), stringResource(R.string.training_error_dialog_description), onRetry)

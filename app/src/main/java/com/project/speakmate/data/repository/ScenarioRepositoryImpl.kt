@@ -17,8 +17,8 @@ class ScenarioRepositoryImpl @Inject constructor(private val firestore: Firebase
 
     override suspend fun getScenario(scenarioId: String): Scenario? = withContext(Dispatchers.IO) {
         if (scenarioId.isBlank() || PATH_SEPARATOR in scenarioId) return@withContext null
-        val scenario = firestore.collection(COLLECTION_NAME).document(scenarioId).get().await()
-            .toObject(ScenarioDto::class.java)?.toDomain()
+        val document = firestore.collection(COLLECTION_NAME).document(scenarioId).get().await()
+        val scenario = document.toObject(ScenarioDto::class.java)?.withDocumentId(document.id)?.toDomain()
         scenario?.takeIf { it.scenarioId == scenarioId }
     }
 }

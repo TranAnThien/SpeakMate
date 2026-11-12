@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
@@ -34,6 +37,7 @@ import com.project.speakmate.ui.training.components.PreparationTabs
 import com.project.speakmate.ui.training.components.PreparationVocabularyCard
 import com.project.speakmate.ui.training.state.PreparationSection
 import com.project.speakmate.ui.training.state.UnitPreparationUiState
+import com.project.speakmate.utils.extension.TtsManager
 
 @Composable
 fun UnitPreparationScreen(
@@ -47,15 +51,27 @@ fun UnitPreparationScreen(
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState()
 ) {
+    val context = LocalContext.current
+    val ttsManager = remember { TtsManager(context) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            ttsManager.shutdown()
+        }
+    }
+
     val onOpenGrammar = remember(onSelectSection) { { onSelectSection(PreparationSection.GRAMMAR) } }
     val onOpenPatterns = remember(onSelectSection) { { onSelectSection(PreparationSection.SENTENCE_PATTERNS) } }
-    Column(modifier.fillMaxSize().background(DesignColor.Background)) {
+
+    // The app is edge-to-edge; reserve the status-bar area before rendering the app bar.
+    Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
         PreparationHeader(stringResource(when (state.section) {
             PreparationSection.OVERVIEW -> R.string.preparation_title
             PreparationSection.VOCABULARY -> R.string.preparation_vocabulary
             PreparationSection.GRAMMAR -> R.string.preparation_grammar
             PreparationSection.SENTENCE_PATTERNS -> R.string.preparation_patterns
         }), onBack)
+
         Column(Modifier.weight(1f).fillMaxWidth().drawWithContent {
             drawContent()
             val scrollRange = scrollState.maxValue
@@ -71,18 +87,37 @@ fun UnitPreparationScreen(
             }
         }.verticalScroll(scrollState).padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)) {
+
             Text(state.contextLabel, style = DesignTypography.Label, color = DesignColor.Muted)
             Text(state.title, style = DesignTypography.PageTitle, color = DesignColor.Primary)
-            Text(state.description, style = DesignTypography.Detail, color = DesignColor.Muted)
+            if (state.section != PreparationSection.OVERVIEW) {
+                Text(state.description, style = DesignTypography.Detail, color = DesignColor.Muted)
+            }
             if (state.section != PreparationSection.OVERVIEW) PreparationTabs(state.section, onSelectSection)
+
             when (state.section) {
-                PreparationSection.OVERVIEW -> PreparationOverviewContent(state.overview, onSelectSection)
+                PreparationSection.OVERVIEW -> PreparationOverviewContent(
+                    overview = state.overview,
+                    context = state.description,
+                    onSelectSection = onSelectSection
+                )
                 PreparationSection.VOCABULARY -> {
                     PreparationNote(stringResource(R.string.preparation_audio_note))
                     state.vocabulary.forEach { word ->
                         key(word.id) {
-                            val onPlay = remember(word.id, onPlayWord) { { onPlayWord(word.id) } }
-                            val onExample = remember(word.id, onPlayExample) { { onPlayExample(word.id) } }
+                            val onPlay = remember(word.id, onPlayWord) {
+                                {
+                                    onPlayWord(word.id)
+                                    ttsManager.speak(word.word)
+                                }
+                            }
+                            val onExample = remember(word.id, onPlayExample) {
+                                {
+                                    onPlayExample(word.id)
+                                    // Gọi trực tiếp example.sentence vì example không phải là dạng List và không nullable
+                                    ttsManager.speak(word.example.sentence)
+                                }
+                            }
                             PreparationVocabularyCard(word, onPlay, onExample)
                         }
                     }
@@ -90,7 +125,12 @@ fun UnitPreparationScreen(
                 PreparationSection.GRAMMAR -> {
                     state.grammar.forEach { grammar ->
                         key(grammar.id) {
-                            val onExample = remember(grammar.id, onPlayExample) { { onPlayExample(grammar.id) } }
+                            val onExample = remember(grammar.id, onPlayExample) {
+                                {
+                                    onPlayExample(grammar.id)
+                                    ttsManager.speak(grammar.example.sentence)
+                                }
+                            }
                             PreparationGrammarCard(grammar, onExample)
                         }
                     }
@@ -99,8 +139,18 @@ fun UnitPreparationScreen(
                 PreparationSection.SENTENCE_PATTERNS -> {
                     state.sentencePatterns.forEach { pattern ->
                         key(pattern.id) {
-                            val onPlay = remember(pattern.id, onPlayPattern) { { onPlayPattern(pattern.id) } }
-                            val onExample = remember(pattern.id, onPlayExample) { { onPlayExample(pattern.id) } }
+                            val onPlay = remember(pattern.id, onPlayPattern) {
+                                {
+                                    onPlayPattern(pattern.id)
+                                    ttsManager.speak(pattern.pattern)
+                                }
+                            }
+                            val onExample = remember(pattern.id, onPlayExample) {
+                                {
+                                    onPlayExample(pattern.id)
+                                    ttsManager.speak(pattern.example.sentence)
+                                }
+                            }
                             PreparationPatternCard(pattern, onPlay, onExample)
                         }
                     }

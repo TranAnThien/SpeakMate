@@ -12,12 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.extension.parseMarkdownBold
 
 @Composable
 fun PracticeTextCard(title: String, text: String, isHighlighted: Boolean, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().background(if (isHighlighted) DesignColor.SecondaryButton else DesignColor.Surface,
         RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, style = DesignTypography.Title, color = DesignColor.Text)
-        Text(text, style = DesignTypography.Detail, color = if (isHighlighted) DesignColor.Primary else DesignColor.Muted)
+        Text(text.parseMarkdownBold(), style = DesignTypography.Detail, color = if (isHighlighted) DesignColor.Primary else DesignColor.Muted)
     }
 }

@@ -38,4 +38,14 @@ class ScenarioDtoTest {
     fun blankPromptDoesNotCreateAUsableScenario() {
         assertNull(scenario.copy(promptTemplate = "\t").toDomain())
     }
+
+    @Test
+    fun missingScenarioIdFieldFallsBackToDocumentId() {
+        assertEquals("doc-cafe", scenario.copy(scenarioId = "").withDocumentId("doc-cafe").toDomain()?.scenarioId)
+    }
+
+    @Test
+    fun storedScenarioIdFieldWinsOverDocumentId() {
+        assertEquals("cafe-a2", scenario.withDocumentId("doc-cafe").toDomain()?.scenarioId)
+    }
 }

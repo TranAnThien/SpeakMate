@@ -64,4 +64,14 @@ class AssessmentTaskDtoTest {
         assertNotNull(AssessmentTaskDto())
         assertNull(AssessmentTaskDto().toDomain())
     }
+
+    @Test
+    fun missingTaskIdFieldFallsBackToDocumentId() {
+        assertEquals("doc-a2", checkNotNull(task.copy(taskId = "").withDocumentId("doc-a2").toDomain()).taskId)
+    }
+
+    @Test
+    fun storedTaskIdFieldWinsOverDocumentId() {
+        assertEquals("assessment-a2", checkNotNull(task.withDocumentId("doc-a2").toDomain()).taskId)
+    }
 }
