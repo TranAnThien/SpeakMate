@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
@@ -31,14 +32,27 @@ import com.project.speakmate.ui.training.state.PreparationOverviewUiState
 import com.project.speakmate.ui.training.state.PreparationSection
 
 @Composable
-fun PreparationOverviewContent(overview: PreparationOverviewUiState, onSelectSection: (PreparationSection) -> Unit) {
+fun PreparationOverviewContent(
+    overview: PreparationOverviewUiState,
+    context: String,
+    onSelectSection: (PreparationSection) -> Unit
+) {
     Box(Modifier.fillMaxWidth().height(142.dp).clip(RoundedCornerShape(12.dp))) {
-        Image(painterResource(R.drawable.img_training_preparation_cafe), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-        Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 16.dp).padding(bottom = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(overview.scenarioTitle, style = DesignTypography.SectionTitle, color = DesignColor.Surface)
-            Text(overview.scenarioRoles, style = DesignTypography.Detail, color = DesignColor.Surface)
+        if (overview.imageUrl.isNotBlank()) {
+            AsyncImage(
+                model = overview.imageUrl,
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Image(painterResource(R.drawable.img_training_preparation_cafe), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
         }
+    }
+    Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.preparation_context), style = DesignTypography.Label, color = DesignColor.Muted)
+        Text(context.removePrefix("Bối cảnh:").trim(), style = DesignTypography.Detail, color = DesignColor.Text)
     }
     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -2,6 +2,7 @@ package com.project.speakmate.ui.home
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AppBottomBar
+import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.StateIllustration
@@ -58,7 +61,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(state.presentation == HomePresentation.LOADING, state.avatarUrl, onOpenProfile)
             Box(Modifier.weight(1f)) {
                 when (state.presentation) {
@@ -93,7 +96,13 @@ fun HomeScreen(
                     } else PrimaryButton(stringResource(R.string.home_continue_path), onContinuePath)
                 }
             }
-            AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile)
+            AppBottomBar(
+                onOpenTrainingPath = onOpenTrainingPath,
+                onOpenPractice = onOpenPractice,
+                onOpenHistory = onOpenHistory,
+                onOpenProfile = onOpenProfile,
+                selectedDestination = AppDestination.TRAINING
+            )
         }
         if (state.presentation == HomePresentation.ERROR_DIALOG) {
             LoadErrorDialog(stringResource(R.string.home_error_dialog_title), stringResource(R.string.home_error_dialog_description),

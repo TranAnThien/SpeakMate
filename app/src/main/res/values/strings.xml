@@ -118,6 +118,7 @@
     <string name="preparation_structure">CẤU TRÚC</string>
     <string name="preparation_usage">KHI NÀO DÙNG?</string>
     <string name="preparation_communicative_focus">MỤC TIÊU GIAO TIẾP</string>
+    <string name="preparation_context">BỐI CẢNH</string>
     <string name="preparation_modules_heading">NỘI DUNG ÔN TẬP · 3 PHẦN</string>
     <string name="preparation_required_actions">VIỆC CẦN THỰC HIỆN KHI GỌI</string>
     <string name="preparation_open_content">Xem nội dung →</string>
@@ -376,8 +377,6 @@
     <string name="history_today">HÔM NAY</string>
     <string name="history_yesterday">HÔM QUA</string>
     <string name="practice_preview_cafe_context">Bạn đang ở một quán cà phê và muốn gọi đồ uống theo sở thích.</string>
-    <string name="practice_preview_cafe_ai_role">Nhân viên quán</string>
-    <string name="practice_preview_cafe_hint">Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.</string>
     <string name="practice_preview_session_description">Thời lượng: 04:32\nTrạng thái: Đã lưu</string>
     <string name="practice_preview_cafe_title">Gọi món tại quán cà phê</string>
     <string name="practice_preview_cafe_role">AI · Nhân viên quán</string>
