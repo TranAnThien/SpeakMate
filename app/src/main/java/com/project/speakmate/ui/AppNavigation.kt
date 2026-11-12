@@ -23,6 +23,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.common.api.ApiException
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.auth.AuthViewModel
 import com.project.speakmate.ui.auth.GoogleSignInScreen
@@ -296,6 +297,7 @@ fun AppNavigation(
             } else {
                 CallRoute(
                     scenario = scenario,
+                    activityType = CallActivityType.FREE_PRACTICE,
                     onExit = {
                         preparationViewModel.onCallExited()
                         navController.popBackStack()
