@@ -13,5 +13,7 @@ interface CallRepository {
     fun setForeground(isForeground: Boolean)
     fun resumeCall()
     fun endCall()
+    fun playPronunciation(text: String)
+    fun stopPronunciation()
     fun close()
 }

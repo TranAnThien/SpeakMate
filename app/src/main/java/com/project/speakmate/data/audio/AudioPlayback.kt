@@ -5,7 +5,9 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.SystemClock
 import com.project.speakmate.utils.AppConstant
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -23,11 +25,44 @@ class AudioPlayback {
 
     private val chunks = Channel<ByteArray>(MAX_QUEUED_CHUNKS)
     private val queuedBytes = AtomicInteger()
+    private val clearGeneration = AtomicLong()
+    private val enqueuedFrames = AtomicLong()
+    private val playedFrames = AtomicLong()
+    private val turnEnqueuedFrames = AtomicLong()
+    private val turnPlayedFrames = AtomicLong()
+    private val isPaused = AtomicBoolean(false)
 
     fun enqueue(chunk: ByteArray): Boolean {
-        if (queuedBytes.addAndGet(chunk.size) <= MAX_QUEUED_BYTES && chunks.trySend(chunk).isSuccess) return true
+        if (queuedBytes.addAndGet(chunk.size) <= MAX_QUEUED_BYTES && chunks.trySend(chunk).isSuccess) {
+            enqueuedFrames.addAndGet((chunk.size / AppConstant.PCM16_BYTES_PER_SAMPLE).toLong())
+            return true
+        }
         queuedBytes.addAndGet(-chunk.size)
         return false
+    }
+
+    fun setPaused(isPaused: Boolean) {
+        this.isPaused.set(isPaused)
+    }
+
+    fun markTurn() {
+        turnEnqueuedFrames.set(enqueuedFrames.get())
+        turnPlayedFrames.set(playedFrames.get())
+    }
+
+    fun clear(): PlaybackProgress {
+        val progress = PlaybackProgress(
+            playedFrames = playedFrames.get() - turnPlayedFrames.get(),
+            enqueuedFrames = enqueuedFrames.get() - turnEnqueuedFrames.get()
+        )
+        clearGeneration.incrementAndGet()
+        while (true) {
+            val chunk = chunks.tryReceive().getOrNull() ?: break
+            queuedBytes.addAndGet(-chunk.size)
+        }
+        enqueuedFrames.set(playedFrames.get())
+        markTurn()
+        return progress
     }
 
     suspend fun play(
@@ -82,8 +117,36 @@ class AudioPlayback {
         var offset = 0
         var level = 0f
         var framesWritten = 0L
+        var headBase = 0L
+        var playedBeforeFlush = 0L
+        var seenClearGeneration = clearGeneration.get()
+        var isTrackPaused = false
         var lastWriteAtMillis = SystemClock.elapsedRealtime()
         while (currentCoroutineContext().isActive && isMediaCurrent()) {
+            val currentClearGeneration = clearGeneration.get()
+            if (currentClearGeneration != seenClearGeneration) {
+                seenClearGeneration = currentClearGeneration
+                chunk?.let { queuedBytes.addAndGet(-it.size) }
+                chunk = null
+                playedBeforeFlush += (track.playbackHeadPosition.toUInt().toLong() - headBase).coerceIn(0L, framesWritten)
+                track.pause()
+                track.flush()
+                if (!isTrackPaused) track.play()
+                headBase = track.playbackHeadPosition.toUInt().toLong()
+                framesWritten = 0L
+                level = 0f
+            }
+            val shouldPause = isPaused.get()
+            if (shouldPause != isTrackPaused) {
+                isTrackPaused = shouldPause
+                if (shouldPause) track.pause() else track.play()
+                lastWriteAtMillis = SystemClock.elapsedRealtime()
+            }
+            if (isTrackPaused) {
+                onPlayback(false, 0f)
+                delay(PLAYBACK_POLL_MILLIS)
+                continue
+            }
             if (chunk == null) {
                 chunk = chunks.tryReceive().getOrNull()
                 offset = 0
@@ -107,7 +170,8 @@ class AudioPlayback {
                     check(SystemClock.elapsedRealtime() - lastWriteAtMillis < MAX_WRITE_STALL_MILLIS)
                 }
             }
-            val framesPlayed = track.playbackHeadPosition.toUInt().toLong()
+            val framesPlayed = (track.playbackHeadPosition.toUInt().toLong() - headBase).coerceIn(0L, framesWritten)
+            playedFrames.set(playedBeforeFlush + framesPlayed)
             val isPlaying = framesPlayed > 0 && framesPlayed < framesWritten
             onPlayback(isPlaying, if (isPlaying) level else 0f)
             if (written == 0) delay(PLAYBACK_POLL_MILLIS)

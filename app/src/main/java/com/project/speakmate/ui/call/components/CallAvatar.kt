@@ -28,7 +28,7 @@ fun CallAvatar(presentation: CallPresentation, modifier: Modifier = Modifier) {
             CallPresentation.PROCESSING -> R.drawable.img_call_processing
             CallPresentation.SPEAKING -> R.drawable.img_call_speaking
             CallPresentation.MUTED -> R.drawable.img_call_muted
-            CallPresentation.AUDIO_UNCLEAR, CallPresentation.FAILED -> R.drawable.img_call_error
+            CallPresentation.AUDIO_UNCLEAR, CallPresentation.MICROPHONE_BLOCKED, CallPresentation.FAILED -> R.drawable.img_call_error
             else -> R.drawable.img_placement_mascot
         }), null, Modifier.size(220.dp))
     }

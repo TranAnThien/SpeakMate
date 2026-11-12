@@ -4,6 +4,8 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.AudioRecordingConfiguration
+import android.os.Build
 import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.utils.AppConstant
 import kotlinx.coroutines.CancellationException
@@ -19,7 +21,8 @@ import kotlin.math.sqrt
 class AudioSessionManager(
     context: Context,
     private val onFailure: (CallFailure) -> Unit,
-    private val onInterrupted: () -> Unit
+    private val onInterrupted: () -> Unit,
+    private val onMicrophoneSilenced: (Boolean) -> Unit
 ) {
     companion object {
         private const val PCM16_MAX_AMPLITUDE = 32_768f
@@ -38,6 +41,15 @@ class AudioSessionManager(
         .setAudioAttributes(attributes)
         .setOnAudioFocusChangeListener(::handleFocusChange)
         .build()
+    private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
+        override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+            val isSilenced = configs.any { it.isClientSilenced }
+            if (isSilenced == isMicrophoneSilenced) return
+            isMicrophoneSilenced = isSilenced
+            onMicrophoneSilenced(isSilenced)
+        }
+    }
     private val mutableAudioLevel = MutableStateFlow(0f)
     val audioLevel = mutableAudioLevel.asStateFlow()
     private var hasFocus = false
@@ -45,10 +57,15 @@ class AudioSessionManager(
     private var playbackJob: Job? = null
     @Volatile
     private var isPlaying = false
+    private var isMicrophoneSilenced = false
+    private var isRecordingCallbackRegistered = false
 
     fun open() {
-        hasFocus = checkNotNull(audioManager).requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        val manager = checkNotNull(audioManager)
+        hasFocus = manager.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         check(hasFocus)
+        manager.registerAudioRecordingCallback(recordingCallback, null)
+        isRecordingCallbackRegistered = true
     }
 
     fun startCapture(
@@ -87,6 +104,16 @@ class AudioSessionManager(
 
     fun enqueue(chunk: ByteArray): Boolean = playback.enqueue(chunk)
 
+    fun markPlaybackTurn() {
+        playback.markTurn()
+    }
+
+    fun clearPlayback(): PlaybackProgress = playback.clear()
+
+    fun setPlaybackPaused(isPaused: Boolean) {
+        playback.setPaused(isPaused)
+    }
+
     fun clearMicrophoneLevel() {
         if (!isPlaying) mutableAudioLevel.value = 0f
     }
@@ -96,6 +123,10 @@ class AudioSessionManager(
         playbackJob?.cancel()
         playbackJob = null
         playback.close()
+        if (isRecordingCallbackRegistered) {
+            isRecordingCallbackRegistered = false
+            runCatching { audioManager?.unregisterAudioRecordingCallback(recordingCallback) }
+        }
         if (hasFocus) {
             hasFocus = false
             runCatching { audioManager?.abandonAudioFocusRequest(focusRequest) }

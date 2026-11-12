@@ -1,6 +1,5 @@
 package com.project.speakmate.ui.call
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -19,9 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.CallFailure
@@ -51,13 +52,15 @@ fun CallScreen(
     onExit: () -> Unit,
     onOpenTranscript: () -> Unit,
     onCloseTranscript: () -> Unit,
-    onSelectTranscriptWord: (String, String, Rect) -> Unit,
+    onSelectTranscriptWord: (String, Int, String) -> Unit,
     onCloseDictionary: () -> Unit,
     onPlayDictionaryWord: () -> Unit,
     onSaveDictionaryWord: () -> Unit,
     modifier: Modifier = Modifier,
-    transcriptScrollState: ScrollState = rememberScrollState(),
+    transcriptListState: LazyListState = rememberLazyListState(),
     onResumeCall: () -> Unit = {},
+    onRetryDictionary: () -> Unit = {},
+    initialDictionaryAnchorTop: Dp = 0.dp,
     durationContent: @Composable () -> Unit = {},
     audioMeter: @Composable (Modifier) -> Unit = {}
 ) {
@@ -89,7 +92,8 @@ fun CallScreen(
         } else {
             val contentHeight = maxHeight.coerceAtLeast(720.dp)
             val isConnecting = state.presentation == CallPresentation.CONNECTING
-            val isPaused = state.presentation == CallPresentation.PAUSED
+            val isReconnecting = state.presentation == CallPresentation.RECONNECTING
+            val isPaused = state.presentation == CallPresentation.PAUSED || isReconnecting
             val isReady = state.presentation == CallPresentation.READY
             Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).height(contentHeight)) {
                 CallStatusHeader(state.title, state.presentation, durationContent = durationContent)
@@ -97,8 +101,14 @@ fun CallScreen(
                 if (!isReady && !isConnecting && !isPaused) {
                     audioMeter(Modifier.align(Alignment.Center).offset(y = 158.dp))
                 }
-                if (state.presentation == CallPresentation.BARGE_IN || state.presentation == CallPresentation.AUDIO_UNCLEAR) {
-                    Text(stringResource(if (state.presentation == CallPresentation.BARGE_IN) R.string.call_barge_in_notice else R.string.call_audio_unclear_notice),
+                val noticeRes = when (state.presentation) {
+                    CallPresentation.BARGE_IN -> R.string.call_barge_in_notice
+                    CallPresentation.AUDIO_UNCLEAR -> R.string.call_audio_unclear_notice
+                    CallPresentation.MICROPHONE_BLOCKED -> R.string.call_microphone_blocked_notice
+                    else -> null
+                }
+                if (noticeRes != null) {
+                    Text(stringResource(noticeRes),
                         style = if (state.presentation == CallPresentation.BARGE_IN) DesignTypography.CallStatus else DesignTypography.Detail,
                         color = DesignColor.Primary,
                         modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 32.dp)
@@ -118,8 +128,8 @@ fun CallScreen(
                                     onReturnToPreparation
                                 )
                             }
-                            state.isResuming -> Text(
-                                stringResource(R.string.call_resuming),
+                            state.isResuming || isReconnecting -> Text(
+                                stringResource(if (isReconnecting) R.string.call_reconnecting_notice else R.string.call_resuming),
                                 Modifier.fillMaxWidth().padding(vertical = 16.dp),
                                 style = DesignTypography.Body,
                                 color = DesignColor.Muted,
@@ -135,8 +145,9 @@ fun CallScreen(
                 }
             }
             if (state.isTranscriptAvailable && state.isTranscriptVisible) {
-                CallTranscriptSheet(state.messages, state.dictionary, transcriptScrollState, onCloseTranscript, onSelectTranscriptWord,
-                    onCloseDictionary, onPlayDictionaryWord, onSaveDictionaryWord)
+                CallTranscriptSheet(state.messages, state.dictionary, transcriptListState, onCloseTranscript, onSelectTranscriptWord,
+                    onCloseDictionary, onPlayDictionaryWord, onSaveDictionaryWord, onRetryDictionary,
+                    initialDictionaryAnchorTop = initialDictionaryAnchorTop)
             }
             if (state.isEndConfirmationVisible) {
                 CallEndConfirmation(

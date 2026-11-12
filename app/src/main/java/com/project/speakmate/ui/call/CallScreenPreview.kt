@@ -1,12 +1,14 @@
 package com.project.speakmate.ui.call
 
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.ui.call.components.CallDurationLabel
+import com.project.speakmate.ui.call.state.CallDictionaryStatus
 import com.project.speakmate.ui.call.state.CallDictionaryUiState
+import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import com.project.speakmate.ui.call.state.CallPresentation
 import com.project.speakmate.ui.call.state.CallTranscriptMessageUiState
 import com.project.speakmate.ui.call.state.CallUiState
@@ -306,7 +308,32 @@ private fun CallTranscriptBottomScreenPreview() {
             onCloseDictionary = {},
             onPlayDictionaryWord = {},
             onSaveDictionaryWord = {},
-            transcriptScrollState = rememberScrollState(initial = with(LocalDensity.current) { 105.dp.roundToPx() })
+            transcriptListState = rememberLazyListState(0, with(LocalDensity.current) { 105.dp.roundToPx() })
+        )
+    }
+}
+
+@Preview(name = "Voice Call / Live transcript / Partial and interrupted", widthDp = 396, heightDp = 835, showBackground = true)
+@Composable
+private fun CallTranscriptLiveScreenPreview() {
+    SpeakMateTheme {
+        CallScreen(
+            state = getCallLiveTranscriptPreviewState(),
+            durationContent = { CallDurationLabel("02:18") },
+            onStartCall = {},
+            onReturnToPreparation = {},
+            onToggleMute = {},
+            onEndCall = {},
+            onConfirmEndCall = {},
+            onContinueCall = {},
+            onRetry = {},
+            onExit = {},
+            onOpenTranscript = {},
+            onCloseTranscript = {},
+            onSelectTranscriptWord = { _, _, _ -> },
+            onCloseDictionary = {},
+            onPlayDictionaryWord = {},
+            onSaveDictionaryWord = {}
         )
     }
 }
@@ -332,7 +359,58 @@ private fun CallDictionaryScreenPreview() {
             onCloseDictionary = {},
             onPlayDictionaryWord = {},
             onSaveDictionaryWord = {},
-            transcriptScrollState = rememberScrollState(initial = with(LocalDensity.current) { 80.dp.roundToPx() })
+            transcriptListState = rememberLazyListState(0, with(LocalDensity.current) { 80.dp.roundToPx() }),
+            initialDictionaryAnchorTop = 216.dp
+        )
+    }
+}
+
+@Preview(name = "Voice Call / Dictionary / Loading", widthDp = 396, heightDp = 835, showBackground = true)
+@Composable
+private fun CallDictionaryLoadingScreenPreview() {
+    CallDictionaryStatusPreview(getCallDictionaryPreviewState().copy(status = CallDictionaryStatus.LOADING, meaning = ""))
+}
+
+@Preview(name = "Voice Call / Dictionary / Not found", widthDp = 396, heightDp = 835, showBackground = true)
+@Composable
+private fun CallDictionaryNotFoundScreenPreview() {
+    CallDictionaryStatusPreview(getCallDictionaryPreviewState().copy(status = CallDictionaryStatus.NOT_FOUND))
+}
+
+@Preview(name = "Voice Call / Dictionary / Error", widthDp = 396, heightDp = 835, showBackground = true)
+@Composable
+private fun CallDictionaryErrorScreenPreview() {
+    CallDictionaryStatusPreview(getCallDictionaryPreviewState().copy(status = CallDictionaryStatus.ERROR, hasPronunciationError = true))
+}
+
+@Preview(name = "Voice Call / Dictionary / Oldest removed", widthDp = 396, heightDp = 835, showBackground = true)
+@Composable
+private fun CallDictionarySavedScreenPreview() {
+    CallDictionaryStatusPreview(getCallDictionaryPreviewState().copy(saveStatus = CallVocabularySaveStatus.SAVED_REPLACING_OLDEST))
+}
+
+@Composable
+private fun CallDictionaryStatusPreview(dictionary: CallDictionaryUiState) {
+    SpeakMateTheme {
+        CallScreen(
+            state = getCallPreviewState(CallPresentation.LISTENING).copy(isTranscriptVisible = true, dictionary = dictionary),
+            durationContent = { CallDurationLabel("02:18") },
+            onStartCall = {},
+            onReturnToPreparation = {},
+            onToggleMute = {},
+            onEndCall = {},
+            onConfirmEndCall = {},
+            onContinueCall = {},
+            onRetry = {},
+            onExit = {},
+            onOpenTranscript = {},
+            onCloseTranscript = {},
+            onSelectTranscriptWord = { _, _, _ -> },
+            onCloseDictionary = {},
+            onPlayDictionaryWord = {},
+            onSaveDictionaryWord = {},
+            transcriptListState = rememberLazyListState(0, with(LocalDensity.current) { 80.dp.roundToPx() }),
+            initialDictionaryAnchorTop = 216.dp
         )
     }
 }
@@ -391,14 +469,26 @@ private fun getCallPreviewState(presentation: CallPresentation): CallUiState = C
     )
 )
 
+private fun getCallLiveTranscriptPreviewState(): CallUiState = getCallPreviewState(CallPresentation.LISTENING).copy(
+    isTranscriptVisible = true,
+    messages = listOf(
+        CallTranscriptMessageUiState("turn_1", "Hello! How can I help you with your order?", false),
+        CallTranscriptMessageUiState("turn_2", "Could I change my iced latte to a large?", true),
+        CallTranscriptMessageUiState("turn_3", "Of course! Would you like the same amount of", false, isInterrupted = true),
+        CallTranscriptMessageUiState("turn_4", "Less sugar, please", true, isPartial = true)
+    )
+)
+
 private fun getCallDictionaryPreviewState(): CallDictionaryUiState = CallDictionaryUiState(
     word = "large",
-    pronunciationLabel = "/lɑːrdʒ/ · tính từ",
+    status = CallDictionaryStatus.SUCCESS,
+    phonetic = "/lɑːrdʒ/",
+    partOfSpeech = "tính từ",
     meaning = "cỡ lớn",
     exampleSentence = "Could I change my iced latte to a large?",
     exampleTranslation = "Tôi có thể đổi latte đá sang cỡ lớn không?",
     messageId = "turn_2",
-    selectionStart = "Could I change my iced latte to a large?".indexOf("large"),
-    anchorTopDp = 216f
+    sentence = "Could I change my iced latte to a large?",
+    selectionStart = "Could I change my iced latte to a large?".indexOf("large")
 )
 

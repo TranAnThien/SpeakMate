@@ -39,18 +39,22 @@ class GeminiLiveClient(
         private const val FREE_PRACTICE_INSTRUCTION = "Activity: Free Practice."
         private const val AUDIO_MODALITY = "AUDIO"
         private const val SETUP = "setup"
-        private const val SETUP_COMPLETE = "setupComplete"
         private const val MODEL_FIELD = "model"
         private const val GENERATION_CONFIG = "generationConfig"
         private const val RESPONSE_MODALITIES = "responseModalities"
         private const val SYSTEM_INSTRUCTION = "systemInstruction"
         private const val REALTIME_INPUT_CONFIG = "realtimeInputConfig"
+        private const val INPUT_AUDIO_TRANSCRIPTION = "inputAudioTranscription"
+        private const val OUTPUT_AUDIO_TRANSCRIPTION = "outputAudioTranscription"
+        private const val SESSION_RESUMPTION = "sessionResumption"
+        private const val RESUMPTION_HANDLE = "handle"
+        private const val CONTEXT_WINDOW_COMPRESSION = "contextWindowCompression"
+        private const val SLIDING_WINDOW = "slidingWindow"
         private const val AUTOMATIC_ACTIVITY_DETECTION = "automaticActivityDetection"
         private const val DISABLED = "disabled"
         private const val REALTIME_INPUT = "realtimeInput"
         private const val AUDIO = "audio"
         private const val AUDIO_STREAM_END = "audioStreamEnd"
-        private const val GO_AWAY = "goAway"
         private const val ERROR = "error"
         private const val STATUS = "status"
         private const val MESSAGE = "message"
@@ -76,12 +80,12 @@ class GeminiLiveClient(
     private var isModelTurnOpen = false
     private var hasInputDuringModelTurn = false
 
-    fun connect(scenario: Scenario) {
+    fun connect(scenario: Scenario, resumptionHandle: String? = null) {
         if (apiKey.isBlank()) {
             reportFailure(CallFailure.CONFIGURATION)
             return
         }
-        val setup = buildSetup(scenario)
+        val setup = buildSetup(scenario, resumptionHandle)
         val url = ENDPOINT.toHttpUrl().newBuilder().addQueryParameter(API_KEY_PARAMETER, apiKey).build()
         val request = Request.Builder().url(url).build()
         val listener = object : WebSocketListener() {
@@ -173,7 +177,7 @@ class GeminiLiveClient(
         webSocket?.cancel()
     }
 
-    private fun buildSetup(scenario: Scenario): String {
+    private fun buildSetup(scenario: Scenario, resumptionHandle: String?): String {
         val instruction = "$FREE_PRACTICE_INSTRUCTION\n${scenario.name}\n" +
             "${scenario.description}\n${scenario.promptTemplate}"
         val generationConfig = JSONObject().put(RESPONSE_MODALITIES, JSONArray().put(AUDIO_MODALITY))
@@ -183,6 +187,10 @@ class GeminiLiveClient(
             .put(GENERATION_CONFIG, generationConfig)
             .put(SYSTEM_INSTRUCTION, systemInstruction)
             .put(REALTIME_INPUT_CONFIG, realtimeConfig)
+            .put(INPUT_AUDIO_TRANSCRIPTION, JSONObject())
+            .put(OUTPUT_AUDIO_TRANSCRIPTION, JSONObject())
+            .put(SESSION_RESUMPTION, JSONObject().apply { resumptionHandle?.let { put(RESUMPTION_HANDLE, it) } })
+            .put(CONTEXT_WINDOW_COMPRESSION, JSONObject().put(SLIDING_WINDOW, JSONObject()))
         return JSONObject().put(SETUP, setup).toString()
     }
 
@@ -218,13 +226,11 @@ class GeminiLiveClient(
         }
         try {
             val frame = JSONObject(message)
-            if (frame.has(SETUP_COMPLETE)) emitEvent(GeminiLiveEvent.SetupComplete)
-            if (frame.has(GO_AWAY)) reportFailure(CallFailure.NETWORK)
             frame.optJSONObject(ERROR)?.let { error ->
                 reportFailure(getFailure(error.optString(STATUS) + " " + error.optString(MESSAGE), error.optInt(CODE)))
+                return
             }
-            audioParser.readSpeechActivity(frame, generation)?.let(::emitEvent)
-            audioParser.readContent(frame, generation)?.let(::emitEvent)
+            audioParser.readServerEvents(frame, generation).forEach(::emitEvent)
         } catch (_: Exception) {
             reportFailure(CallFailure.PROTOCOL)
         }
@@ -247,7 +253,7 @@ class GeminiLiveClient(
                     }
                     else -> Unit
                 }
-                GeminiLiveEvent.SetupComplete -> Unit
+                else -> Unit
             }
         }
         onEvent(event)

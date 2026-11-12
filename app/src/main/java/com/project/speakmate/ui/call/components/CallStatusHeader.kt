@@ -39,9 +39,9 @@ fun CallStatusHeader(
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).background(when (presentation) {
                 CallPresentation.READY -> DesignColor.Placeholder
-                CallPresentation.CONNECTING, CallPresentation.PROCESSING -> DesignColor.CallBusy
+                CallPresentation.CONNECTING, CallPresentation.PROCESSING, CallPresentation.RECONNECTING -> DesignColor.CallBusy
                 CallPresentation.MUTED, CallPresentation.PAUSED -> DesignColor.CallMuted
-                CallPresentation.AUDIO_UNCLEAR -> DesignColor.CallWarning
+                CallPresentation.AUDIO_UNCLEAR, CallPresentation.MICROPHONE_BLOCKED -> DesignColor.CallWarning
                 else -> DesignColor.CallActive
             }, CircleShape))
             Text(stringResource(when (presentation) {
@@ -53,6 +53,8 @@ fun CallStatusHeader(
                 CallPresentation.PAUSED -> R.string.call_paused
                 CallPresentation.BARGE_IN -> R.string.call_barge_in
                 CallPresentation.AUDIO_UNCLEAR -> R.string.call_audio_unclear
+                CallPresentation.RECONNECTING -> R.string.call_reconnecting
+                CallPresentation.MICROPHONE_BLOCKED -> R.string.call_microphone_blocked
                 else -> R.string.call_listening
             }), style = DesignTypography.CallStatus, color = DesignColor.Muted)
         }

@@ -14,4 +14,27 @@ sealed interface GeminiLiveEvent {
         val isTurnFinished: Boolean,
         val isWaitingForInput: Boolean
     ) : GeminiLiveEvent
+
+    data class InputTranscription(
+        val text: String,
+        val isFinished: Boolean,
+        val playbackGeneration: Long?
+    ) : GeminiLiveEvent
+
+    data class OutputTranscription(
+        val text: String,
+        val isFinished: Boolean,
+        val playbackGeneration: Long?
+    ) : GeminiLiveEvent
+
+    data class Interrupted(val playbackGeneration: Long?) : GeminiLiveEvent
+
+    data class GenerationComplete(val playbackGeneration: Long?) : GeminiLiveEvent
+
+    data class ResumptionUpdate(
+        val handle: String,
+        val isResumable: Boolean
+    ) : GeminiLiveEvent
+
+    data class GoAway(val timeLeftMillis: Long?) : GeminiLiveEvent
 }
