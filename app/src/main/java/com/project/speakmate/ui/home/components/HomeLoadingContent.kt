@@ -29,10 +29,16 @@ import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun HomeLoadingContent(modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
-        Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SpeakMateLoadingIndicator(size = 16.dp, strokeWidth = 2.dp)
-            Text(stringResource(R.string.home_loading), style = DesignTypography.Navigation, color = DesignColor.Muted)
+            Text(
+                text = stringResource(R.string.home_loading),
+                style = DesignTypography.Navigation,
+                color = DesignColor.Muted,
+                modifier = Modifier.weight(1f),
+                maxLines = 2
+            )
         }
         Row(Modifier.fillMaxWidth().height(82.dp).background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween) {

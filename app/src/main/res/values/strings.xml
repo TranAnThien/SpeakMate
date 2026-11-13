@@ -108,6 +108,10 @@
     <string name="training_no_units_description">Mục tiêu này chưa có bài học. Hãy chọn mục tiêu khác trong lộ trình.</string>
     <string name="training_back_to_path">Quay lại lộ trình</string>
     <string name="preparation_title">Chuẩn bị bài học</string>
+    <string name="preparation_loading_title">Đang tải bài học…</string>
+    <string name="preparation_loading_description">Đang nạp Scenario và học liệu của bài học.</string>
+    <string name="preparation_error_title">Chưa tải được bài học</string>
+    <string name="preparation_error_description">Học liệu hoặc Scenario của bài học chưa hoàn chỉnh. Kiểm tra dữ liệu rồi thử lại.</string>
     <string name="preparation_overview">Tổng quan</string>
     <string name="preparation_vocabulary">Từ vựng</string>
     <string name="preparation_grammar">Ngữ pháp</string>

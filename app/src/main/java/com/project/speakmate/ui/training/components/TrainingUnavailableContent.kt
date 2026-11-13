@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,10 @@ fun TrainingUnavailableContent(
     isLoading: Boolean,
     onRetry: () -> Unit,
     errorMessage: String = "",
+    @StringRes loadingTitleRes: Int = R.string.training_loading_title,
+    @StringRes loadingDescriptionRes: Int = R.string.training_loading_description,
+    @StringRes errorTitleRes: Int = R.string.training_error_title,
+    @StringRes errorDescriptionRes: Int = R.string.training_error_description,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -46,12 +51,12 @@ fun TrainingUnavailableContent(
                     }
                 } else StateIllustration(R.drawable.ic_training_empty_path)
                 Spacer(Modifier.height(16.dp))
-                Text(stringResource(if (isLoading) R.string.training_loading_title else R.string.training_error_title),
+                Text(stringResource(if (isLoading) loadingTitleRes else errorTitleRes),
                     style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    if (isLoading) stringResource(R.string.training_loading_description)
-                    else errorMessage.ifBlank { stringResource(R.string.training_error_description) },
+                    if (isLoading) stringResource(loadingDescriptionRes)
+                    else errorMessage.ifBlank { stringResource(errorDescriptionRes) },
                     style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 16.dp))
                 if (!isLoading) {

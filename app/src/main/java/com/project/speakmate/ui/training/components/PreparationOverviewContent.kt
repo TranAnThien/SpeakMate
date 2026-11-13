@@ -70,8 +70,8 @@ fun PreparationOverviewContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.preparation_required_actions), style = DesignTypography.Label, color = DesignColor.Muted)
         overview.requiredActions.forEach { action ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Image(painterResource(R.drawable.ic_training_preparation_requirement), null, Modifier.size(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                Image(painterResource(R.drawable.ic_training_preparation_requirement), null, Modifier.size(20.dp).padding(top = 2.dp))
                 Text(action, style = DesignTypography.Detail, color = DesignColor.Text, modifier = Modifier.weight(1f))
             }
         }

@@ -220,8 +220,23 @@ fun AppNavigation(
                     onPlayPattern = {},
                     onPlayExample = {}
                 )
-                TrainingContentStatus.LOADING -> TrainingUnavailableContent(isLoading = true, onRetry = { trainingViewModel.loadUnitPreparation(unitId) })
-                else -> TrainingUnavailableContent(isLoading = false, onRetry = { trainingViewModel.loadUnitPreparation(unitId) })
+                TrainingContentStatus.LOADING -> TrainingUnavailableContent(
+                    isLoading = true,
+                    onRetry = { trainingViewModel.loadUnitPreparation(unitId) },
+                    loadingTitleRes = R.string.preparation_loading_title,
+                    loadingDescriptionRes = R.string.preparation_loading_description,
+                    errorTitleRes = R.string.preparation_error_title,
+                    errorDescriptionRes = R.string.preparation_error_description
+                )
+                else -> TrainingUnavailableContent(
+                    isLoading = false,
+                    onRetry = { trainingViewModel.loadUnitPreparation(unitId) },
+                    errorMessage = preparationState.errorMessage,
+                    loadingTitleRes = R.string.preparation_loading_title,
+                    loadingDescriptionRes = R.string.preparation_loading_description,
+                    errorTitleRes = R.string.preparation_error_title,
+                    errorDescriptionRes = R.string.preparation_error_description
+                )
             }
         }
 
@@ -276,8 +291,7 @@ fun AppNavigation(
 
         composable("free_practice_call/{practiceId}") { entry ->
             val practiceId = entry.arguments?.getString("practiceId").orEmpty()
-            // Reuse the Preparation destination's ViewModel: the Scenario was loaded before
-            // navigation and its CTA state must be restored when the call closes.
+
             val preparationEntry = remember(entry, practiceId) {
                 navController.getBackStackEntry("practice_preparation/$practiceId")
             }
