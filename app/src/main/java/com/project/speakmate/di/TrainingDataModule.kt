@@ -1,5 +1,6 @@
 package com.project.speakmate.di
 
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.data.repository.PracticeRepositoryImpl
 import com.project.speakmate.data.repository.TrainingRepositoryImpl
@@ -30,4 +31,8 @@ object FirebaseModule {
     @Provides
     @Singleton
     fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+
+    @Provides
+    @Singleton
+    fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
 }
