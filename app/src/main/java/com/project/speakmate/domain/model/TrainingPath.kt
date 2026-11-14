@@ -1,5 +1,7 @@
 package com.project.speakmate.domain.model
 
+import com.project.speakmate.domain.rules.TrainingProgressRules
+
 data class TrainingPath(
     val pathId: String,
     val targetLevel: SpeakingLevel,
@@ -7,10 +9,6 @@ data class TrainingPath(
     val goals: List<TrainingGoal>
 ) {
     fun getGoalStatus(goalIndex: Int, progress: TrainingProgress): ContentStatus {
-        return when {
-            goalIndex < progress.currentGoalOrder -> ContentStatus.COMPLETED
-            goalIndex == progress.currentGoalOrder -> ContentStatus.CURRENT
-            else -> ContentStatus.LOCKED
-        }
+        return TrainingProgressRules.getGoalStatus(this, progress, goalIndex)
     }
 }
