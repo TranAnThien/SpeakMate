@@ -1,6 +1,7 @@
 package com.project.speakmate.ui.call.state
 
 import com.project.speakmate.domain.model.CallFailure
+import com.project.speakmate.domain.model.CallSessionState
 
 data class CallUiState(
     val presentation: CallPresentation = CallPresentation.READY,
@@ -16,5 +17,6 @@ data class CallUiState(
     val isExiting: Boolean = false,
     val isExitReady: Boolean = false,
     val isStandaloneCall: Boolean = false,
-    val failure: CallFailure? = null
+    val failure: CallFailure? = null,
+    val finishedSession: CallSessionState? = null
 )

@@ -1,14 +1,35 @@
 package com.project.speakmate.data.session
 
 import com.project.speakmate.data.audio.PlaybackProgress
+import com.project.speakmate.data.audio.AssessmentAudioFileProvider
+import com.project.speakmate.data.audio.AssessmentAudioRecorder
 import com.project.speakmate.data.remote.ai.GeminiLiveEvent
 import com.project.speakmate.domain.model.CallFailure
+import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.Scenario
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 
 class FakeCallSessionMedia : CallSessionMedia {
+    var audioFiles: AssessmentAudioFileProvider? = null
+    var recorder: AssessmentAudioRecorder? = null
+        private set
+    var recordingAudioId: String? = null
+        private set
+    var recordingFinishCount = 0
+        private set
+    var activityType = CallActivityType.FREE_PRACTICE
+        private set
+    var connectedScenario: Scenario? = null
+        private set
+    private var onAudioLimit: (() -> Unit)? = null
+    override var assessmentAudioId: String? = null
+        private set
+    override var assessmentAudioDurationMillis: Long? = null
+        private set
     private var onEvent: ((GeminiLiveEvent) -> Unit)? = null
     private var onFailure: ((CallFailure) -> Unit)? = null
     private var onInterrupted: (() -> Unit)? = null
@@ -34,6 +55,9 @@ class FakeCallSessionMedia : CallSessionMedia {
     var hasPermission = true
     var shouldFailAudioOpen = false
     var shouldFailClose = false
+    var shouldFailRecordingAppend = false
+    var shouldSuppressRecordingFailureSignal = false
+    private var hasRecordingFailure = false
     var onOpenAudio: () -> Unit = {}
     var onEnableDownlink: (Long) -> Unit = {}
     var onStartCapture: () -> Unit = {}
@@ -56,6 +80,52 @@ class FakeCallSessionMedia : CallSessionMedia {
         private set
 
     override fun hasMicrophonePermission(): Boolean = hasPermission
+
+    override fun configureAssessmentRecording(activityType: CallActivityType, onLimitReached: () -> Unit) {
+        this.activityType = activityType
+        onAudioLimit = onLimitReached
+    }
+
+    override fun finishAssessmentRecording(outcome: CallOutcome) {
+        recordingFinishCount++
+        val current = recorder ?: return
+        if (hasRecordingFailure) {
+            current.delete()
+            throw IOException()
+        }
+        current.close()
+        if (outcome == CallOutcome.COMPLETED && current.durationMillis > 0L) {
+            assessmentAudioId = recordingAudioId
+            assessmentAudioDurationMillis = current.durationMillis
+        } else current.delete()
+    }
+
+    fun sendMicrophoneChunk(chunk: ByteArray, isAcceptedByProvider: Boolean = true): Boolean {
+        if (!isUplinkEnabled || isUplinkBlocked || !isAcceptedByProvider) return false
+        return writeRecordingChunk(recorder, chunk)
+    }
+
+    fun captureMicrophoneCallback(): (ByteArray) -> Boolean {
+        val isCurrent = isUplinkCurrent
+        val recording = recorder
+        return { chunk -> isCurrent?.invoke() == true && writeRecordingChunk(recording, chunk) }
+    }
+
+    fun captureAudioLimitCallback(): () -> Unit = checkNotNull(onAudioLimit)
+
+    private fun writeRecordingChunk(recording: AssessmentAudioRecorder?, chunk: ByteArray): Boolean {
+        if (recording == null) return true
+        return try {
+            if (shouldFailRecordingAppend) throw IOException()
+            if (!recording.append(chunk)) return false
+            if (recording.isAtLimit) onAudioLimit?.invoke()
+            true
+        } catch (_: IOException) {
+            hasRecordingFailure = true
+            if (!shouldSuppressRecordingFailureSignal) onFailure?.invoke(CallFailure.AUDIO)
+            false
+        }
+    }
 
     override fun markPlaybackTurn() {
         turnMarks++
@@ -90,6 +160,7 @@ class FakeCallSessionMedia : CallSessionMedia {
     }
 
     override fun connect(scenario: Scenario, onEvent: (GeminiLiveEvent) -> Unit, onFailure: (CallFailure) -> Unit) {
+        connectedScenario = scenario
         this.onEvent = onEvent
         this.onFailure = onFailure
         hasConnection = true
@@ -150,14 +221,23 @@ class FakeCallSessionMedia : CallSessionMedia {
         onStartCapture()
         isUplinkBlocked = false
         isUplinkCurrent = isMediaCurrent
+        val files = audioFiles
+        if (activityType != CallActivityType.FREE_PRACTICE && files != null && recorder == null) {
+            val audioId = files.createAudioId()
+            recordingAudioId = audioId
+            recorder = files.openRecorder(audioId)
+        }
+        recorder?.resumeCapture()
     }
 
     override fun suspendUplink() {
         isUplinkCurrent = null
+        recorder?.pauseCapture()
     }
 
     override fun blockUplink() {
         isUplinkBlocked = true
+        recorder?.pauseCapture()
     }
 
     override fun finishAudioInput() = Unit
@@ -170,6 +250,7 @@ class FakeCallSessionMedia : CallSessionMedia {
     override fun closeAudio() {
         if (isAudioOpen) audioCloseCount++
         isAudioOpen = false
+        recorder?.pauseCapture()
     }
 
     override fun close() {

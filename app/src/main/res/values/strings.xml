@@ -20,6 +20,17 @@
     <string name="placement_result_title">Kết quả đánh giá</string>
     <string name="placement_estimated_level">TRÌNH ĐỘ NÓI ƯỚC LƯỢNG</string>
     <string name="placement_a2_label">TIỀN TRUNG CẤP</string>
+    <string name="placement_a1_label">SƠ CẤP</string>
+    <string name="placement_b1_label">TRUNG CẤP</string>
+    <string name="placement_b2_label">TRÊN TRUNG CẤP</string>
+    <string name="placement_resume_title">Tiếp tục đánh giá?</string>
+    <string name="placement_resume_description">Bạn có một bài đánh giá chưa hoàn tất. Tiếp tục từ bước đã lưu hoặc làm lại từ đầu.</string>
+    <string name="placement_resume">Tiếp tục</string>
+    <string name="placement_restart">Làm lại</string>
+    <string name="placement_undetermined_badge">CHƯA XÁC ĐỊNH</string>
+    <string name="placement_undetermined_title">Chưa thể xác định trình độ</string>
+    <string name="placement_undetermined_description">Bài đánh giá chưa có đủ bằng chứng để xác định trình độ. Bạn có thể bắt đầu lại khi sẵn sàng.</string>
+    <string name="placement_time_limit_notice">Cuộc gọi đã kết thúc sau 5 phút. Hệ thống sẽ đánh giá phần trả lời đã ghi nhận.</string>
     <string name="placement_skill_details">Chi tiết kỹ năng</string>
     <string name="placement_range">Range (Vốn từ)</string>
     <string name="placement_accuracy">Accuracy (Ngữ pháp)</string>

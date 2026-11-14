@@ -5,9 +5,10 @@ import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.UserRepository
+import javax.inject.Inject
 
-class UserRepositoryImpl(
-    private val firestoreUserDataSource: FirestoreUserDataSource = FirestoreUserDataSource()
+class UserRepositoryImpl @Inject constructor(
+    private val firestoreUserDataSource: FirestoreUserDataSource
 ) : UserRepository {
 
     override suspend fun getOrCreateUser(user: User): Result<User> {

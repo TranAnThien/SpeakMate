@@ -3,9 +3,10 @@ package com.project.speakmate.data.remote.firebase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.data.dto.UserDto
 import kotlinx.coroutines.tasks.await
+import javax.inject.Inject
 
-class FirestoreUserDataSource(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+class FirestoreUserDataSource @Inject constructor(
+    private val firestore: FirebaseFirestore
 ) {
     private val usersCollection = firestore.collection("users")
 
