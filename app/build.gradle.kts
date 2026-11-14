@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.generativeai)
     implementation(libs.navigation.compose)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -111,4 +112,5 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.0.0")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation(libs.androidx.compose.material.icons.extended)
 }

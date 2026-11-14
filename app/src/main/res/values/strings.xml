@@ -418,6 +418,9 @@
     <string name="profile_estimated_level">Trình độ nói ước lượng: %1$s</string>
     <string name="profile_saved_vocabulary">Từ vựng đã lưu →</string>
     <string name="profile_saved_vocabulary_description">Xem, tìm kiếm và quản lý các từ đã lưu.</string>
+    <string name="saved_vocab_title">Từ vựng đã lưu</string>
+    <string name="saved_vocab_search_placeholder">Tìm kiếm từ vựng…</string>
+    <string name="saved_vocab_empty">Chưa có từ vựng nào được lưu.</string>
     <string name="profile_skills_heading">Hồ sơ kỹ năng nói</string>
     <string name="settings_header">Cài đặt</string>
     <string name="settings_application_heading">ỨNG DỤNG</string>
