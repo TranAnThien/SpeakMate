@@ -50,6 +50,7 @@ import com.project.speakmate.ui.training.state.GoalDetailUiState
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
 import com.project.speakmate.ui.call.CallRoute
+import com.project.speakmate.ui.profile.savedvocab.SavedVocabScreen
 
 @Composable
 fun AppNavigation(
@@ -362,7 +363,7 @@ fun AppNavigation(
             ProfileScreen(
                 state = profileUiState,
                 onOpenSettings = { navController.navigate("settings") },
-                onOpenVocabulary = {},
+                onOpenVocabulary = { navController.navigate("saved_vocab") { launchSingleTop = true } },
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
@@ -392,6 +393,12 @@ fun AppNavigation(
                     }
                 },
                 onCancelSignOut = { isSignOutConfirmationVisible = false }
+            )
+        }
+
+        composable("saved_vocab") {
+            SavedVocabScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }
