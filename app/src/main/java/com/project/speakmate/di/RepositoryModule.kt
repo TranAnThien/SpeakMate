@@ -1,8 +1,10 @@
 package com.project.speakmate.di
 
 import com.project.speakmate.data.repository.DictionaryRepositoryImpl
+import com.project.speakmate.data.repository.HistoryRepositoryImpl
 import com.project.speakmate.data.repository.SavedVocabularyRepositoryImpl
 import com.project.speakmate.domain.repository.DictionaryRepository
+import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import dagger.Binds
 import dagger.Module
@@ -25,4 +27,10 @@ abstract class RepositoryModule {
     abstract fun bindDictionaryRepository(
         impl: DictionaryRepositoryImpl
     ): DictionaryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindHistoryRepository(
+        impl: HistoryRepositoryImpl
+    ): HistoryRepository
 }
