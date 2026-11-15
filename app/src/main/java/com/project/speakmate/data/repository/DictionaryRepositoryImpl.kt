@@ -1,86 +1,156 @@
 package com.project.speakmate.data.repository
 
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
-import com.project.speakmate.BuildConfig
+import android.util.Log
 import com.project.speakmate.domain.model.DictionaryLookupResult
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.repository.DictionaryRepository
-import org.json.JSONObject
+import java.net.URLEncoder
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
 
 class DictionaryRepositoryImpl @Inject constructor(
-    private val generativeModel: GenerativeModel
+    private val httpClient: OkHttpClient
 ) : DictionaryRepository {
 
-    override suspend fun lookUp(word: String, sentenceContext: String): DictionaryLookupResult {
-        if (BuildConfig.GEMINI_API_KEY.isBlank()) {
-            return DictionaryLookupResult.Found(
-                VocabularyItem(
-                    word = word.trim().lowercase(),
-                    mean = "[Mock] Chưa cấu hình API key",
-                    phonetic = "",
-                    partOfSpeech = "",
-                    example = LearningExample(sentence = "", translate = "")
-                )
-            )
+    override suspend fun lookUp(word: String, sentence: String): DictionaryLookupResult = withContext(Dispatchers.IO) {
+        val cleanWord = word.trim().lowercase()
+        if (cleanWord.isBlank()) {
+            return@withContext DictionaryLookupResult.NotFound
         }
 
-        return try {
-            val prompt = """
-                Bạn là một từ điển tiếng Anh cho người Việt. Hãy giải thích từ "$word" dựa trên ngữ cảnh của câu: "$sentenceContext".
-                Trả về DUY NHẤT một chuỗi JSON hợp lệ (không chứa markdown), bao gồm các field chính xác như sau:
-                {
-                  "word": "từ tiếng Anh đã chuẩn hóa lowercase",
-                  "mean": "nghĩa tiếng Việt ngắn gọn theo ngữ cảnh",
-                  "phonetic": "phiên âm quốc tế IPA",
-                  "partOfSpeech": "loại từ (vd: noun, verb, adj)",
-                  "example": {
-                    "sentence": "1 câu ví dụ tiếng Anh ngắn có chứa từ này",
-                    "translate": "nghĩa tiếng Việt của câu ví dụ"
-                  }
+        try {
+            val encodedWord = URLEncoder.encode(cleanWord, "UTF-8")
+            val freeDictUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/$encodedWord"
+            val myMemoryWordUrl = "https://api.mymemory.translated.net/get?q=$encodedWord&langpair=en|vi"
+
+            var phonetic = ""
+            var partOfSpeech = ""
+            var exampleSentence = ""
+
+            val dictJson = fetchJson(freeDictUrl)
+            if (dictJson != null) {
+                try {
+                    val rootArray = JSONArray(dictJson)
+                    if (rootArray.length() > 0) {
+                        val firstEntry = rootArray.getJSONObject(0)
+                        phonetic = firstEntry.optString("phonetic", "")
+                        if (phonetic.isBlank()) {
+                            val phoneticsArr = firstEntry.optJSONArray("phonetics")
+                            if (phoneticsArr != null) {
+                                for (i in 0 until phoneticsArr.length()) {
+                                    val p = phoneticsArr.optJSONObject(i)?.optString("text", "") ?: ""
+                                    if (p.isNotBlank()) {
+                                        phonetic = p
+                                        break
+                                    }
+                                }
+                            }
+                        }
+
+                        val meaningsArr = firstEntry.optJSONArray("meanings")
+                        if (meaningsArr != null && meaningsArr.length() > 0) {
+                            val firstMeaning = meaningsArr.optJSONObject(0)
+                            partOfSpeech = firstMeaning?.optString("partOfSpeech", "") ?: ""
+                            val defs = firstMeaning?.optJSONArray("definitions")
+                            if (defs != null) {
+                                for (i in 0 until defs.length()) {
+                                    val ex = defs.optJSONObject(i)?.optString("example", "") ?: ""
+                                    if (ex.isNotBlank()) {
+                                        exampleSentence = ex
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("DictionaryRepository", "Failed to parse Free Dictionary response: ${e.message}")
                 }
-                Nếu không tìm thấy hoặc không phải từ hợp lệ, hãy trả về chuỗi rỗng.
-            """.trimIndent()
-
-            val response = generativeModel.generateContent(
-                content { text(prompt) }
-            )
-
-            val rawText = response.text?.trim() ?: return DictionaryLookupResult.NotFound
-
-            // Trích xuất JSON object đầu tiên từ chuỗi trả về (đề phòng Gemini bọc markdown)
-            val start = rawText.indexOf('{')
-            val end = rawText.lastIndexOf('}')
-            if (start == -1 || end == -1 || start >= end) {
-                return DictionaryLookupResult.NotFound
-            }
-            val jsonText = rawText.substring(start, end + 1)
-
-            val jsonObject = JSONObject(jsonText)
-            val wordValue = jsonObject.optString("word", "").trim()
-            val meanValue = jsonObject.optString("mean", "").trim()
-
-            if (wordValue.isBlank() || meanValue.isBlank()) {
-                return DictionaryLookupResult.NotFound
             }
 
-            val exampleObj = jsonObject.optJSONObject("example")
+            var meaning = ""
+            val myMemoryJson = fetchJson(myMemoryWordUrl)
+            if (myMemoryJson != null) {
+                try {
+                    val rootObj = JSONObject(myMemoryJson)
+                    val trans = rootObj.optJSONObject("responseData")?.optString("translatedText", "") ?: ""
+                    if (trans.isNotBlank() && !trans.startsWith("MYMEMORY WARNING")) {
+                        meaning = cleanHtmlEntities(trans)
+                    }
+                } catch (e: Exception) {
+                    Log.w("DictionaryRepository", "Failed to parse MyMemory response: ${e.message}")
+                }
+            }
+
+            if (meaning.isBlank() && dictJson == null) {
+                return@withContext DictionaryLookupResult.NotFound
+            }
+
+            if (meaning.isBlank()) {
+                meaning = cleanWord
+            }
+
+            if (exampleSentence.isBlank() && sentence.isNotBlank() && sentence.contains(cleanWord, ignoreCase = true)) {
+                exampleSentence = sentence.trim()
+            }
+
+            var exampleTranslate = ""
+            if (exampleSentence.isNotBlank()) {
+                try {
+                    val encodedEx = URLEncoder.encode(exampleSentence, "UTF-8")
+                    val myMemoryExUrl = "https://api.mymemory.translated.net/get?q=$encodedEx&langpair=en|vi"
+                    val exJson = fetchJson(myMemoryExUrl)
+                    if (exJson != null) {
+                        val rootEx = JSONObject(exJson)
+                        val exTrans = rootEx.optJSONObject("responseData")?.optString("translatedText", "") ?: ""
+                        if (exTrans.isNotBlank() && !exTrans.startsWith("MYMEMORY WARNING")) {
+                            exampleTranslate = cleanHtmlEntities(exTrans)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
             val item = VocabularyItem(
-                word = wordValue,
-                mean = meanValue,
-                phonetic = jsonObject.optString("phonetic", ""),
-                partOfSpeech = jsonObject.optString("partOfSpeech", ""),
+                word = cleanWord,
+                mean = meaning,
+                phonetic = phonetic,
+                partOfSpeech = partOfSpeech,
                 example = LearningExample(
-                    sentence = exampleObj?.optString("sentence", "") ?: "",
-                    translate = exampleObj?.optString("translate", "") ?: ""
+                    sentence = exampleSentence,
+                    translate = exampleTranslate
                 )
             )
 
             DictionaryLookupResult.Found(item)
         } catch (e: Exception) {
+            Log.e("DictionaryRepository", "Error looking up word '$cleanWord': ${e.message}", e)
             DictionaryLookupResult.Error(e)
         }
+    }
+
+    private fun fetchJson(url: String): String? {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "SpeakMate-App")
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            return response.body?.string()
+        }
+    }
+
+    private fun cleanHtmlEntities(text: String): String {
+        return text.replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .trim()
     }
 }

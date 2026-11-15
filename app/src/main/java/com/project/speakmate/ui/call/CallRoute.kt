@@ -177,7 +177,7 @@ fun CallRoute(
             onSelectTranscriptWord = viewModel::selectWord,
             onCloseDictionary = viewModel::closeDictionary,
             onPlayDictionaryWord = viewModel::playDictionaryWord,
-            onSaveDictionaryWord = {},
+            onSaveDictionaryWord = viewModel::saveDictionaryWord,
             modifier = modifier,
             onResumeCall = viewModel::resumeCall,
             onRetryDictionary = viewModel::retryLookup,

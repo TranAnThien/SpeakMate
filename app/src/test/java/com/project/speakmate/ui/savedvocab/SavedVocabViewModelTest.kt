@@ -10,6 +10,8 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -55,6 +57,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `uiState isLoading false after first vocab emission`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         fakeVocabFlow.emit(emptyList())
         advanceUntilIdle()
         assertFalse(viewModel.uiState.value.isLoading)
@@ -62,6 +65,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `uiState isEmpty true when list is empty and not loading`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         fakeVocabFlow.emit(emptyList())
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isEmpty)
@@ -71,6 +75,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `updateSearchQuery filters by word (case insensitive)`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         fakeVocabFlow.emit(
             listOf(
                 makeItem("resilience", "sự kiên cường"),
@@ -90,6 +95,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `updateSearchQuery filters by mean (case insensitive)`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         fakeVocabFlow.emit(
             listOf(
                 makeItem("resilience", "sự kiên cường"),
@@ -108,6 +114,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `blank search query shows all vocabularies`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         val items = listOf(makeItem("a", "alpha"), makeItem("b", "beta"))
         fakeVocabFlow.emit(items)
         advanceUntilIdle()
@@ -122,6 +129,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `search with no match returns empty filtered list`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         fakeVocabFlow.emit(listOf(makeItem("resilience", "sự kiên cường")))
         advanceUntilIdle()
 
@@ -135,6 +143,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `removeVocabulary calls repository with correct key pair`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         coEvery { repository.removeVocabulary("test", "noun") } returns Result.success(Unit)
 
         viewModel.removeVocabulary("test", "noun")
@@ -145,6 +154,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `removeVocabulary sets error message on failure`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         coEvery { repository.removeVocabulary(any(), any()) } returns
                 Result.failure(Exception("Firestore error"))
 
@@ -156,6 +166,7 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `clearError resets error to null`() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         coEvery { repository.removeVocabulary(any(), any()) } returns
                 Result.failure(Exception("err"))
 
