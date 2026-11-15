@@ -91,7 +91,7 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
                 } else {
                     currentList.add(0, validItem)
                     if (currentList.size > 1000) {
-                        currentList.removeLast()
+                        currentList.removeAt(currentList.lastIndex)
                         finalResult = VocabularySaveResult.SAVED_REPLACING_OLDEST
                     } else {
                         finalResult = VocabularySaveResult.SAVED
