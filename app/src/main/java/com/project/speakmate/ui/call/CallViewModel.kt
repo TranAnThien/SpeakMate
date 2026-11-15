@@ -3,31 +3,43 @@ package com.project.speakmate.ui.call
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.speakmate.domain.model.AssessmentEvidence
+import com.project.speakmate.domain.model.AssessmentOutcome
+import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.CallInterruption
+import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
-import com.project.speakmate.domain.model.PronunciationState
 import com.project.speakmate.domain.model.CallState
-import com.project.speakmate.domain.model.Scenario
-import com.project.speakmate.domain.model.SenderType
-import com.project.speakmate.domain.model.TranscriptMessage
-import com.project.speakmate.domain.repository.CallRepository
-import com.project.speakmate.domain.repository.DictionaryRepository
-import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import com.project.speakmate.domain.model.DictionaryLookupResult
 import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.model.PracticeAttempt
+import com.project.speakmate.domain.model.PracticeType
+import com.project.speakmate.domain.model.PronunciationState
+import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.SenderType
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
+import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.TranscriptMessage
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
+import com.project.speakmate.domain.repository.CallRepository
+import com.project.speakmate.domain.repository.DictionaryRepository
+import com.project.speakmate.domain.repository.HistoryRepository
+import com.project.speakmate.domain.repository.SavedVocabularyRepository
+import com.project.speakmate.domain.repository.SpeakingAssessmentRepository
 import com.project.speakmate.ui.call.state.CallDictionaryStatus
 import com.project.speakmate.ui.call.state.CallDictionaryUiState
 import com.project.speakmate.ui.call.state.CallPresentation
 import com.project.speakmate.ui.call.state.CallTranscriptMessageUiState
 import com.project.speakmate.ui.call.state.CallUiState
+import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import com.project.speakmate.ui.call.state.MicrophonePermissionPresentation
 import com.project.speakmate.ui.call.state.MicrophonePermissionUiState
-import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +58,9 @@ import kotlinx.coroutines.launch
 class CallViewModel @Inject constructor(
     private val repository: CallRepository,
     private val dictionaryRepository: DictionaryRepository,
-    private val savedVocabularyRepository: SavedVocabularyRepository
+    private val savedVocabularyRepository: SavedVocabularyRepository,
+    private val historyRepository: HistoryRepository,
+    private val speakingAssessmentRepository: SpeakingAssessmentRepository
 ) : ViewModel() {
 
     companion object {
@@ -66,6 +80,12 @@ class CallViewModel @Inject constructor(
     val uiState: StateFlow<CallUiState> = _uiState.asStateFlow()
     val audioLevel: StateFlow<Float> = repository.audioLevel
 
+    private var currentScenario: Scenario? = null
+    private var currentActivityType: CallActivityType = CallActivityType.FREE_PRACTICE
+    private var currentCommunicativeGoal: String = ""
+    private var activeStartedAt: Date? = null
+    private var hasProcessedCurrentSession: Boolean = false
+
     val durationLabel: StateFlow<String> = combine(
         repository.sessionState,
         flow {
@@ -84,6 +104,17 @@ class CallViewModel @Inject constructor(
                 val isCallOpen = session.state == CallState.CALLING ||
                         session.state == CallState.ACTIVE ||
                         session.state == CallState.PAUSED
+
+                if (session.state == CallState.ACTIVE && activeStartedAt == null) {
+                    activeStartedAt = Date()
+                }
+
+                if ((session.outcome != null || session.state == CallState.ENDED || session.state == CallState.FAILED) &&
+                    !hasProcessedCurrentSession && session.state != CallState.READY && session.state != CallState.CALLING
+                ) {
+                    hasProcessedCurrentSession = true
+                    onCallEnded(isNetworkError = session.interruption == CallInterruption.NETWORK || session.failure != null)
+                }
 
                 _uiState.update {
                     it.copy(
@@ -133,6 +164,12 @@ class CallViewModel @Inject constructor(
         activityType: CallActivityType,
         communicativeGoal: String = ""
     ) {
+        currentScenario = scenario
+        currentActivityType = activityType
+        currentCommunicativeGoal = communicativeGoal
+        activeStartedAt = null
+        hasProcessedCurrentSession = false
+
         _uiState.update {
             it.copy(
                 microphonePermission = null,
@@ -339,6 +376,127 @@ class CallViewModel @Inject constructor(
         }
 
         repository.close()
+    }
+
+    fun onCallEnded(isNetworkError: Boolean = false) {
+        val session = repository.sessionState.value
+        val finalTranscripts = extractFinalTranscripts(session.transcript)
+        val hasUserSpeech = session.hasUserSpeech || finalTranscripts.any { it.senderType == SenderType.USER }
+        val endedAt = Date()
+        val startedAt = activeStartedAt ?: endedAt
+
+        if (isNetworkError || session.failure != null) {
+            return
+        }
+
+        if (!hasUserSpeech) {
+            return
+        }
+
+        if (currentActivityType == CallActivityType.INITIAL_PLACEMENT || currentActivityType == CallActivityType.REASSESSMENT) {
+            return
+        }
+
+        val practiceType = when (currentActivityType) {
+            CallActivityType.FREE_PRACTICE -> PracticeType.FREE_PRACTICE
+            CallActivityType.TRAINING_UNIT -> PracticeType.TRAINING_UNIT
+            CallActivityType.GOAL_ASSESSMENT -> PracticeType.GOAL_ASSESSMENT
+            else -> PracticeType.FREE_PRACTICE
+        }
+
+        processAssessmentAndSaveHistory(
+            transcripts = finalTranscripts,
+            startedAt = startedAt,
+            endedAt = endedAt,
+            scenarioId = currentScenario?.scenarioId ?: "",
+            practiceType = practiceType
+        )
+    }
+
+    fun extractFinalTranscripts(rawTranscripts: List<TranscriptMessage>): List<TranscriptMessage> {
+        return rawTranscripts
+            .filter { it.isFinal && it.content.isNotBlank() }
+            .mapIndexed { index, raw ->
+                TranscriptMessage(
+                    messageId = raw.messageId.ifBlank { UUID.randomUUID().toString() },
+                    senderType = raw.senderType,
+                    content = raw.content.trim(),
+                    orderIndex = index,
+                    isFinal = true,
+                    isInterrupted = raw.isInterrupted
+                )
+            }
+    }
+
+    fun processAssessmentAndSaveHistory(
+        transcripts: List<TranscriptMessage>,
+        startedAt: Date,
+        endedAt: Date,
+        scenarioId: String,
+        practiceType: PracticeType
+    ) {
+        viewModelScope.launch {
+            var finalResult: AssessmentResult? = null
+            var criteriaResult: SpeakingCriteriaResult? = null
+            var requiredActionResults: Map<String, Boolean> = emptyMap()
+            var feedbackSummary: String? = null
+
+            if (practiceType != PracticeType.FREE_PRACTICE) {
+                try {
+                    val outcome = speakingAssessmentRepository.evaluate(
+                        AssessmentEvidence(
+                            targetLevel = SpeakingLevel.A1,
+                            communicativeGoal = currentCommunicativeGoal,
+                            requiredActions = emptyList(),
+                            callOutcome = CallOutcome.COMPLETED,
+                            failure = null,
+                            hasUserSpeech = true,
+                            transcript = transcripts,
+                            audioDurationMillis = endedAt.time - startedAt.time,
+                            assessmentAudioId = repository.sessionState.value.assessmentAudioId
+                        )
+                    )
+                    when (outcome) {
+                        is AssessmentOutcome.Evaluated -> {
+                            criteriaResult = outcome.criteria
+                            requiredActionResults = outcome.requiredActionResults
+                            finalResult = calculateSpeakingResult(criteriaResult, requiredActionResults)
+                            feedbackSummary = "Hoàn tất đánh giá."
+                        }
+                        is AssessmentOutcome.InsufficientEvidence -> {
+                            feedbackSummary = "Hệ thống chưa thể đánh giá được phiên này do thiếu dữ kiện hoặc lỗi AI."
+                        }
+                    }
+                } catch (_: Exception) {
+                    feedbackSummary = "Hệ thống chưa thể đánh giá được phiên này do thiếu dữ kiện hoặc lỗi AI."
+                }
+            } else {
+                feedbackSummary = "Luyện tập tự do không chấm điểm."
+            }
+
+            val attempt = PracticeAttempt(
+                attemptId = UUID.randomUUID().toString(),
+                scenarioId = scenarioId,
+                practiceType = practiceType,
+                startedAt = startedAt,
+                endedAt = endedAt,
+                result = finalResult,
+                criteriaResult = criteriaResult,
+                requiredActionResults = requiredActionResults,
+                transcripts = transcripts,
+                feedbackSummary = feedbackSummary
+            )
+
+            historyRepository.savePracticeAttempt(attempt)
+        }
+    }
+
+    fun calculateSpeakingResult(
+        criteria: SpeakingCriteriaResult,
+        actions: Map<String, Boolean>
+    ): AssessmentResult {
+        if (actions.containsValue(false)) return AssessmentResult.FAIL
+        return criteria.calculateSpeakingResult()
     }
 
     private fun getPresentation(session: CallSessionState): CallPresentation =
