@@ -34,14 +34,12 @@ import com.project.speakmate.ui.history.HistoryScreen
 import com.project.speakmate.ui.history.HistoryViewModel
 import com.project.speakmate.ui.history.SessionDetailScreen
 import com.project.speakmate.ui.history.SessionDetailViewModel
-import com.project.speakmate.ui.history.state.HistoryUiState
 import com.project.speakmate.ui.home.HomeScreen
 import com.project.speakmate.ui.home.HomeViewModel
 import com.project.speakmate.ui.practice.PracticeViewModel
 import com.project.speakmate.ui.practice.ScenarioCatalogScreen
 import com.project.speakmate.ui.practice.ScenarioPreparationScreen
 import com.project.speakmate.ui.practice.ScenarioPreparationViewModel
-import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
 import com.project.speakmate.ui.placement.PlacementDestination
 import com.project.speakmate.ui.placement.PlacementRoute
 import com.project.speakmate.ui.placement.PlacementViewModel
