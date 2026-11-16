@@ -393,7 +393,13 @@ fun AppNavigation(
                 onOpenSession = { sessionId ->
                     navController.navigate("session_detail/$sessionId")
                 },
-                onStartPractice = { navController.navigate("practice") { launchSingleTop = true } },
+                onStartPractice = {
+                    if (state.selectedFilterId == "free_practice") {
+                        navController.navigate("practice") { launchSingleTop = true }
+                    } else {
+                        navController.navigate("training_path") { launchSingleTop = true }
+                    }
+                },
                 onRetry = {},
                 onDismissError = {},
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },

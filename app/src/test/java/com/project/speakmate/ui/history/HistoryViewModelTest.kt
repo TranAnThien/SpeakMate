@@ -115,11 +115,23 @@ class HistoryViewModelTest {
     }
 
     @Test
+    fun defaultFiltersHasThreeFilters() = runTest {
+        historyListFlow.value = emptyList()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(3, state.filters.size)
+        assertEquals("all", state.filters[0].id)
+        assertEquals("training_unit", state.filters[1].id)
+        assertEquals("free_practice", state.filters[2].id)
+    }
+
+    @Test
     fun filterChangesVisibleSessions() = runTest {
         val attempts = listOf(
             makeAttempt("1", PracticeType.FREE_PRACTICE, null),
             makeAttempt("2", PracticeType.TRAINING_UNIT, AssessmentResult.PASS),
-            makeAttempt("3", PracticeType.TRAINING_UNIT, AssessmentResult.FAIL)
+            makeAttempt("3", PracticeType.GOAL_ASSESSMENT, AssessmentResult.FAIL)
         )
         historyListFlow.value = attempts
         advanceUntilIdle()

@@ -44,8 +44,9 @@ class HistoryViewModel @Inject constructor(
     ) { attempts, filterId ->
         val filtered = when (filterId) {
             "free_practice" -> attempts.filter { it.practiceType == PracticeType.FREE_PRACTICE }
-            "training_unit" -> attempts.filter { it.practiceType == PracticeType.TRAINING_UNIT }
-            "goal_assessment" -> attempts.filter { it.practiceType == PracticeType.GOAL_ASSESSMENT }
+            "training_unit" -> attempts.filter {
+                it.practiceType == PracticeType.TRAINING_UNIT || it.practiceType == PracticeType.GOAL_ASSESSMENT
+            }
             else -> attempts
         }
 
@@ -130,8 +131,7 @@ class HistoryViewModel @Inject constructor(
 
     private fun defaultFilters() = listOf(
         ContentFilterUiState("all", "Tất cả"),
-        ContentFilterUiState("free_practice", "Luyện tự do"),
         ContentFilterUiState("training_unit", "Bài học"),
-        ContentFilterUiState("goal_assessment", "Đánh giá")
+        ContentFilterUiState("free_practice", "Luyện tự do")
     )
 }
