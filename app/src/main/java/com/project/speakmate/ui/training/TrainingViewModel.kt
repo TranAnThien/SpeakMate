@@ -2,9 +2,11 @@ package com.project.speakmate.ui.training
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.TrainingGoal
 import com.project.speakmate.domain.model.TrainingPath
 import com.project.speakmate.domain.model.TrainingStage
+import com.project.speakmate.domain.model.TrainingUnit
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.TrainingRepository
 import com.project.speakmate.ui.training.state.*
@@ -26,6 +28,11 @@ class TrainingViewModel @Inject constructor(
 
     private val _preparationState = MutableStateFlow(UnitPreparationUiState())
     val preparationState: StateFlow<UnitPreparationUiState> = _preparationState.asStateFlow()
+
+    var currentLoadedScenario: Scenario? = null
+        private set
+    var currentLoadedUnit: TrainingUnit? = null
+        private set
 
     private var currentUser: User? = null
 
@@ -154,13 +161,19 @@ class TrainingViewModel @Inject constructor(
         viewModelScope.launch {
             _preparationState.update { UnitPreparationUiState(status = TrainingContentStatus.LOADING) }
             val unit = trainingRepository.getTrainingUnit(unitId).getOrElse { error ->
+                currentLoadedUnit = null
+                currentLoadedScenario = null
                 _preparationState.update { UnitPreparationUiState(status = TrainingContentStatus.ERROR, errorMessage = error.message.orEmpty()) }
                 return@launch
             }
             val scenario = trainingRepository.getScenario(unit.scenarioId).getOrElse { error ->
+                currentLoadedUnit = null
+                currentLoadedScenario = null
                 _preparationState.update { UnitPreparationUiState(status = TrainingContentStatus.ERROR, errorMessage = error.message.orEmpty()) }
                 return@launch
             }
+            currentLoadedUnit = unit
+            currentLoadedScenario = scenario
             val imageUrl = trainingRepository.getScenarioImageUrl(unit.scenarioId).getOrElse { error ->
                 _preparationState.update { UnitPreparationUiState(status = TrainingContentStatus.ERROR, errorMessage = error.message.orEmpty()) }
                 return@launch

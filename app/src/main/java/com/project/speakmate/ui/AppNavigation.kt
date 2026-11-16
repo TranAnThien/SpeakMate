@@ -253,7 +253,9 @@ fun AppNavigation(
                     state = preparationState,
                     onBack = navController::popBackStack,
                     onSelectSection = trainingViewModel::selectPreparationSection,
-                    onStartRoleplay = {},
+                    onStartRoleplay = {
+                        navController.navigate("training_unit_call/$unitId")
+                    },
                     onPlayWord = {},
                     onPlayPattern = {},
                     onPlayExample = {}
@@ -274,6 +276,30 @@ fun AppNavigation(
                     loadingDescriptionRes = R.string.preparation_loading_description,
                     errorTitleRes = R.string.preparation_error_title,
                     errorDescriptionRes = R.string.preparation_error_description
+                )
+            }
+        }
+
+        composable("training_unit_call/{unitId}") { entry ->
+            val unitId = entry.arguments?.getString("unitId").orEmpty()
+            val unitEntry = remember(entry, unitId) {
+                navController.getBackStackEntry("training_unit/$unitId")
+            }
+            val trainingViewModel: TrainingViewModel = hiltViewModel(unitEntry)
+            val scenario = trainingViewModel.currentLoadedScenario
+            val unit = trainingViewModel.currentLoadedUnit
+            if (scenario == null || unit == null) {
+                LaunchedEffect(Unit) {
+                    navController.popBackStack()
+                }
+            } else {
+                CallRoute(
+                    scenario = scenario,
+                    activityType = CallActivityType.TRAINING_UNIT,
+                    communicativeGoal = unit.communicativeFocus,
+                    onExit = {
+                        navController.popBackStack()
+                    }
                 )
             }
         }
