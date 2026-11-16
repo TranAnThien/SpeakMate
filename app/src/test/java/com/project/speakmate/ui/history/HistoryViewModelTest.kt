@@ -14,6 +14,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -67,6 +69,7 @@ class HistoryViewModelTest {
 
     @Test
     fun emptyListResultsInEmptyPresentation() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         historyListFlow.value = emptyList()
         advanceUntilIdle()
 
@@ -78,6 +81,7 @@ class HistoryViewModelTest {
 
     @Test
     fun populatedListGroupsByDateAndMapsResults() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         val attempts = listOf(
             makeAttempt("1", PracticeType.FREE_PRACTICE, null),
             makeAttempt("2", PracticeType.TRAINING_UNIT, AssessmentResult.PASS),
@@ -102,6 +106,7 @@ class HistoryViewModelTest {
 
     @Test
     fun scenarioTitleResolvesToScenarioNameWhenAvailable() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         val scenario = Scenario("scenario_1", "Gọi món tại nhà hàng", "Description", "Prompt")
         coEvery { practiceRepository.getScenario("scenario_1") } returns Result.success(scenario)
 
@@ -116,6 +121,7 @@ class HistoryViewModelTest {
 
     @Test
     fun defaultFiltersHasThreeFilters() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         historyListFlow.value = emptyList()
         advanceUntilIdle()
 
@@ -128,6 +134,7 @@ class HistoryViewModelTest {
 
     @Test
     fun filterChangesVisibleSessions() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         val attempts = listOf(
             makeAttempt("1", PracticeType.FREE_PRACTICE, null),
             makeAttempt("2", PracticeType.TRAINING_UNIT, AssessmentResult.PASS),
