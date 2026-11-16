@@ -1,5 +1,7 @@
 package com.project.speakmate.domain.model
 
+import com.project.speakmate.domain.rules.TrainingProgressRules
+
 data class TrainingGoal(
     val goalId: String,
     val title: String,
@@ -8,11 +10,6 @@ data class TrainingGoal(
     val units: List<TrainingUnit>
 ) {
     fun getUnitStatus(goalIndex: Int, unitIndex: Int, progress: TrainingProgress): ContentStatus {
-        return when {
-            goalIndex < progress.currentGoalOrder -> ContentStatus.COMPLETED
-            goalIndex == progress.currentGoalOrder && unitIndex < progress.currentUnitOrder -> ContentStatus.COMPLETED
-            goalIndex == progress.currentGoalOrder && unitIndex == progress.currentUnitOrder -> ContentStatus.CURRENT
-            else -> ContentStatus.LOCKED
-        }
+        return TrainingProgressRules.getUnitStatus(this, progress, goalIndex, unitIndex)
     }
 }
