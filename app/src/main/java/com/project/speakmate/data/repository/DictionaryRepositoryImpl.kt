@@ -8,6 +8,8 @@ import com.project.speakmate.domain.repository.DictionaryRepository
 import java.net.URLEncoder
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -29,11 +31,16 @@ class DictionaryRepositoryImpl @Inject constructor(
             val freeDictUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/$encodedWord"
             val myMemoryWordUrl = "https://api.mymemory.translated.net/get?q=$encodedWord&langpair=en|vi"
 
+            val (dictJson, myMemoryJson) = coroutineScope {
+                val dictDeferred = async { fetchJson(freeDictUrl) }
+                val myMemoryDeferred = async { fetchJson(myMemoryWordUrl) }
+                Pair(dictDeferred.await(), myMemoryDeferred.await())
+            }
+
             var phonetic = ""
             var partOfSpeech = ""
             var exampleSentence = ""
 
-            val dictJson = fetchJson(freeDictUrl)
             if (dictJson != null) {
                 try {
                     val rootArray = JSONArray(dictJson)
@@ -75,7 +82,6 @@ class DictionaryRepositoryImpl @Inject constructor(
             }
 
             var meaning = ""
-            val myMemoryJson = fetchJson(myMemoryWordUrl)
             if (myMemoryJson != null) {
                 try {
                     val rootObj = JSONObject(myMemoryJson)
