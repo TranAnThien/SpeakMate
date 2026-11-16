@@ -15,9 +15,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -29,14 +31,15 @@ import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.auth.AuthViewModel
 import com.project.speakmate.ui.auth.GoogleSignInScreen
 import com.project.speakmate.ui.history.HistoryScreen
-import com.project.speakmate.ui.history.state.HistoryUiState
+import com.project.speakmate.ui.history.HistoryViewModel
+import com.project.speakmate.ui.history.SessionDetailScreen
+import com.project.speakmate.ui.history.SessionDetailViewModel
 import com.project.speakmate.ui.home.HomeScreen
 import com.project.speakmate.ui.home.HomeViewModel
 import com.project.speakmate.ui.practice.PracticeViewModel
 import com.project.speakmate.ui.practice.ScenarioCatalogScreen
 import com.project.speakmate.ui.practice.ScenarioPreparationScreen
 import com.project.speakmate.ui.practice.ScenarioPreparationViewModel
-import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
 import com.project.speakmate.ui.placement.PlacementDestination
 import com.project.speakmate.ui.placement.PlacementRoute
 import com.project.speakmate.ui.placement.PlacementViewModel
@@ -55,6 +58,7 @@ import com.project.speakmate.ui.training.state.GoalDetailUiState
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
 import com.project.speakmate.ui.call.CallRoute
+import com.project.speakmate.ui.profile.savedvocab.SavedVocabScreen
 
 @Composable
 fun AppNavigation(
@@ -249,13 +253,54 @@ fun AppNavigation(
                     state = preparationState,
                     onBack = navController::popBackStack,
                     onSelectSection = trainingViewModel::selectPreparationSection,
-                    onStartRoleplay = {},
+                    onStartRoleplay = {
+                        navController.navigate("training_unit_call/$unitId")
+                    },
                     onPlayWord = {},
                     onPlayPattern = {},
                     onPlayExample = {}
                 )
-                TrainingContentStatus.LOADING -> TrainingUnavailableContent(isLoading = true, onRetry = { trainingViewModel.loadUnitPreparation(unitId) })
-                else -> TrainingUnavailableContent(isLoading = false, onRetry = { trainingViewModel.loadUnitPreparation(unitId) })
+                TrainingContentStatus.LOADING -> TrainingUnavailableContent(
+                    isLoading = true,
+                    onRetry = { trainingViewModel.loadUnitPreparation(unitId) },
+                    loadingTitleRes = R.string.preparation_loading_title,
+                    loadingDescriptionRes = R.string.preparation_loading_description,
+                    errorTitleRes = R.string.preparation_error_title,
+                    errorDescriptionRes = R.string.preparation_error_description
+                )
+                else -> TrainingUnavailableContent(
+                    isLoading = false,
+                    onRetry = { trainingViewModel.loadUnitPreparation(unitId) },
+                    errorMessage = preparationState.errorMessage,
+                    loadingTitleRes = R.string.preparation_loading_title,
+                    loadingDescriptionRes = R.string.preparation_loading_description,
+                    errorTitleRes = R.string.preparation_error_title,
+                    errorDescriptionRes = R.string.preparation_error_description
+                )
+            }
+        }
+
+        composable("training_unit_call/{unitId}") { entry ->
+            val unitId = entry.arguments?.getString("unitId").orEmpty()
+            val unitEntry = remember(entry, unitId) {
+                navController.getBackStackEntry("training_unit/$unitId")
+            }
+            val trainingViewModel: TrainingViewModel = hiltViewModel(unitEntry)
+            val scenario = trainingViewModel.currentLoadedScenario
+            val unit = trainingViewModel.currentLoadedUnit
+            if (scenario == null || unit == null) {
+                LaunchedEffect(Unit) {
+                    navController.popBackStack()
+                }
+            } else {
+                CallRoute(
+                    scenario = scenario,
+                    activityType = CallActivityType.TRAINING_UNIT,
+                    communicativeGoal = unit.communicativeFocus,
+                    onExit = {
+                        navController.popBackStack()
+                    }
+                )
             }
         }
 
@@ -310,8 +355,7 @@ fun AppNavigation(
 
         composable("free_practice_call/{practiceId}") { entry ->
             val practiceId = entry.arguments?.getString("practiceId").orEmpty()
-            // Reuse the Preparation destination's ViewModel: the Scenario was loaded before
-            // navigation and its CTA state must be restored when the call closes.
+
             val preparationEntry = remember(entry, practiceId) {
                 navController.getBackStackEntry("practice_preparation/$practiceId")
             }
@@ -341,17 +385,43 @@ fun AppNavigation(
         }
 
         composable("history") {
+            val viewModel: HistoryViewModel = hiltViewModel()
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
             HistoryScreen(
-                state = HistoryUiState(),
-                onSelectFilter = {},
-                onOpenSession = {},
-                onStartPractice = { navController.navigate("practice") { launchSingleTop = true } },
+                state = state,
+                onSelectFilter = viewModel::onSelectFilter,
+                onOpenSession = { sessionId ->
+                    navController.navigate("session_detail/$sessionId")
+                },
+                onStartPractice = {
+                    if (state.selectedFilterId == "free_practice") {
+                        navController.navigate("practice") { launchSingleTop = true }
+                    } else {
+                        navController.navigate("training_path") { launchSingleTop = true }
+                    }
+                },
                 onRetry = {},
                 onDismissError = {},
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
-                onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
+                onOpenHistory = {},
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
+            )
+        }
+
+        composable(
+            route = "session_detail/{attemptId}",
+            arguments = listOf(navArgument("attemptId") { type = NavType.StringType })
+        ) {
+            val viewModel: SessionDetailViewModel = hiltViewModel()
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
+            SessionDetailScreen(
+                state = state,
+                onBack = { navController.popBackStack() },
+                onRetrySession = viewModel::loadSessionDetail,
+                onRetryTranscript = viewModel::loadSessionDetail,
+                onDismissError = { navController.popBackStack() },
+                onReturnToHistory = { navController.popBackStack() }
             )
         }
 
@@ -382,7 +452,7 @@ fun AppNavigation(
             ProfileScreen(
                 state = profileUiState,
                 onOpenSettings = { navController.navigate("settings") },
-                onOpenVocabulary = {},
+                onOpenVocabulary = { navController.navigate("saved_vocab") { launchSingleTop = true } },
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
@@ -412,6 +482,12 @@ fun AppNavigation(
                     }
                 },
                 onCancelSignOut = { isSignOutConfirmationVisible = false }
+            )
+        }
+
+        composable("saved_vocab") {
+            SavedVocabScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }

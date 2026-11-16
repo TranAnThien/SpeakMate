@@ -7,17 +7,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
-import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
-import com.project.speakmate.data.repository.AuthRepositoryImpl
-import com.project.speakmate.data.repository.UserRepositoryImpl
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.project.speakmate.ui.AppNavigation
 import com.project.speakmate.ui.components.SpeakMateLoadingIndicator

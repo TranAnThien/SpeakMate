@@ -10,6 +10,29 @@ plugins {
 
 val geminiKeyName = "GEMINI_API_KEY"
 
+fun resolveGeminiApiKey(): String {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        val assignment = Regex("""^\s*(?:export\s+)?GEMINI_API_KEY\s*=\s*(?:"([^"]*)"|'([^']*)'|([^#\s]*))\s*(?:#.*)?$""")
+        envFile.readLines().forEach { line ->
+            assignment.matchEntire(line.trim())?.destructured?.let { (dq, sq, uq) ->
+                val key = dq.ifEmpty { sq }.ifEmpty { uq }.trim()
+                if (key.isNotEmpty()) return key
+            }
+        }
+    }
+    val localPropFile = rootProject.file("local.properties")
+    if (localPropFile.exists()) {
+        localPropFile.readLines().forEach { line ->
+            if (line.trim().startsWith("GEMINI_API_KEY=")) {
+                val key = line.substringAfter("GEMINI_API_KEY=").trim().trim('"', '\'')
+                if (key.isNotEmpty()) return key
+            }
+        }
+    }
+    return System.getenv("GEMINI_API_KEY")?.trim().orEmpty()
+}
+
 android {
     namespace = "com.project.speakmate"
     compileSdk {
@@ -24,7 +47,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", geminiKeyName, "\"\"")
+        val resolvedKey = resolveGeminiApiKey()
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+        buildConfigField("String", geminiKeyName, "\"$resolvedKey\"")
     }
 
     buildTypes {
@@ -51,29 +77,6 @@ android {
     }
 }
 
-androidComponents {
-    onVariants(selector().withBuildType("debug")) { variant ->
-        val keyName = geminiKeyName
-        val assignment = Regex("""\s*(?:export\s+)?$keyName\s*=\s*(?:"([^"]*)"|'([^']*)'|([^#\s]*))\s*(?:#.*)?""")
-        val dotenv = rootProject.layout.projectDirectory.file(".env")
-        val geminiApiKey = providers.fileContents(dotenv).asText.map { contents ->
-            contents.removePrefix("\uFEFF").lineSequence().mapNotNull { line ->
-                assignment.matchEntire(line)?.destructured?.let { (doubleQuoted, singleQuoted, unquoted) ->
-                    doubleQuoted.ifEmpty { singleQuoted }.ifEmpty { unquoted }.trim()
-                }
-            }.lastOrNull().orEmpty()
-        }.filter(String::isNotEmpty)
-            .orElse(providers.environmentVariable(keyName))
-            .orElse("")
-            .map { key ->
-                val escaped = key.trim().replace("\\", "\\\\").replace("\"", "\\\"")
-                    .replace("\r", "\\r").replace("\n", "\\n")
-                BuildConfigField("String", "\"$escaped\"", null)
-            }
-        checkNotNull(variant.buildConfigFields).put(keyName, geminiApiKey)
-    }
-}
-
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -83,6 +86,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.generativeai)
     implementation(libs.navigation.compose)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -111,4 +115,5 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.0.0")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation(libs.androidx.compose.material.icons.extended)
 }
