@@ -9,6 +9,7 @@ import com.project.speakmate.data.dto.TranscriptMessageDto
 import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.domain.model.PracticeAttempt
+import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.repository.HistoryRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -24,15 +25,31 @@ class HistoryRepositoryImpl @Inject constructor(
     private val auth: FirebaseAuth
 ) : HistoryRepository {
 
-    override suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit> = runCatching {
+    override suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit> {
+        return saveAttemptAndProgress(attempt, null)
+    }
+
+    override suspend fun saveAttemptAndProgress(
+        attempt: PracticeAttempt,
+        newProgress: TrainingProgress?
+    ): Result<Unit> = runCatching {
         val uid = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
-        val attemptRef = firestore.collection("users").document(uid)
-            .collection("practiceAttempts").document(attempt.attemptId)
+        val userRef = firestore.collection("users").document(uid)
+        val attemptRef = userRef.collection("practiceAttempts").document(attempt.attemptId)
 
         firestore.runTransaction { transaction ->
-            val snapshot = transaction.get(attemptRef)
-            if (snapshot.exists()) {
+            val attemptSnapshot = transaction.get(attemptRef)
+            if (attemptSnapshot.exists()) {
                 return@runTransaction
+            }
+
+            val userSnapshot = if (newProgress != null) transaction.get(userRef) else null
+            if (newProgress != null && (userSnapshot == null || !userSnapshot.exists())) {
+                throw IllegalStateException("User document not found")
+            }
+
+            if (newProgress != null) {
+                transaction.update(userRef, "trainingProgress", newProgress.toDto())
             }
 
             val attemptDto = attempt.toDto()

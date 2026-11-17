@@ -42,19 +42,29 @@ data class LearningExampleDto(
     val translate: String = ""
 )
 
+fun SpeakingCriteriaResult.toDto() = SpeakingCriteriaResultDto(
+    rangeMet = rangeMet,
+    accuracyMet = accuracyMet,
+    fluencyMet = fluencyMet,
+    interactionMet = interactionMet,
+    coherenceMet = coherenceMet
+)
+
+fun TrainingProgress.toDto() = TrainingProgressDto(
+    currentGoalOrder = currentGoalOrder,
+    currentUnitOrder = currentUnitOrder,
+    stage = stage.name
+)
+
 fun User.toDto() = UserDto(
     userId = userId,
     displayName = displayName,
     email = email,
     photoUrl = photoUrl,
     level = level.name,
-    latestAssessmentCriteria = latestAssessmentCriteria?.let {
-        SpeakingCriteriaResultDto(it.rangeMet, it.accuracyMet, it.fluencyMet, it.interactionMet, it.coherenceMet)
-    },
+    latestAssessmentCriteria = latestAssessmentCriteria?.toDto(),
     lastAssessedAt = lastAssessedAt,
-    trainingProgress = trainingProgress?.let {
-        TrainingProgressDto(it.currentGoalOrder, it.currentUnitOrder, it.stage.name)
-    },
+    trainingProgress = trainingProgress?.toDto(),
     savedVocabularies = savedVocabularies.map {
         VocabularyItemDto(it.word, it.mean, it.phonetic, it.partOfSpeech,
             LearningExampleDto(it.example.sentence, it.example.translate))
