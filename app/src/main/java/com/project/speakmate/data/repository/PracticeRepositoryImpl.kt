@@ -1,5 +1,7 @@
 package com.project.speakmate.data.repository
 
+import com.project.speakmate.utils.extension.suspendRunCatching
+
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.domain.model.FreePractice
 import com.project.speakmate.domain.model.Scenario
@@ -15,7 +17,7 @@ class PracticeRepositoryImpl @Inject constructor(
     private val freePractices get() = firestore.collection("freePractices")
     private val scenarios get() = firestore.collection("scenarios")
 
-    override suspend fun getScenarioCatalog(): Result<List<FreePractice>> = runCatching {
+    override suspend fun getScenarioCatalog(): Result<List<FreePractice>> = suspendRunCatching {
         freePractices.get().await().documents.map { document ->
             FreePractice(
                 practiceId = document.getString("practiceId")?.takeIf(String::isNotBlank) ?: document.id,
@@ -27,7 +29,7 @@ class PracticeRepositoryImpl @Inject constructor(
         }.sortedBy(FreePractice::category)
     }
 
-    override suspend fun getScenario(scenarioId: String): Result<Scenario> = runCatching {
+    override suspend fun getScenario(scenarioId: String): Result<Scenario> = suspendRunCatching {
         val document = scenarios.document(scenarioId).get().await()
         require(document.exists()) { "Scenario '$scenarioId' is missing from Firestore." }
         Scenario(
@@ -41,7 +43,7 @@ class PracticeRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<Map<String, String>> = runCatching {
+    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<Map<String, String>> = suspendRunCatching {
         val document = scenarios.document(scenarioId).get().await()
         require(document.exists()) { "Scenario '$scenarioId' is missing from Firestore." }
         mapOf(

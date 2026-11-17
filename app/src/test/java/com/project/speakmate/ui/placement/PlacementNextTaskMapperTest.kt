@@ -20,13 +20,14 @@ class PlacementNextTaskMapperTest(
         @JvmStatic
         @Parameterized.Parameters(name = "{0} / {1} -> {2}")
         fun transitions(): List<Array<Any>> {
-            val passing = listOf(
+            val outcomes = listOf(
                 arrayOf<Any>(PlacementStep.INITIAL_A2, AssessmentResult.PASS, PlacementStep.B1_PROBE, PlacementNextTask.HIGHER_LEVEL),
+                arrayOf<Any>(PlacementStep.INITIAL_A2, AssessmentResult.PARTIAL, PlacementStep.A2_CONFIRMATION, PlacementNextTask.SAME_LEVEL),
+                arrayOf<Any>(PlacementStep.INITIAL_A2, AssessmentResult.FAIL, PlacementStep.A1_CONFIRMATION, PlacementNextTask.LOWER_LEVEL),
                 arrayOf<Any>(PlacementStep.B1_PROBE, AssessmentResult.PASS, PlacementStep.B2_PROBE, PlacementNextTask.HIGHER_LEVEL),
                 arrayOf<Any>(PlacementStep.B2_PROBE, AssessmentResult.PASS, PlacementStep.B2_CONFIRMATION, PlacementNextTask.SAME_LEVEL)
             )
             val remaining = listOf(
-                Triple(PlacementStep.INITIAL_A2, PlacementStep.A2_CONFIRMATION, PlacementNextTask.SAME_LEVEL),
                 Triple(PlacementStep.B1_PROBE, PlacementStep.A2_CONFIRMATION, PlacementNextTask.LOWER_LEVEL),
                 Triple(PlacementStep.B2_PROBE, PlacementStep.B1_CONFIRMATION, PlacementNextTask.LOWER_LEVEL),
                 Triple(PlacementStep.B2_CONFIRMATION, PlacementStep.B1_CONFIRMATION, PlacementNextTask.LOWER_LEVEL),
@@ -35,7 +36,7 @@ class PlacementNextTaskMapperTest(
             ).flatMap { (step, nextStep, classification) ->
                 listOf(AssessmentResult.PARTIAL, AssessmentResult.FAIL).map { arrayOf<Any>(step, it, nextStep, classification) }
             }
-            return passing + remaining
+            return outcomes + remaining
         }
     }
 

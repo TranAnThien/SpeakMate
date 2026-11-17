@@ -52,16 +52,20 @@ fun PracticeAttempt.toDto(): PracticeAttemptDto {
     )
 }
 
-fun PracticeAttemptDto.toDomain(transcripts: List<TranscriptMessage>): PracticeAttempt {
+fun PracticeAttemptDto.toDomain(transcripts: List<TranscriptMessage>): PracticeAttempt? {
+    val type = PracticeType.entries.firstOrNull { it.name == practiceType } ?: return null
+    val assessment = result?.let { storedResult ->
+        AssessmentResult.entries.firstOrNull { it.name == storedResult } ?: return null
+    }
     val started = this.startedAt?.toDate() ?: Date()
     val ended = this.endedAt?.toDate() ?: started
     return PracticeAttempt(
         attemptId = this.attemptId,
         scenarioId = this.scenarioId,
-        practiceType = PracticeType.valueOf(this.practiceType),
+        practiceType = type,
         startedAt = started,
         endedAt = ended,
-        result = this.result?.let { AssessmentResult.valueOf(it) },
+        result = assessment,
         criteriaResult = this.criteriaResult?.let {
             SpeakingCriteriaResult(
                 rangeMet = it["rangeMet"] ?: false,
@@ -88,10 +92,11 @@ fun TranscriptMessage.toDto(): TranscriptMessageDto {
     )
 }
 
-fun TranscriptMessageDto.toDomain(): TranscriptMessage {
+fun TranscriptMessageDto.toDomain(): TranscriptMessage? {
+    val sender = SenderType.entries.firstOrNull { it.name == senderType } ?: return null
     return TranscriptMessage(
         messageId = this.messageId,
-        senderType = SenderType.valueOf(this.senderType),
+        senderType = sender,
         content = this.content,
         orderIndex = this.orderIndex,
         isFinal = this.isFinal,

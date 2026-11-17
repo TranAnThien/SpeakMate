@@ -22,6 +22,10 @@ class ProfileViewModel @Inject constructor(
     private val userRepository: UserRepository
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "ProfileViewModel"
+    }
+
     private val _userProfile = MutableStateFlow<User?>(null)
     val userProfile: StateFlow<User?> = _userProfile.asStateFlow()
 
@@ -43,11 +47,11 @@ class ProfileViewModel @Inject constructor(
                         if (user != null) {
                             _userProfile.value = user
                         } else {
-                            Log.e("ProfileViewModel", "Phát hiện tài khoản lỗi (Không có Firestore). Đang ép đăng xuất...")
+                            Log.e(TAG, "Signed-in user has no profile document")
                             forceSignOutAndNavigate()
                         }
-                    }.onFailure { error ->
-                        Log.e("ProfileViewModel", "Lỗi truy xuất Firestore. Đang ép đăng xuất...", error)
+                    }.onFailure {
+                        Log.e(TAG, "Could not load user profile")
                         forceSignOutAndNavigate()
                     }
                 } else {

@@ -1,5 +1,7 @@
 package com.project.speakmate.data.repository
 
+import com.project.speakmate.utils.extension.suspendRunCatching
+
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.domain.model.GrammarPoint
@@ -32,7 +34,7 @@ class TrainingRepositoryImpl @Inject constructor(
     private val assessments get() = firestore.collection("goal_assessments")
     private val scenarios get() = firestore.collection("scenarios")
 
-    override suspend fun getTrainingPath(level: SpeakingLevel): Result<TrainingPath> = runCatching {
+    override suspend fun getTrainingPath(level: SpeakingLevel): Result<TrainingPath> = suspendRunCatching {
         require(level != SpeakingLevel.NOT_ASSESSED) { "A training path requires an assessed level." }
         val document = paths.document(level.name).get().await().required("Training path ${level.name}")
         val goalIds = document.requiredStringList("goals")
@@ -44,11 +46,11 @@ class TrainingRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun getTrainingGoal(goalId: String): Result<TrainingGoal> = runCatching { loadGoal(goalId) }
+    override suspend fun getTrainingGoal(goalId: String): Result<TrainingGoal> = suspendRunCatching { loadGoal(goalId) }
 
-    override suspend fun getTrainingUnit(unitId: String): Result<TrainingUnit> = runCatching { loadUnit(unitId) }
+    override suspend fun getTrainingUnit(unitId: String): Result<TrainingUnit> = suspendRunCatching { loadUnit(unitId) }
 
-    override suspend fun getScenario(scenarioId: String): Result<Scenario> = runCatching {
+    override suspend fun getScenario(scenarioId: String): Result<Scenario> = suspendRunCatching {
         val document = scenarios.document(scenarioId).get().await().required("Scenario $scenarioId")
         Scenario(
             scenarioId = document.stringOrId("scenarioId"),
@@ -58,7 +60,7 @@ class TrainingRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun getScenarioImageUrl(scenarioId: String): Result<String> = runCatching {
+    override suspend fun getScenarioImageUrl(scenarioId: String): Result<String> = suspendRunCatching {
         scenarios.document(scenarioId).get().await()
             .required("Scenario $scenarioId")
             .getString("imageUrl")

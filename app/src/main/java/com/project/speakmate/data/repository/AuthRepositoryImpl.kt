@@ -1,5 +1,7 @@
 package com.project.speakmate.data.repository
 
+import kotlinx.coroutines.CancellationException
+
 import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.project.speakmate.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +15,8 @@ class AuthRepositoryImpl @Inject constructor(
         return try {
             val uid = authDataSource.signInWithGoogle(idToken)
             Result.success(uid)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -22,6 +26,8 @@ class AuthRepositoryImpl @Inject constructor(
         return try {
             authDataSource.signOut()
             Result.success(Unit)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }

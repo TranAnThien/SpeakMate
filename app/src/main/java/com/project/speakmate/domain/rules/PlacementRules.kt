@@ -39,7 +39,11 @@ object PlacementRules {
     fun getNextStep(step: PlacementStep, result: AssessmentResult): PlacementStep? {
         val hasPassed = result == AssessmentResult.PASS
         return when (step) {
-            PlacementStep.INITIAL_A2 -> if (hasPassed) PlacementStep.B1_PROBE else PlacementStep.A2_CONFIRMATION
+            PlacementStep.INITIAL_A2 -> when (result) {
+                AssessmentResult.PASS -> PlacementStep.B1_PROBE
+                AssessmentResult.PARTIAL -> PlacementStep.A2_CONFIRMATION
+                AssessmentResult.FAIL -> PlacementStep.A1_CONFIRMATION
+            }
             PlacementStep.B1_PROBE -> if (hasPassed) PlacementStep.B2_PROBE else PlacementStep.A2_CONFIRMATION
             PlacementStep.B2_PROBE -> if (hasPassed) PlacementStep.B2_CONFIRMATION else PlacementStep.B1_CONFIRMATION
             PlacementStep.B2_CONFIRMATION -> if (hasPassed) null else PlacementStep.B1_CONFIRMATION
@@ -92,7 +96,6 @@ object PlacementRules {
         checkpoint: PlacementCheckpoint,
         reason: InsufficientEvidenceReason
     ): PlacementTransition {
-        if (reason == InsufficientEvidenceReason.NO_USER_SPEECH) return PlacementTransition.RetryTask(checkpoint, reason)
         if (checkpoint.technicalRetryCount >= MAX_TECHNICAL_RETRIES) {
             return PlacementTransition.Stopped(PlacementStopReason.TECHNICAL_RETRY_LIMIT)
         }

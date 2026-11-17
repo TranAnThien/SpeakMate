@@ -1,5 +1,6 @@
 package com.project.speakmate.ui.savedvocab
 
+import com.project.speakmate.data.audio.PronunciationPlayer
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
@@ -8,6 +9,7 @@ import com.project.speakmate.test.MainDispatcherRule
 import com.project.speakmate.ui.profile.savedvocab.SavedVocabViewModel
 import io.mockk.coEvery
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -30,6 +32,7 @@ class SavedVocabViewModelTest {
 
     private val fakeVocabFlow = MutableStateFlow<List<VocabularyItem>>(emptyList())
     private lateinit var repository: SavedVocabularyRepository
+    private lateinit var pronunciationPlayer: PronunciationPlayer
     private lateinit var viewModel: SavedVocabViewModel
 
     private fun makeItem(word: String, mean: String, pos: String = "noun") = VocabularyItem(
@@ -44,7 +47,8 @@ class SavedVocabViewModelTest {
     fun setUp() {
         repository = mockk(relaxed = true)
         io.mockk.every { repository.getSavedVocabularies() } returns fakeVocabFlow
-        viewModel = SavedVocabViewModel(repository)
+        pronunciationPlayer = mockk(relaxed = true)
+        viewModel = SavedVocabViewModel(repository, pronunciationPlayer)
     }
 
     // ─── Trạng thái ban đầu ───────────────────────────────────────────────────
@@ -178,19 +182,11 @@ class SavedVocabViewModelTest {
         assertNull(viewModel.uiState.value.error)
     }
 
-    // ─── Phát âm ─────────────────────────────────────────────────────────────
-
     @Test
-    fun `playPronunciation emits word to pronunciationWord flow`() {
-        viewModel.playPronunciation("resilience")
-        assertEquals("resilience", viewModel.pronunciationWord.value)
-    }
-
-    @Test
-    fun `onPronunciationConsumed resets pronunciationWord to null`() {
-        viewModel.playPronunciation("resilience")
-        viewModel.onPronunciationConsumed()
-        assertNull(viewModel.pronunciationWord.value)
+    fun playsTheSameWordOnEachTap() {
+        viewModel.playWord("resilience")
+        viewModel.playWord("resilience")
+        verify(exactly = 2) { pronunciationPlayer.speak("resilience", any()) }
     }
 }
 

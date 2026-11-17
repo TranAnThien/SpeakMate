@@ -1,5 +1,7 @@
 package com.project.speakmate.data.repository
 
+import kotlinx.coroutines.CancellationException
+
 import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
@@ -15,6 +17,8 @@ class UserRepositoryImpl @Inject constructor(
         return try {
             val savedDto = firestoreUserDataSource.getOrCreateUser(user.toDto())
             Result.success(savedDto.toDomain())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -24,6 +28,8 @@ class UserRepositoryImpl @Inject constructor(
         return try {
             val userDto = firestoreUserDataSource.getUser(userId)
             Result.success(userDto?.toDomain())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }

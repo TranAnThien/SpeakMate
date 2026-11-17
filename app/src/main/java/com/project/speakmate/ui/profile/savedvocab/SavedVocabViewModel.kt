@@ -2,6 +2,7 @@ package com.project.speakmate.ui.profile.savedvocab
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.speakmate.data.audio.PronunciationPlayer
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import com.project.speakmate.ui.profile.savedvocab.state.SavedVocabUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,13 +16,13 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SavedVocabViewModel @Inject constructor(
-    private val savedVocabularyRepository: SavedVocabularyRepository
+    private val savedVocabularyRepository: SavedVocabularyRepository,
+    private val pronunciationPlayer: PronunciationPlayer
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     private val _isLoading = MutableStateFlow(true)
     private val _error = MutableStateFlow<String?>(null)
-    private val _pronunciationWord = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<SavedVocabUiState> = combine(
         savedVocabularyRepository.getSavedVocabularies(),
@@ -52,8 +53,10 @@ class SavedVocabViewModel @Inject constructor(
         initialValue = SavedVocabUiState()
     )
 
-    /** Flow phát ra từ cần phát âm để Screen/Activity collect và gọi TTS */
-    val pronunciationWord: StateFlow<String?> = _pronunciationWord
+    override fun onCleared() {
+        pronunciationPlayer.release()
+        super.onCleared()
+    }
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
@@ -72,15 +75,7 @@ class SavedVocabViewModel @Inject constructor(
         _error.value = null
     }
 
-    /**
-     * Yêu cầu phát âm từ. Screen sẽ collect [pronunciationWord] để khởi động TextToSpeech.
-     * Reset về null sau mỗi lần phát để tránh re-trigger khi recompose.
-     */
-    fun playPronunciation(word: String) {
-        _pronunciationWord.value = word
-    }
-
-    fun onPronunciationConsumed() {
-        _pronunciationWord.value = null
+    fun playWord(word: String) {
+        pronunciationPlayer.speak(word) {}
     }
 }

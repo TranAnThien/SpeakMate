@@ -150,13 +150,16 @@ class ReassessmentRulesTest {
     }
 
     @Test
-    fun retriesNoSpeechOnTheSameTaskWithoutCountingEvenAtTheTechnicalLimit() {
+    fun noSpeechSharesTheRetryBudgetWithOtherFailures() {
         val initial = start(A1)
         val reason = InsufficientEvidenceReason.NO_USER_SPEECH
-        for (state in listOf(initial, initial.copy(technicalRetryCount = PlacementRules.MAX_TECHNICAL_RETRIES))) {
-            assertEquals(ReassessmentTransition.RetryTask(state, reason), apply(state, AssessmentOutcome.InsufficientEvidence(reason)))
-            assertEquals(state.currentTask, rules.selectTask(state, tasks, random))
-        }
+        val noSpeech = AssessmentOutcome.InsufficientEvidence(reason)
+        val firstRetry = (apply(initial, noSpeech) as ReassessmentTransition.RetryTask).state
+        assertEquals(initial.copy(technicalRetryCount = 1), firstRetry)
+        val otherFailure = AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED)
+        val secondRetry = (apply(firstRetry, otherFailure) as ReassessmentTransition.RetryTask).state
+        assertEquals(initial.copy(technicalRetryCount = PlacementRules.MAX_TECHNICAL_RETRIES), secondRetry)
+        assertEquals(ReassessmentTransition.Stopped(StopReason.TECHNICAL_RETRY_LIMIT), apply(secondRetry, noSpeech))
     }
 
     @Test

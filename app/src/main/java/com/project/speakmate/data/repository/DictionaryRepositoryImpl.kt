@@ -7,6 +7,7 @@ import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.repository.DictionaryRepository
 import java.net.URLEncoder
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -14,11 +15,16 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 class DictionaryRepositoryImpl @Inject constructor(
     private val httpClient: OkHttpClient
 ) : DictionaryRepository {
+
+    companion object {
+        private const val TAG = "DictionaryRepository"
+    }
 
     override suspend fun lookUp(word: String, sentence: String): DictionaryLookupResult = withContext(Dispatchers.IO) {
         val cleanWord = word.trim().lowercase()
@@ -76,8 +82,8 @@ class DictionaryRepositoryImpl @Inject constructor(
                             }
                         }
                     }
-                } catch (e: Exception) {
-                    Log.w("DictionaryRepository", "Failed to parse Free Dictionary response: ${e.message}")
+                } catch (_: JSONException) {
+                    Log.w(TAG, "Failed to parse Free Dictionary response")
                 }
             }
 
@@ -89,8 +95,8 @@ class DictionaryRepositoryImpl @Inject constructor(
                     if (trans.isNotBlank() && !trans.startsWith("MYMEMORY WARNING")) {
                         meaning = cleanHtmlEntities(trans)
                     }
-                } catch (e: Exception) {
-                    Log.w("DictionaryRepository", "Failed to parse MyMemory response: ${e.message}")
+                } catch (_: JSONException) {
+                    Log.w(TAG, "Failed to parse MyMemory response")
                 }
             }
 
@@ -119,6 +125,8 @@ class DictionaryRepositoryImpl @Inject constructor(
                             exampleTranslate = cleanHtmlEntities(exTrans)
                         }
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {}
             }
 
@@ -134,8 +142,10 @@ class DictionaryRepositoryImpl @Inject constructor(
             )
 
             DictionaryLookupResult.Found(item)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
-            Log.e("DictionaryRepository", "Error looking up word '$cleanWord': ${e.message}", e)
+            Log.e(TAG, "Dictionary lookup failed")
             DictionaryLookupResult.Error(e)
         }
     }

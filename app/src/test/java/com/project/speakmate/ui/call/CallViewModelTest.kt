@@ -5,7 +5,9 @@ import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.CallState
+import com.project.speakmate.domain.model.DictionaryLookupResult
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
+import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.Scenario
@@ -13,17 +15,21 @@ import com.project.speakmate.domain.model.SenderType
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.SpeakingEvaluation
 import com.project.speakmate.domain.model.TranscriptMessage
+import com.project.speakmate.domain.model.VocabularyItem
+import com.project.speakmate.domain.model.VocabularySaveResult
 import com.project.speakmate.domain.repository.CallRepository
 import com.project.speakmate.domain.repository.DictionaryRepository
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import com.project.speakmate.domain.repository.SpeakingAssessmentRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -320,5 +326,48 @@ class CallViewModelTest {
         assertEquals("A coffee please", result[1].content)
         assertEquals(1, result[1].orderIndex)
         assertTrue(result[1].isInterrupted)
+    }
+
+    @Test
+    fun lateVocabularySaveDoesNotChangeTheNewEntry() = runTest {
+        val earlierSave = CompletableDeferred<Result<VocabularySaveResult>>()
+        val currentSave = CompletableDeferred<Result<VocabularySaveResult>>()
+        coEvery { dictionaryRepository.lookUp(any(), any()) } coAnswers {
+            DictionaryLookupResult.Found(
+                VocabularyItem(firstArg<String>(), "meaning", "", "noun", LearningExample("", ""))
+            )
+        }
+        coEvery { savedVocabularyRepository.saveVocabulary(match { it.word == "coffee" }) } coAnswers {
+            earlierSave.await()
+        }
+        coEvery { savedVocabularyRepository.saveVocabulary(match { it.word == "bread" }) } coAnswers {
+            currentSave.await()
+        }
+        sessionStateFlow.value = CallSessionState(
+            state = CallState.ACTIVE,
+            transcript = listOf(
+                TranscriptMessage("one", SenderType.USER, "coffee", 0, isFinal = true, isInterrupted = false),
+                TranscriptMessage("two", SenderType.USER, "bread", 1, isFinal = true, isInterrupted = false)
+            )
+        )
+        advanceUntilIdle()
+
+        viewModel.selectWord("one", 0, "coffee")
+        advanceUntilIdle()
+        viewModel.saveDictionaryWord()
+
+        viewModel.selectWord("two", 0, "bread")
+        advanceUntilIdle()
+        viewModel.saveDictionaryWord()
+        earlierSave.complete(Result.success(VocabularySaveResult.SAVED))
+        advanceUntilIdle()
+
+        val dictionary = requireNotNull(viewModel.uiState.value.dictionary)
+        assertEquals("bread", dictionary.word)
+        assertEquals(CallVocabularySaveStatus.SAVING, dictionary.saveStatus)
+
+        currentSave.complete(Result.success(VocabularySaveResult.MOVED_TO_TOP))
+        advanceUntilIdle()
+        assertEquals(CallVocabularySaveStatus.MOVED_TO_TOP, viewModel.uiState.value.dictionary?.saveStatus)
     }
 }

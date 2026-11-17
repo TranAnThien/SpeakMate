@@ -1,5 +1,7 @@
 package com.project.speakmate.ui.practice
 
+import com.project.speakmate.utils.extension.suspendRunCatching
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.repository.PracticeRepository
@@ -80,7 +82,7 @@ class PracticeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun mapToUiState(practices: List<com.project.speakmate.domain.model.FreePractice>): Result<List<ScenarioItemUiState>> = runCatching {
+    private suspend fun mapToUiState(practices: List<com.project.speakmate.domain.model.FreePractice>): Result<List<ScenarioItemUiState>> = suspendRunCatching {
         coroutineScope { practices.map { fp -> async {
             val scenario = practiceRepository.getScenario(fp.scenarioId).getOrThrow()
             val metadata = practiceRepository.getScenarioPreparationMetadata(scenario.scenarioId).getOrNull()

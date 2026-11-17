@@ -77,9 +77,7 @@ class HomeViewModel @Inject constructor(
             }
 
             val currentGoal = currentPath.goals.getOrNull(progress.currentGoalOrder)
-            val currentUnit = currentGoal?.units?.getOrNull(progress.currentUnitOrder)
-
-            if (currentGoal == null || (progress.stage == TrainingStage.UNIT && currentUnit == null)) {
+            if (currentGoal == null) {
                 _uiState.update { it.copy(presentation = HomePresentation.ERROR) }
                 return@launch
             }
@@ -91,8 +89,13 @@ class HomeViewModel @Inject constructor(
                     "Hoàn thành bài kiểm tra để mở khóa mục tiêu tiếp theo."
                 )
             } else {
+                val currentUnit = currentGoal.units.getOrNull(progress.currentUnitOrder)
+                if (currentUnit == null) {
+                    _uiState.update { it.copy(presentation = HomePresentation.ERROR) }
+                    return@launch
+                }
                 Pair(
-                    currentUnit!!.title,
+                    currentUnit.title,
                     currentUnit.communicativeFocus
                 )
             }

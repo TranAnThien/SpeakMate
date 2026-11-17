@@ -6,9 +6,13 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
+import javax.inject.Inject
 
-class PronunciationPlayer(private val context: Context) {
+class PronunciationPlayer @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     companion object {
         private const val UTTERANCE_PREFIX = "pronunciation_"
     }

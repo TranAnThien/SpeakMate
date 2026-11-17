@@ -1,5 +1,7 @@
 package com.project.speakmate.data.repository
 
+import kotlinx.coroutines.CancellationException
+
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.domain.model.LearningExample
@@ -103,6 +105,8 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
             }.await()
 
             Result.success(saveResult)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -136,6 +140,8 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
             }.await()
 
             Result.success(Unit)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }

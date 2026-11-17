@@ -1,5 +1,7 @@
 package com.project.speakmate.ui.call
 
+import kotlinx.coroutines.CancellationException
+
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -85,6 +87,7 @@ class CallViewModel @Inject constructor(
     private var currentCommunicativeGoal: String = ""
     private var activeStartedAt: Date? = null
     private var hasProcessedCurrentSession: Boolean = false
+    private var dictionarySaveRequest = 0L
 
     val durationLabel: StateFlow<String> = combine(
         repository.sessionState,
@@ -249,7 +252,8 @@ class CallViewModel @Inject constructor(
 
     fun saveDictionaryWord() {
         val currentDict = _uiState.value.dictionary ?: return
-        if (!currentDict.canSave) return
+        if (!currentDict.canSave || currentDict.saveStatus == CallVocabularySaveStatus.SAVING) return
+        val saveRequest = ++dictionarySaveRequest
 
         _uiState.update {
             it.copy(
@@ -275,6 +279,15 @@ class CallViewModel @Inject constructor(
 
             _uiState.update { state ->
                 val dict = state.dictionary ?: return@update state
+                if (
+                    saveRequest != dictionarySaveRequest ||
+                    dict.messageId != currentDict.messageId ||
+                    dict.word != currentDict.word ||
+                    dict.selectionStart != currentDict.selectionStart ||
+                    dict.saveStatus != CallVocabularySaveStatus.SAVING
+                ) {
+                    return@update state
+                }
 
                 val updatedSaveStatus = result.fold(
                     onSuccess = { saveStatusResult ->
@@ -467,6 +480,8 @@ class CallViewModel @Inject constructor(
                             feedbackSummary = "Hệ thống chưa thể đánh giá được phiên này do thiếu dữ kiện hoặc lỗi AI."
                         }
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {
                     feedbackSummary = "Hệ thống chưa thể đánh giá được phiên này do thiếu dữ kiện hoặc lỗi AI."
                 }

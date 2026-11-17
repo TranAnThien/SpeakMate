@@ -27,7 +27,14 @@ class PlacementRulesTest {
     fun initialA2PassGoesToB1Probe() = assertPass(PlacementStep.INITIAL_A2, PlacementStep.B1_PROBE)
 
     @Test
-    fun initialA2PartialOrFailGoesToA2Confirmation() = assertNotPassed(PlacementStep.INITIAL_A2, PlacementStep.A2_CONFIRMATION)
+    fun initialA2PartialGoesToA2Confirmation() {
+        assertEquals(PlacementStep.A2_CONFIRMATION, PlacementRules.getNextStep(PlacementStep.INITIAL_A2, AssessmentResult.PARTIAL))
+    }
+
+    @Test
+    fun initialA2FailGoesToA1Confirmation() {
+        assertEquals(PlacementStep.A1_CONFIRMATION, PlacementRules.getNextStep(PlacementStep.INITIAL_A2, AssessmentResult.FAIL))
+    }
 
     @Test
     fun b1ProbePassGoesToB2Probe() = assertPass(PlacementStep.B1_PROBE, PlacementStep.B2_PROBE)
@@ -87,8 +94,8 @@ class PlacementRulesTest {
     }
 
     @Test
-    fun initialFailThenA2ConfirmationFailConfirmsA1() {
-        assertPath(SpeakingLevel.A1, AssessmentResult.FAIL, AssessmentResult.FAIL, AssessmentResult.FAIL)
+    fun initialFailThenA1ConfirmationFailConfirmsA1() {
+        assertPath(SpeakingLevel.A1, AssessmentResult.FAIL, AssessmentResult.FAIL)
     }
 
     @Test
@@ -202,7 +209,7 @@ class PlacementRulesTest {
 
     @Test
     fun thirdInsufficientAttemptStopsWithoutLevel() {
-        InsufficientEvidenceReason.entries.filter { it != InsufficientEvidenceReason.NO_USER_SPEECH }.forEach { reason ->
+        InsufficientEvidenceReason.entries.forEach { reason ->
             val first = apply(initial, insufficient(reason)) as PlacementTransition.RetryTask
             val second = apply(first.checkpoint, insufficient(reason)) as PlacementTransition.RetryTask
             assertEquals(2, second.checkpoint.technicalRetryCount)
@@ -219,10 +226,15 @@ class PlacementRulesTest {
     }
 
     @Test
-    fun noUserSpeechDoesNotConsumeRetry() {
-        val checkpoint = initial.copy(technicalRetryCount = PlacementRules.MAX_TECHNICAL_RETRIES)
-        val transition = apply(checkpoint, insufficient(InsufficientEvidenceReason.NO_USER_SPEECH)) as PlacementTransition.RetryTask
-        assertEquals(checkpoint, transition.checkpoint)
+    fun noUserSpeechSharesTheRetryBudgetWithOtherFailures() {
+        val first = apply(initial, insufficient()) as PlacementTransition.RetryTask
+        val noSpeech = insufficient(InsufficientEvidenceReason.NO_USER_SPEECH)
+        val second = apply(first.checkpoint, noSpeech) as PlacementTransition.RetryTask
+        assertEquals(initial.copy(technicalRetryCount = PlacementRules.MAX_TECHNICAL_RETRIES), second.checkpoint)
+        assertEquals(
+            PlacementTransition.Stopped(PlacementStopReason.TECHNICAL_RETRY_LIMIT),
+            apply(second.checkpoint, noSpeech)
+        )
     }
 
     @Test

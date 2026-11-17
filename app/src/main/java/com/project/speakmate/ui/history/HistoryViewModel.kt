@@ -19,14 +19,23 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
@@ -34,12 +43,45 @@ class HistoryViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository
 ) : ViewModel() {
 
+    companion object {
+        private const val STOP_TIMEOUT_MILLIS = 5_000L
+    }
+
     private val selectedFilter = MutableStateFlow("all")
+    private val loadRequest = MutableStateFlow(0)
     private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     private val scenarioTitleCache = ConcurrentHashMap<String, String>()
 
-    val uiState: StateFlow<HistoryUiState> = combine(
-        historyRepository.getPracticeHistoryList(),
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<HistoryUiState> = loadRequest.flatMapLatest {
+        observeHistory()
+            .onStart { emit(loadState(HistoryPresentation.LOADING)) }
+            .catch { failure ->
+                if (failure is CancellationException) throw failure
+                emit(loadState(HistoryPresentation.LOAD_ERROR))
+            }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+        initialValue = loadState(HistoryPresentation.LOADING)
+    )
+
+    fun onSelectFilter(filterId: String) {
+        selectedFilter.value = filterId
+    }
+
+    fun retry() {
+        loadRequest.update { it + 1 }
+    }
+
+    private fun loadState(presentation: HistoryPresentation) = HistoryUiState(
+        presentation = presentation,
+        filters = defaultFilters(),
+        selectedFilterId = selectedFilter.value
+    )
+
+    private fun observeHistory(): Flow<HistoryUiState> = combine(
+        flow { emitAll(historyRepository.getPracticeHistoryList()) },
         selectedFilter
     ) { attempts, filterId ->
         val filtered = when (filterId) {
@@ -93,14 +135,6 @@ class HistoryViewModel @Inject constructor(
                 groups = groups
             )
         }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = HistoryUiState(presentation = HistoryPresentation.LOADING)
-    )
-
-    fun onSelectFilter(filterId: String) {
-        selectedFilter.value = filterId
     }
 
     private fun toSessionUiState(attempt: PracticeAttempt, scenarioTitle: String): HistorySessionUiState {

@@ -1,8 +1,6 @@
 package com.project.speakmate.data.repository
 
 import com.google.firebase.Timestamp
-import com.project.speakmate.data.dto.PracticeAttemptDto
-import com.project.speakmate.data.dto.TranscriptMessageDto
 import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.domain.model.AssessmentResult
@@ -61,7 +59,7 @@ class HistoryRepositoryImplTest {
     @Test
     fun practiceAttemptDtoToDomainRestoresObjectCorrectly() {
         val dto = sampleAttempt.toDto()
-        val domain = dto.toDomain(sampleAttempt.transcripts)
+        val domain = requireNotNull(dto.toDomain(sampleAttempt.transcripts))
 
         assertEquals(sampleAttempt.attemptId, domain.attemptId)
         assertEquals(sampleAttempt.scenarioId, domain.scenarioId)
@@ -86,7 +84,7 @@ class HistoryRepositoryImplTest {
         assertNull(dto.result)
         assertNull(dto.criteriaResult)
 
-        val domain = dto.toDomain(emptyList())
+        val domain = requireNotNull(dto.toDomain(emptyList()))
         assertNull(domain.result)
         assertNull(domain.criteriaResult)
         assertEquals("Thiếu bằng chứng", domain.feedbackSummary)
@@ -106,5 +104,21 @@ class HistoryRepositoryImplTest {
 
         val backToDomain = dto.toDomain()
         assertEquals(msg, backToDomain)
+    }
+
+    @Test
+    fun attemptMappingRejectsUnknownPracticeType() {
+        assertNull(sampleAttempt.toDto().copy(practiceType = "UNKNOWN_TYPE").toDomain(emptyList()))
+    }
+
+    @Test
+    fun attemptMappingRejectsUnknownAssessmentResult() {
+        assertNull(sampleAttempt.toDto().copy(result = "UNKNOWN_RESULT").toDomain(emptyList()))
+    }
+
+    @Test
+    fun transcriptMappingRejectsUnknownSenderType() {
+        val dto = sampleAttempt.transcripts.first().toDto().copy(senderType = "UNKNOWN_SENDER")
+        assertNull(dto.toDomain())
     }
 }
