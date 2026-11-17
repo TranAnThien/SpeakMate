@@ -49,10 +49,11 @@ import com.project.speakmate.ui.profile.SettingsScreen
 import com.project.speakmate.ui.profile.state.ProfileSkillUiState
 import com.project.speakmate.ui.profile.state.ProfileUiState
 import com.project.speakmate.ui.profile.state.SettingsUiState
+import com.project.speakmate.ui.training.GoalDetailScreen
 import com.project.speakmate.ui.training.TrainingPathScreen
 import com.project.speakmate.ui.training.TrainingViewModel
 import com.project.speakmate.ui.training.UnitPreparationScreen
-import com.project.speakmate.ui.training.GoalDetailScreen
+import com.project.speakmate.ui.training.UnitResultScreen
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
 import com.project.speakmate.ui.training.state.GoalDetailUiState
 import com.project.speakmate.ui.training.state.TrainingContentStatus
@@ -299,6 +300,55 @@ fun AppNavigation(
                     communicativeGoal = unit.communicativeFocus,
                     onExit = {
                         navController.popBackStack()
+                    },
+                    onCallFinished = { sessionState ->
+                        trainingViewModel.onUnitCallFinished(sessionState)
+                        navController.navigate("training_unit_result/$unitId") {
+                            popUpTo("training_unit/$unitId")
+                        }
+                    }
+                )
+            }
+        }
+
+        composable("training_unit_result/{unitId}") { entry ->
+            val unitId = entry.arguments?.getString("unitId").orEmpty()
+            val unitEntry = remember(entry, unitId) {
+                navController.getBackStackEntry("training_unit/$unitId")
+            }
+            val trainingViewModel: TrainingViewModel = hiltViewModel(unitEntry)
+            val resultState by trainingViewModel.unitResultState.collectAsStateWithLifecycle()
+            val state = resultState
+            if (state == null) {
+                LaunchedEffect(Unit) {
+                    navController.popBackStack()
+                }
+            } else {
+                UnitResultScreen(
+                    state = state,
+                    onBack = {
+                        trainingViewModel.dismissUnitResult()
+                        navController.popBackStack("training_path", inclusive = false)
+                    },
+                    onContinuePath = {
+                        trainingViewModel.dismissUnitResult()
+                        navController.popBackStack("training_path", inclusive = false)
+                    },
+                    onReplayUnit = {
+                        trainingViewModel.dismissUnitResult()
+                        navController.navigate("training_unit_call/$unitId") {
+                            popUpTo("training_unit/$unitId")
+                        }
+                    },
+                    onRetryUnit = {
+                        trainingViewModel.dismissUnitResult()
+                        navController.navigate("training_unit_call/$unitId") {
+                            popUpTo("training_unit/$unitId")
+                        }
+                    },
+                    onReviewLesson = {
+                        trainingViewModel.dismissUnitResult()
+                        navController.popBackStack("training_unit/$unitId", inclusive = false)
                     }
                 )
             }

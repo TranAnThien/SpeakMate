@@ -10,11 +10,14 @@ import com.project.speakmate.domain.model.PlacementCheckpoint
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementStopReason
 import com.project.speakmate.domain.model.PlacementTransition
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.repository.AssessmentTaskRepository
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.PlacementCheckpointRepository
 import com.project.speakmate.domain.repository.ScenarioRepository
 import com.project.speakmate.domain.repository.SpeakingAssessmentRepository
+import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.domain.rules.PlacementRules
 import com.project.speakmate.ui.placement.state.PlacementEffect
 import com.project.speakmate.ui.placement.state.PlacementPhase
@@ -49,6 +52,7 @@ class PlacementViewModel @Inject constructor(
     private val checkpointRepository: PlacementCheckpointRepository,
     private val assessmentRepository: SpeakingAssessmentRepository,
     private val scenarioRepository: ScenarioRepository,
+    private val userRepository: UserRepository,
     private val clock: Clock
 ) : ViewModel() {
     companion object {
@@ -212,11 +216,22 @@ class PlacementViewModel @Inject constructor(
     }
 
     fun confirmResultSaved() {
-        if (_uiState.value.phase != PlacementPhase.RESULT || checkpoint?.pendingResult == null) return
+        val result = checkpoint?.pendingResult ?: return
+        if (_uiState.value.phase != PlacementPhase.RESULT) return
         launchOperation(shouldShowLoading = false) {
             _uiState.update { it.copy(isSavingResult = true, saveFailed = false) }
             try {
                 val uid = userId ?: return@launchOperation
+                val newProgress = TrainingProgress(
+                    currentGoalOrder = 0,
+                    currentUnitOrder = 0,
+                    stage = TrainingStage.UNIT
+                )
+                userRepository.updateUserLevelAndProgress(
+                    result.level,
+                    result.speakingProfile,
+                    newProgress
+                ).getOrThrow()
                 checkpointRepository.clearCheckpoint(uid)
                 checkpoint = null
             } catch (cancelled: CancellationException) {
