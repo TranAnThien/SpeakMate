@@ -1,11 +1,21 @@
 package com.project.speakmate.data.repository
 
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Transaction
 import com.project.speakmate.data.dto.UserDto
 import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.User
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -15,12 +25,16 @@ import org.junit.Test
 class UserRepositoryImplTest {
 
     private lateinit var firestoreDataSource: FirestoreUserDataSource
+    private lateinit var firestore: FirebaseFirestore
+    private lateinit var auth: FirebaseAuth
     private lateinit var repository: UserRepositoryImpl
 
     @Before
     fun setUp() {
         firestoreDataSource = mockk()
-        repository = UserRepositoryImpl(firestoreDataSource)
+        firestore = mockk(relaxed = true)
+        auth = mockk(relaxed = true)
+        repository = UserRepositoryImpl(firestoreDataSource, firestore, auth)
     }
 
     @Test
@@ -126,5 +140,19 @@ class UserRepositoryImplTest {
                 dto.level == "A2"
             })
         }
+    }
+
+    @Test
+    fun updateUserLevelAndProgress_fails_whenUserNotLoggedIn() = runTest {
+        every { auth.currentUser } returns null
+
+        val result = repository.updateUserLevelAndProgress(
+            SpeakingLevel.B1,
+            SpeakingCriteriaResult(true, true, true, true, true),
+            TrainingProgress(0, 0, TrainingStage.UNIT)
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals("User not logged in", result.exceptionOrNull()?.message)
     }
 }

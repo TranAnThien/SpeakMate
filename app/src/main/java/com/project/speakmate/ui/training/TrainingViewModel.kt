@@ -2,15 +2,32 @@ package com.project.speakmate.ui.training
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.speakmate.domain.model.AssessmentOutcome
+import com.project.speakmate.domain.model.AssessmentResult
+import com.project.speakmate.domain.model.CallSessionState
+import com.project.speakmate.domain.model.ContentStatus
+import com.project.speakmate.domain.model.CriterionJudgement
+import com.project.speakmate.domain.model.PracticeAttempt
+import com.project.speakmate.domain.model.PracticeType
+import com.project.speakmate.domain.model.RequiredActionJudgement
 import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
+import com.project.speakmate.domain.model.SpeakingEvaluation
+import com.project.speakmate.domain.model.TrainingActivity
 import com.project.speakmate.domain.model.TrainingGoal
 import com.project.speakmate.domain.model.TrainingPath
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingProgressDecision
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.TrainingUnit
 import com.project.speakmate.domain.model.User
+import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.TrainingRepository
+import com.project.speakmate.domain.rules.TrainingProgressRules
 import com.project.speakmate.ui.training.state.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Date
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +37,22 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class TrainingViewModel @Inject constructor(
-    private val trainingRepository: TrainingRepository
+    private val trainingRepository: TrainingRepository,
+    private val historyRepository: HistoryRepository
 ) : ViewModel() {
+
+    constructor(trainingRepository: TrainingRepository) : this(
+        trainingRepository,
+        object : HistoryRepository {
+            override suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit> = Result.success(Unit)
+            override suspend fun saveAttemptAndProgress(
+                attempt: PracticeAttempt,
+                newProgress: TrainingProgress?
+            ): Result<Unit> = Result.success(Unit)
+            override fun getPracticeHistoryList() = kotlinx.coroutines.flow.flowOf(emptyList<PracticeAttempt>())
+            override suspend fun getSessionDetail(attemptId: String): Result<PracticeAttempt> = Result.failure(Exception())
+        }
+    )
 
     private val _uiState = MutableStateFlow(TrainingPathUiState())
     val uiState: StateFlow<TrainingPathUiState> = _uiState.asStateFlow()
@@ -29,12 +60,16 @@ class TrainingViewModel @Inject constructor(
     private val _preparationState = MutableStateFlow(UnitPreparationUiState())
     val preparationState: StateFlow<UnitPreparationUiState> = _preparationState.asStateFlow()
 
+    private val _unitResultState = MutableStateFlow<UnitResultUiState?>(null)
+    val unitResultState: StateFlow<UnitResultUiState?> = _unitResultState.asStateFlow()
+
     var currentLoadedScenario: Scenario? = null
         private set
     var currentLoadedUnit: TrainingUnit? = null
         private set
 
     private var currentUser: User? = null
+    private var currentPath: TrainingPath? = null
 
     fun updateUserData(currentUser: User?) {
         this.currentUser = currentUser
@@ -65,6 +100,7 @@ class TrainingViewModel @Inject constructor(
                 }
                 return@launch
             }
+            this@TrainingViewModel.currentPath = currentPath
             val progress = currentUser.trainingProgress
 
             val progressError = validateProgress(currentPath, progress)
@@ -251,5 +287,256 @@ class TrainingViewModel @Inject constructor(
             return "trainingProgress.currentUnitOrder = ${progress.currentUnitOrder} không tồn tại trong Goal ${goal.goalId}."
         }
         return null
+    }
+
+    fun resolveContentStatus(
+        goalIndex: Int,
+        unitIndex: Int,
+        progress: TrainingProgress
+    ): ContentStatus {
+        return when {
+            goalIndex < progress.currentGoalOrder -> ContentStatus.COMPLETED
+            goalIndex > progress.currentGoalOrder -> ContentStatus.LOCKED
+            else -> {
+                when {
+                    unitIndex >= 0 -> {
+                        when {
+                            unitIndex < progress.currentUnitOrder -> ContentStatus.COMPLETED
+                            unitIndex == progress.currentUnitOrder -> {
+                                if (progress.stage == TrainingStage.GOAL_ASSESSMENT || progress.stage == TrainingStage.PATH_COMPLETED) {
+                                    ContentStatus.COMPLETED
+                                } else {
+                                    ContentStatus.CURRENT
+                                }
+                            }
+                            else -> ContentStatus.LOCKED
+                        }
+                    }
+                    else -> {
+                        when (progress.stage) {
+                            TrainingStage.UNIT -> ContentStatus.LOCKED
+                            TrainingStage.GOAL_ASSESSMENT -> ContentStatus.CURRENT
+                            TrainingStage.PATH_COMPLETED -> ContentStatus.COMPLETED
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun onUnitCallFinished(session: CallSessionState) {
+        val unit = currentLoadedUnit ?: return
+        val user = currentUser ?: return
+        val progress = user.trainingProgress ?: return
+        val path = currentPath ?: return
+
+        val goalIndex = path.goals.indexOfFirst { goal -> goal.units.any { it.unitId == unit.unitId } }
+        if (goalIndex == -1) return
+        val unitIndex = path.goals[goalIndex].units.indexOfFirst { it.unitId == unit.unitId }
+        if (unitIndex == -1) return
+        val activity = TrainingActivity.UnitActivity(goalIndex, unitIndex)
+
+        val outcome = when {
+            session.failure != null || !session.hasUserSpeech ->
+                AssessmentOutcome.InsufficientEvidence(com.project.speakmate.domain.model.InsufficientEvidenceReason.NO_USER_SPEECH)
+            session.outcome == null ->
+                AssessmentOutcome.InsufficientEvidence(com.project.speakmate.domain.model.InsufficientEvidenceReason.EVALUATION_FAILED)
+            else -> {
+                val evalResult = if (session.outcome == com.project.speakmate.domain.model.CallOutcome.COMPLETED)
+                    AssessmentResult.PASS else AssessmentResult.FAIL
+                createEvaluatedOutcome(evalResult, null, emptyMap())
+            }
+        }
+
+        val decision = TrainingProgressRules.applyOutcome(path, progress, activity, outcome)
+        val newProgress = when (decision) {
+            is TrainingProgressDecision.Advanced -> decision.progress
+            is TrainingProgressDecision.PathCompleted -> decision.progress
+            else -> null
+        }
+
+        val attempt = PracticeAttempt(
+            attemptId = UUID.randomUUID().toString(),
+            scenarioId = unit.scenarioId,
+            practiceType = PracticeType.TRAINING_UNIT,
+            startedAt = Date(session.startedAtMillis ?: System.currentTimeMillis()),
+            endedAt = Date(session.endedAtMillis ?: System.currentTimeMillis()),
+            result = if (outcome is AssessmentOutcome.Evaluated) outcome.result else null,
+            criteriaResult = if (outcome is AssessmentOutcome.Evaluated) outcome.criteria else null,
+            requiredActionResults = if (outcome is AssessmentOutcome.Evaluated) outcome.requiredActionResults else emptyMap(),
+            transcripts = session.transcript.toList(),
+            feedbackSummary = null
+        )
+
+        viewModelScope.launch {
+            _unitResultState.update { UnitResultUiState(presentation = UnitResultPresentation.PROCESSING) }
+            val saveResult = historyRepository.saveAttemptAndProgress(attempt, newProgress)
+            if (saveResult.isSuccess) {
+                if (newProgress != null) {
+                    val updatedUser = user.copy(trainingProgress = newProgress)
+                    updateUserData(updatedUser)
+                }
+                val presentation = when {
+                    outcome !is AssessmentOutcome.Evaluated -> UnitResultPresentation.INSUFFICIENT_EVIDENCE
+                    outcome.result == AssessmentResult.PASS -> UnitResultPresentation.PASS
+                    else -> UnitResultPresentation.FAIL_CRITERIA
+                }
+                _unitResultState.update {
+                    UnitResultUiState(
+                        presentation = presentation,
+                        title = unit.title,
+                        explanation = if (presentation == UnitResultPresentation.PASS)
+                            "Chúc mừng! Bạn đã hoàn thành tốt bài học."
+                        else if (presentation == UnitResultPresentation.INSUFFICIENT_EVIDENCE)
+                            "Không đủ dữ kiện để đánh giá bài học."
+                        else
+                            "Bạn chưa đạt yêu cầu của bài học. Hãy luyện tập lại nhé.",
+                        criteriaHeading = "Tiêu chí đánh giá",
+                        feedback = if (presentation == UnitResultPresentation.PASS) "Đạt yêu cầu bài học" else "Cần luyện tập thêm",
+                        requiredActions = unit.requiredActions.map { action ->
+                            UnitResultActionUiState(
+                                id = action.requiredActionId,
+                                text = action.description,
+                                evaluation = if (presentation == UnitResultPresentation.PASS)
+                                    UnitResultEvaluation.PASSED
+                                else
+                                    UnitResultEvaluation.NOT_PASSED
+                            )
+                        }
+                    )
+                }
+            } else {
+                _unitResultState.update {
+                    UnitResultUiState(
+                        presentation = UnitResultPresentation.INSUFFICIENT_EVIDENCE,
+                        title = unit.title,
+                        explanation = "Lưu tiến độ thất bại. Vui lòng thử lại.",
+                        feedback = "Lỗi kết nối khi lưu kết quả."
+                    )
+                }
+            }
+        }
+    }
+
+    fun onUnitCallFinished(
+        result: AssessmentResult?,
+        criteria: com.project.speakmate.domain.model.SpeakingCriteriaResult?,
+        actionResults: Map<String, Boolean> = emptyMap()
+    ) {
+        val unit = currentLoadedUnit ?: return
+        val user = currentUser ?: return
+        val progress = user.trainingProgress ?: return
+        val path = currentPath ?: return
+
+        val goalIndex = path.goals.indexOfFirst { goal -> goal.units.any { it.unitId == unit.unitId } }
+        if (goalIndex == -1) return
+        val unitIndex = path.goals[goalIndex].units.indexOfFirst { it.unitId == unit.unitId }
+        if (unitIndex == -1) return
+        val activity = TrainingActivity.UnitActivity(goalIndex, unitIndex)
+
+        val outcome = if (result == null) {
+            AssessmentOutcome.InsufficientEvidence(com.project.speakmate.domain.model.InsufficientEvidenceReason.EVALUATION_FAILED)
+        } else {
+            createEvaluatedOutcome(result, criteria, actionResults)
+        }
+
+        val decision = TrainingProgressRules.applyOutcome(path, progress, activity, outcome)
+        val newProgress = when (decision) {
+            is TrainingProgressDecision.Advanced -> decision.progress
+            is TrainingProgressDecision.PathCompleted -> decision.progress
+            else -> null
+        }
+
+        val now = Date()
+        val attempt = PracticeAttempt(
+            attemptId = UUID.randomUUID().toString(),
+            scenarioId = unit.scenarioId,
+            practiceType = PracticeType.TRAINING_UNIT,
+            startedAt = now,
+            endedAt = now,
+            result = result,
+            criteriaResult = criteria,
+            requiredActionResults = actionResults,
+            transcripts = emptyList(),
+            feedbackSummary = null
+        )
+
+        viewModelScope.launch {
+            _unitResultState.update { UnitResultUiState(presentation = UnitResultPresentation.PROCESSING) }
+            val saveResult = historyRepository.saveAttemptAndProgress(attempt, newProgress)
+            if (saveResult.isSuccess) {
+                if (newProgress != null) {
+                    val updatedUser = user.copy(trainingProgress = newProgress)
+                    updateUserData(updatedUser)
+                }
+                val presentation = when {
+                    result == null -> UnitResultPresentation.INSUFFICIENT_EVIDENCE
+                    result == AssessmentResult.PASS -> UnitResultPresentation.PASS
+                    result == AssessmentResult.PARTIAL -> UnitResultPresentation.PARTIAL
+                    actionResults.values.any { !it } -> UnitResultPresentation.FAIL_REQUIRED_ACTION
+                    else -> UnitResultPresentation.FAIL_CRITERIA
+                }
+                _unitResultState.update {
+                    UnitResultUiState(
+                        presentation = presentation,
+                        title = unit.title,
+                        explanation = if (presentation == UnitResultPresentation.PASS)
+                            "Chúc mừng! Bạn đã hoàn thành tốt bài học."
+                        else if (presentation == UnitResultPresentation.INSUFFICIENT_EVIDENCE)
+                            "Không đủ dữ kiện để đánh giá bài học."
+                        else
+                            "Bạn chưa đạt yêu cầu của bài học. Hãy luyện tập lại nhé.",
+                        criteriaHeading = "Tiêu chí đánh giá",
+                        feedback = if (presentation == UnitResultPresentation.PASS) "Đạt yêu cầu bài học" else "Cần luyện tập thêm",
+                        requiredActions = unit.requiredActions.map { action ->
+                            UnitResultActionUiState(
+                                id = action.requiredActionId,
+                                text = action.description,
+                                evaluation = if (actionResults[action.requiredActionId] == true)
+                                    UnitResultEvaluation.PASSED
+                                else
+                                    UnitResultEvaluation.NOT_PASSED
+                            )
+                        }
+                    )
+                }
+            } else {
+                _unitResultState.update {
+                    UnitResultUiState(
+                        presentation = UnitResultPresentation.INSUFFICIENT_EVIDENCE,
+                        title = unit.title,
+                        explanation = "Lưu tiến độ thất bại. Vui lòng thử lại.",
+                        feedback = "Lỗi kết nối khi lưu kết quả."
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissUnitResult() {
+        _unitResultState.update { null }
+    }
+
+    private fun createEvaluatedOutcome(
+        result: AssessmentResult,
+        criteria: SpeakingCriteriaResult?,
+        actionResults: Map<String, Boolean>
+    ): AssessmentOutcome.Evaluated {
+        val resolvedCriteria = criteria ?: SpeakingCriteriaResult(false, false, false, false, false)
+        val defaultJudgement = CriterionJudgement(false, "", "", null, null)
+        val evaluation = SpeakingEvaluation(
+            range = defaultJudgement.copy(isMet = resolvedCriteria.rangeMet),
+            accuracy = defaultJudgement.copy(isMet = resolvedCriteria.accuracyMet),
+            fluency = defaultJudgement.copy(isMet = resolvedCriteria.fluencyMet),
+            interaction = defaultJudgement.copy(isMet = resolvedCriteria.interactionMet),
+            coherence = defaultJudgement.copy(isMet = resolvedCriteria.coherenceMet),
+            requiredActions = actionResults.mapValues { RequiredActionJudgement(it.value, "") }
+        )
+        return AssessmentOutcome.Evaluated(
+            result = result,
+            criteria = resolvedCriteria,
+            requiredActionResults = actionResults,
+            evaluation = evaluation
+        )
     }
 }
