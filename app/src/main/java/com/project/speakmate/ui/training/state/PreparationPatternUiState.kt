@@ -11,5 +11,6 @@ data class PreparationPatternUiState(
     val pattern: String = "",
     val meaning: String = "",
     val usage: String = "",
-    val example: PreparationExampleUiState = PreparationExampleUiState()
+    val example: PreparationExampleUiState = PreparationExampleUiState(),
+    val examples: List<PreparationExampleUiState> = emptyList()
 )

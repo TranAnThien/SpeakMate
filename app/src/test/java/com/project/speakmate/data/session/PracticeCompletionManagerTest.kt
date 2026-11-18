@@ -1,0 +1,313 @@
+package com.project.speakmate.data.session
+
+import com.project.speakmate.domain.model.AssessmentOutcome
+import com.project.speakmate.domain.model.AssessmentResult
+import com.project.speakmate.domain.model.CallOutcome
+import com.project.speakmate.domain.model.InsufficientEvidenceReason
+import com.project.speakmate.domain.model.PracticeCompletionState
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingStage
+import com.project.speakmate.domain.rules.TrainingProgressTestFixtures
+import com.project.speakmate.test.FakeAuthRepository
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class PracticeCompletionManagerTest {
+    @Test
+    fun gradingPublishesSavedOnlyAfterTheWriterConfirms() = runTest {
+        val history = FakeHistoryRepository()
+        history.gate = CompletableDeferred()
+        val assessment = FakeSpeakingAssessmentRepository()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        assertEquals(PracticeCompletionState.Grading, manager.observeCompletion(id).first())
+
+        history.gate?.complete(Unit)
+        runCurrent()
+        val saved = manager.observeCompletion(id).first() as PracticeCompletionState.Saved
+        assertEquals(AssessmentResult.PASS, saved.completion.attempt.result)
+        assertEquals(PracticeCompletionTestFixtures.FEEDBACK, saved.completion.attempt.feedbackSummary)
+        assertEquals(PracticeCompletionTestFixtures.training.requiredActions, assessment.evidence.single().requiredActions)
+        assertEquals(PracticeCompletionTestFixtures.training.targetLevel, assessment.evidence.single().targetLevel)
+    }
+
+    @Test
+    fun failedSaveRetriesTheSameAttemptWithoutCallingAiAgain() = runTest {
+        val history = FakeHistoryRepository()
+        history.failure = IllegalStateException()
+        val assessment = FakeSpeakingAssessmentRepository()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        val failed = manager.observeCompletion(id).first() as PracticeCompletionState.SaveFailed
+        assertEquals(AssessmentResult.PASS, failed.completion.attempt.result)
+
+        history.failure = null
+        history.gate = CompletableDeferred()
+        manager.retrySave(id)
+        manager.retrySave(id)
+        runCurrent()
+        assertTrue((manager.observeCompletion(id).first() as PracticeCompletionState.SaveFailed).isSaving)
+        history.gate?.complete(Unit)
+        runCurrent()
+
+        assertTrue(manager.observeCompletion(id).first() is PracticeCompletionState.Saved)
+        assertEquals(listOf(id, id), history.savedIds)
+        assertEquals(1, assessment.evidence.size)
+        assertEquals(1, history.attempts.size)
+    }
+
+    @Test
+    fun leavingDuringGradingDoesNotCancelTheCompletion() = runTest {
+        val history = FakeHistoryRepository()
+        val assessment = FakeSpeakingAssessmentRepository()
+        assessment.gate = CompletableDeferred()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        val observed = manager.observeCompletion(id)
+        val consumer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { observed.collect {} }
+        runCurrent()
+        assertEquals(PracticeCompletionState.Grading, observed.first())
+        consumer.cancel()
+        manager.releaseCompletion(id)
+        runCurrent()
+        assertTrue(history.attempts.isEmpty())
+        assertEquals(0, assessment.cancelledEvaluations)
+        assessment.gate?.complete(Unit)
+        runCurrent()
+
+        assertTrue(observed.first() is PracticeCompletionState.Saved)
+        assertEquals(1, history.attempts.size)
+        assertTrue(id in history.attempts)
+        assertEquals(PracticeCompletionState.Unavailable, manager.observeCompletion(id).first())
+        assertEquals(listOf(PracticeCompletionTestFixtures.AUDIO_ID), assessment.clearedAudioIds)
+    }
+
+    @Test
+    fun aSavedEntryIsReleasedWhenItsResultConsumerFinishes() = runTest {
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), FakeHistoryRepository(), FakeSpeakingAssessmentRepository())
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        assertTrue(manager.observeCompletion(id).first() is PracticeCompletionState.Saved)
+        manager.releaseCompletion(id)
+        assertEquals(PracticeCompletionState.Unavailable, manager.observeCompletion(id).first())
+    }
+
+    @Test
+    fun releaseBeforeTheWriterConfirmsDoesNotCancelTheSave() = runTest {
+        val history = FakeHistoryRepository()
+        history.gate = CompletableDeferred()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, FakeSpeakingAssessmentRepository())
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        val observed = manager.observeCompletion(id)
+        runCurrent()
+
+        manager.releaseCompletion(id)
+        manager.releaseCompletion(id)
+        assertEquals(PracticeCompletionState.Grading, observed.first())
+        assertTrue(history.attempts.isEmpty())
+        history.gate?.complete(Unit)
+        runCurrent()
+
+        assertTrue(observed.first() is PracticeCompletionState.Saved)
+        assertEquals(listOf(id), history.savedIds)
+        assertTrue(id in history.attempts)
+        assertEquals(PracticeCompletionState.Unavailable, manager.observeCompletion(id).first())
+    }
+
+    @Test
+    fun failedSaveWithoutAConsumerRemainsUntilSignOut() = runTest {
+        val auth = FakeAuthRepository()
+        val history = FakeHistoryRepository()
+        history.failure = IllegalStateException()
+        val manager = PracticeCompletionManager(backgroundScope, auth, history, FakeSpeakingAssessmentRepository())
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        val failed = manager.observeCompletion(id).first() as PracticeCompletionState.SaveFailed
+
+        manager.releaseCompletion(id)
+        runCurrent()
+        assertEquals(failed, manager.observeCompletion(id).first())
+        assertEquals(AssessmentResult.PASS, failed.completion.attempt.result)
+        assertEquals(listOf(id), history.savedIds)
+        auth.signedInUserId.value = null
+        runCurrent()
+
+        assertEquals(PracticeCompletionState.Unavailable, manager.observeCompletion(id).first())
+        manager.retrySave(id)
+        runCurrent()
+        assertEquals(listOf(id), history.savedIds)
+    }
+
+    @Test
+    fun signingOutCancelsGradingAndRemovesSavedFailedAndPendingEntries() = runTest {
+        val auth = FakeAuthRepository()
+        val history = FakeHistoryRepository()
+        val assessment = FakeSpeakingAssessmentRepository()
+        val manager = PracticeCompletionManager(backgroundScope, auth, history, assessment)
+        val practice = PracticeCompletionTestFixtures.practice()
+        val savedId = requireNotNull(manager.completePractice(practice))
+        runCurrent()
+        history.failure = IllegalStateException()
+        val failedId = requireNotNull(manager.completePractice(practice))
+        runCurrent()
+        history.failure = null
+        assessment.gate = CompletableDeferred()
+        val pendingId = requireNotNull(manager.completePractice(practice))
+        runCurrent()
+        val observed = listOf(savedId, failedId, pendingId).map(manager::observeCompletion)
+        assertTrue(observed[0].first() is PracticeCompletionState.Saved)
+        assertTrue(observed[1].first() is PracticeCompletionState.SaveFailed)
+        assertEquals(PracticeCompletionState.Grading, observed[2].first())
+
+        auth.signedInUserId.value = null
+        runCurrent()
+        assertEquals(1, assessment.cancelledEvaluations)
+        assertEquals(3, assessment.clearedAudioIds.size)
+        observed.forEach { assertEquals(PracticeCompletionState.Unavailable, it.first()) }
+        listOf(savedId, failedId, pendingId).forEach {
+            assertEquals(PracticeCompletionState.Unavailable, manager.observeCompletion(it).first())
+        }
+        assessment.gate?.complete(Unit)
+        manager.retrySave(failedId)
+        runCurrent()
+        assertEquals(listOf(savedId, failedId), history.savedIds)
+        assertEquals(setOf(savedId), history.attempts.keys)
+    }
+
+    @Test
+    fun signingOutClearsPendingEntriesAndTheirAudio() = runTest {
+        val auth = FakeAuthRepository()
+        val history = FakeHistoryRepository()
+        val assessment = FakeSpeakingAssessmentRepository()
+        assessment.gate = CompletableDeferred()
+        val manager = PracticeCompletionManager(backgroundScope, auth, history, assessment)
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        auth.signedInUserId.value = null
+        runCurrent()
+
+        assertEquals(PracticeCompletionState.Unavailable, manager.observeCompletion(id).first())
+        assertTrue(history.attempts.isEmpty())
+        assertEquals(listOf(PracticeCompletionTestFixtures.AUDIO_ID), assessment.clearedAudioIds)
+    }
+
+    @Test
+    fun freePracticeSkipsAiAndKeepsFeedbackNull() = runTest {
+        val history = FakeHistoryRepository()
+        val assessment = FakeSpeakingAssessmentRepository()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice(isFreePractice = true)))
+        runCurrent()
+
+        val attempt = requireNotNull(history.attempts[id])
+        assertTrue(assessment.evidence.isEmpty())
+        assertNull(attempt.result)
+        assertNull(attempt.feedbackSummary)
+    }
+
+    @Test
+    fun insufficientEvidenceAndAiFailureStillSaveANullResult() = runTest {
+        val history = FakeHistoryRepository()
+        val assessment = FakeSpeakingAssessmentRepository()
+        assessment.outcome = AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.NOT_ENOUGH_SPEECH)
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val first = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        assertNull(history.attempts[first]?.result)
+
+        assessment.failure = IllegalStateException()
+        val second = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        assertTrue(manager.observeCompletion(second).first() is PracticeCompletionState.Saved)
+        assertNull(history.attempts[second]?.criteriaResult)
+    }
+
+    @Test
+    fun incompleteCallsNeverReachTheWriter() = runTest {
+        val history = FakeHistoryRepository()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, FakeSpeakingAssessmentRepository())
+        val practice = PracticeCompletionTestFixtures.practice()
+
+        assertNull(manager.completePractice(practice.copy(session = practice.session.copy(outcome = CallOutcome.CANCELLED))))
+        assertNull(manager.completePractice(practice.copy(session = practice.session.copy(hasUserSpeech = false))))
+        assertTrue(history.savedIds.isEmpty())
+    }
+
+    @Test
+    fun passAdvancesTheCurrentUnitOnlyOnceWhenTheCommitAcknowledgementIsLost() = runTest {
+        val history = FakeHistoryRepository()
+        history.path = TrainingProgressTestFixtures.getPath()
+        history.progress = TrainingProgress(0, 0, TrainingStage.UNIT)
+        history.shouldFailAfterCommit = true
+        val assessment = FakeSpeakingAssessmentRepository()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+
+        assertEquals(TrainingProgress(0, 1, TrainingStage.UNIT), history.progress)
+        assertTrue(manager.observeCompletion(id).first() is PracticeCompletionState.SaveFailed)
+        history.shouldFailAfterCommit = false
+        manager.retrySave(id)
+        runCurrent()
+
+        assertEquals(TrainingProgress(0, 1, TrainingStage.UNIT), history.progress)
+        assertEquals(1, history.attempts.size)
+        assertEquals(listOf(id, id), history.savedIds)
+        assertEquals(1, assessment.evidence.size)
+    }
+
+    @Test
+    fun replayUsesTheProgressAtSaveTimeAndDoesNotAdvanceIt() = runTest {
+        val history = FakeHistoryRepository()
+        history.path = TrainingProgressTestFixtures.getPath()
+        history.progress = TrainingProgress(0, 0, TrainingStage.UNIT)
+        val assessment = FakeSpeakingAssessmentRepository()
+        assessment.gate = CompletableDeferred()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        history.progress = TrainingProgress(0, 1, TrainingStage.UNIT)
+        assessment.gate?.complete(Unit)
+        runCurrent()
+
+        assertEquals(AssessmentResult.PASS, history.attempts[id]?.result)
+        assertEquals(TrainingProgress(0, 1, TrainingStage.UNIT), history.progress)
+    }
+
+    @Test
+    fun partialFailAndNullKeepTheCurrentProgress() = runTest {
+        val outcomes = listOf(
+            PracticeCompletionTestFixtures.evaluated(SpeakingCriteriaResult(false, false, true, true, true)),
+            PracticeCompletionTestFixtures.evaluated(isActionCompleted = false),
+            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED)
+        )
+        val expected = listOf(AssessmentResult.PARTIAL, AssessmentResult.FAIL, null)
+        outcomes.forEachIndexed { index, outcome ->
+            val history = FakeHistoryRepository()
+            history.path = TrainingProgressTestFixtures.getPath()
+            val progress = TrainingProgress(0, 0, TrainingStage.UNIT)
+            history.progress = progress
+            val assessment = FakeSpeakingAssessmentRepository()
+            assessment.outcome = outcome
+            val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+            val id = requireNotNull(manager.completePractice(PracticeCompletionTestFixtures.practice()))
+            runCurrent()
+
+            assertEquals(expected[index], history.attempts[id]?.result)
+            assertEquals(progress, history.progress)
+        }
+    }
+}

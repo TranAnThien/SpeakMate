@@ -18,5 +18,6 @@ data class CallUiState(
     val isExitReady: Boolean = false,
     val isStandaloneCall: Boolean = false,
     val failure: CallFailure? = null,
-    val finishedSession: CallSessionState? = null
+    val finishedSession: CallSessionState? = null,
+    val completionAttemptId: String? = null
 )

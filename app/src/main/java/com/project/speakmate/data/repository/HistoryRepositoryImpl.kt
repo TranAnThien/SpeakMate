@@ -14,7 +14,12 @@ import com.project.speakmate.data.dto.TranscriptMessageDto
 import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.domain.model.PracticeAttempt
+import com.project.speakmate.domain.model.PracticeCompletion
+import com.project.speakmate.domain.model.TrainingProgressDecision
+import com.project.speakmate.data.dto.UserDto
 import com.project.speakmate.domain.repository.HistoryRepository
+import com.project.speakmate.domain.repository.TrainingRepository
+import com.project.speakmate.domain.rules.TrainingProgressRules
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -27,22 +32,47 @@ import javax.inject.Singleton
 @Singleton
 class HistoryRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val authDataSource: FirebaseAuthDataSource
+    private val authDataSource: FirebaseAuthDataSource,
+    private val trainingRepository: TrainingRepository
 ) : HistoryRepository {
 
     companion object {
         private const val TAG = "HistoryRepository"
     }
 
-    override suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit> = suspendRunCatching {
-        val uid = authDataSource.requireCurrentUserId()
-        val attemptRef = firestore.collection(FirestoreCollection.USERS).document(uid)
+    override suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit> =
+        suspendRunCatching {
+            saveCompletedPractice(authDataSource.requireCurrentUserId(), PracticeCompletion(attempt)).getOrThrow()
+        }
+
+    override suspend fun saveCompletedPractice(userId: String, completion: PracticeCompletion): Result<Unit> = suspendRunCatching {
+        check(authDataSource.requireCurrentUserId() == userId)
+        val attempt = completion.attempt
+        val training = completion.training
+        val path = training?.let { trainingRepository.getTrainingPath(it.targetLevel).getOrThrow() }
+        val uid = userId
+        val userRef = firestore.collection(FirestoreCollection.USERS).document(uid)
+        val attemptRef = userRef
             .collection(FirestoreCollection.PRACTICE_ATTEMPTS).document(attempt.attemptId)
 
         firestore.runTransaction { transaction ->
+            check(authDataSource.requireCurrentUserId() == uid)
             val snapshot = transaction.get(attemptRef)
             if (snapshot.exists()) {
                 return@runTransaction
+            }
+
+            val user = if (training != null) {
+                checkNotNull(transaction.get(userRef).toObject(UserDto::class.java)).toDomain()
+            } else null
+            val progress = user?.trainingProgress
+            val decision = if (user != null && training != null && path != null && user.level == training.targetLevel) {
+                TrainingProgressRules.applyOutcome(path, checkNotNull(progress), training.activity, checkNotNull(completion.outcome))
+            } else null
+            val updatedProgress = when (decision) {
+                is TrainingProgressDecision.Advanced -> decision.progress
+                is TrainingProgressDecision.PathCompleted -> decision.progress
+                else -> null
             }
 
             val attemptDto = attempt.toDto()
@@ -52,6 +82,10 @@ class HistoryRepositoryImpl @Inject constructor(
                 val msgRef = attemptRef.collection(FirestoreCollection.MESSAGES).document(msg.messageId)
                 transaction.set(msgRef, msg.toDto())
             }
+            if (updatedProgress != null) {
+                transaction.update(userRef, FirestoreField.TRAINING_PROGRESS, updatedProgress.toDto())
+            }
+            Unit
         }.await()
     }
 

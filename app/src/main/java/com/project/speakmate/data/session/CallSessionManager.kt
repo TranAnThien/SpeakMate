@@ -36,7 +36,8 @@ import kotlinx.coroutines.yield
 class CallSessionManager(
     private val createMedia: () -> CallSessionMedia,
     dispatcher: CoroutineDispatcher,
-    private val nowMillis: () -> Long
+    private val nowMillis: () -> Long,
+    private val epochMillis: () -> Long = System::currentTimeMillis
 ) {
     companion object {
         private const val SETUP_TIMEOUT_MILLIS = 15_000L
@@ -654,11 +655,13 @@ class CallSessionManager(
     private fun activate(current: CallSession, audioLevel: StateFlow<Float>, activeAt: Long) {
         current.timeoutJob?.cancel()
         activeAudioLevel.value = audioLevel
+        val startedAtEpochMillis = mutableSessionState.value.startedAtEpochMillis ?: epochMillis()
         mutableSessionState.update {
             val pauseMillis = it.pausedAtMillis?.let { pausedAt -> activeAt - pausedAt }.default(0L)
             it.copy(
                 state = CallState.ACTIVE,
                 startedAtMillis = it.startedAtMillis.default(activeAt),
+                startedAtEpochMillis = startedAtEpochMillis,
                 pausedAtMillis = null,
                 totalPausedMillis = it.totalPausedMillis + pauseMillis,
                 isResuming = false,

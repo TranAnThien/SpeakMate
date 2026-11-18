@@ -1,6 +1,7 @@
 package com.project.speakmate.ui.training
 
 import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.ProgressProblem
 import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.User
@@ -18,7 +19,7 @@ import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TrainingViewModelTest {
+class TrainingPathViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
@@ -38,30 +39,16 @@ class TrainingViewModelTest {
         val viewModel = createViewModel(user(TrainingProgress(0, 9, TrainingStage.UNIT)))
 
         assertEquals(TrainingContentStatus.ERROR, viewModel.uiState.value.status)
-        assertEquals(true, viewModel.uiState.value.errorMessage.contains("currentUnitOrder"))
+        assertEquals(ProgressProblem.UNIT_OUT_OF_RANGE, viewModel.uiState.value.progressProblem)
     }
 
-    @Test
-    fun preparationCombinesScenarioAndUnitContent() = runTest {
-        val viewModel = createViewModel(user(TrainingProgress(0, 0, TrainingStage.UNIT)))
-
-        viewModel.loadUnitPreparation("unit-1")
-
-        val state = viewModel.preparationState.value
-        assertEquals(TrainingContentStatus.CONTENT, state.status)
-        assertEquals("Bối cảnh: Scenario context", state.description)
-        assertEquals("Focus unit-1", state.overview.communicativeFocus)
-        assertEquals(listOf("Action unit-1"), state.overview.requiredActions)
-        assertEquals("https://example.com/image.jpg", state.overview.imageUrl)
-    }
-
-    private fun createViewModel(user: User): TrainingViewModel =
-        TrainingViewModel(FakeTrainingRepository(), FakeAuthRepository(user.userId), FakeUserRepository(user))
+    private fun createViewModel(user: User): TrainingPathViewModel =
+        TrainingPathViewModel(FakeTrainingRepository(), FakeAuthRepository(user.userId), FakeUserRepository(user))
 
     @Test
     fun profileUpdatesChangeTheCurrentUnitWithoutNavigationReload() = runTest {
         val users = FakeUserRepository(user(TrainingProgress(0, 0, TrainingStage.UNIT)))
-        val viewModel = TrainingViewModel(FakeTrainingRepository(), FakeAuthRepository(), users)
+        val viewModel = TrainingPathViewModel(FakeTrainingRepository(), FakeAuthRepository(), users)
 
         users.setUser(user(TrainingProgress(0, 1, TrainingStage.UNIT)))
         advanceUntilIdle()
@@ -74,7 +61,7 @@ class TrainingViewModelTest {
     fun retryReplacesTheFailedProfileListener() = runTest {
         val users = FakeUserRepository(user(TrainingProgress(0, 0, TrainingStage.UNIT)))
         users.shouldFailObservation = true
-        val viewModel = TrainingViewModel(FakeTrainingRepository(), FakeAuthRepository(), users)
+        val viewModel = TrainingPathViewModel(FakeTrainingRepository(), FakeAuthRepository(), users)
         assertEquals(TrainingContentStatus.ERROR, viewModel.uiState.value.status)
 
         users.shouldFailObservation = false
@@ -86,6 +73,16 @@ class TrainingViewModelTest {
         assertEquals(1, users.activeObservers)
     }
 
+    @Test
+    fun completedPathHasNoLockedUnitsOrCurrentGoal() = runTest {
+        val viewModel = createViewModel(user(TrainingProgress(1, 0, TrainingStage.PATH_COMPLETED)))
+        val state = viewModel.uiState.value
+
+        assertEquals(false, state.canContinue)
+        assertEquals(true, state.goals.all { it.status == TrainingProgressStatus.COMPLETED })
+        assertEquals(true, state.goals.flatMap { it.units }.all { it.status == TrainingProgressStatus.COMPLETED && it.canOpen })
+    }
+
     private fun user(progress: TrainingProgress) = User(
         userId = "user-1",
         displayName = "Student",
@@ -95,3 +92,4 @@ class TrainingViewModelTest {
         trainingProgress = progress
     )
 }
+

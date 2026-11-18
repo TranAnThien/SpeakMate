@@ -32,6 +32,7 @@ class CallSessionManagerTest {
         private const val PAUSE_TIMEOUT_MILLIS = 30_000L
         private const val RESUME_TIMEOUT_MILLIS = 4_000L
         private const val TEST_INTERVAL_MILLIS = 1_000L
+        private const val EPOCH_START_MILLIS = 1_700_000_000_000L
         private const val MAX_SERVER_EVENTS = 256
         private const val LONG_SPEECH_MILLIS = 1_000L
         private const val SHORT_NOISE_MILLIS = 300L
@@ -45,6 +46,44 @@ class CallSessionManagerTest {
 
     @get:Rule
     val folder = TemporaryFolder()
+
+    @Test
+    fun epochEndIsFixedBeforeWaitingForTheFinalTranscript() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        speak(media, LONG_SPEECH_MILLIS)
+        media.emitInputTranscription("A large")
+        runCurrent()
+        val endedAtEpochMillis = EPOCH_START_MILLIS + testScheduler.currentTime
+
+        manager.endCall()
+        runCurrent()
+        assertEquals(endedAtEpochMillis, manager.sessionState.value.endedAtEpochMillis)
+        advanceTimeBy(TEST_INTERVAL_MILLIS)
+        media.emitInputTranscription("A large latte", isFinished = true)
+        runCurrent()
+
+        assertEquals(CallOutcome.COMPLETED, manager.sessionState.value.outcome)
+        assertEquals(endedAtEpochMillis, manager.sessionState.value.endedAtEpochMillis)
+    }
+
+    @Test
+    fun epochStartSurvivesReconnection() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        val startedAtEpochMillis = manager.sessionState.value.startedAtEpochMillis
+        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitResumptionHandle(RESUMPTION_HANDLE)
+        runCurrent()
+        advanceTimeBy(TEST_INTERVAL_MILLIS)
+        media.disconnect(CallFailure.NETWORK)
+        runCurrent()
+        advanceTimeBy(TEST_INTERVAL_MILLIS)
+        runCurrent()
+        media.acknowledgeSetup()
+        runCurrent()
+
+        assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+        assertEquals(startedAtEpochMillis, manager.sessionState.value.startedAtEpochMillis)
+    }
 
     @Test
     fun recordsOnlyAssessmentActivities() = withManager { manager, attempts ->
@@ -1327,7 +1366,8 @@ class CallSessionManagerTest {
                 }
             },
             dispatcher = StandardTestDispatcher(testScheduler),
-            nowMillis = { testScheduler.currentTime }
+            nowMillis = { testScheduler.currentTime },
+            epochMillis = { EPOCH_START_MILLIS + testScheduler.currentTime }
         )
         manager.setForeground(true)
         try {

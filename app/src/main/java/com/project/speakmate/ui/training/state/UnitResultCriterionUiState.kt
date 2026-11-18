@@ -9,5 +9,6 @@ data class UnitResultCriterionUiState(
     val id: String = "",
     val name: String = "",
     val description: String = "",
-    val evaluation: UnitResultEvaluation = UnitResultEvaluation.NOT_EVALUATED
+    val evaluation: UnitResultEvaluation = UnitResultEvaluation.NOT_EVALUATED,
+    val criterion: UnitResultCriterionType = UnitResultCriterionType.RANGE
 )

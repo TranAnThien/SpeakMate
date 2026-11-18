@@ -1,6 +1,6 @@
 package com.project.speakmate.ui.savedvocab
 
-import com.project.speakmate.data.audio.PronunciationPlayer
+import com.project.speakmate.domain.repository.PronunciationRepository
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
@@ -32,7 +32,7 @@ class SavedVocabViewModelTest {
 
     private val fakeVocabFlow = MutableStateFlow<List<VocabularyItem>>(emptyList())
     private lateinit var repository: SavedVocabularyRepository
-    private lateinit var pronunciationPlayer: PronunciationPlayer
+    private lateinit var pronunciationRepository: PronunciationRepository
     private lateinit var viewModel: SavedVocabViewModel
 
     private fun makeItem(word: String, mean: String, pos: String = "noun") = VocabularyItem(
@@ -47,8 +47,8 @@ class SavedVocabViewModelTest {
     fun setUp() {
         repository = mockk(relaxed = true)
         io.mockk.every { repository.observeSavedVocabularies() } returns fakeVocabFlow
-        pronunciationPlayer = mockk(relaxed = true)
-        viewModel = SavedVocabViewModel(repository, pronunciationPlayer)
+        pronunciationRepository = mockk(relaxed = true)
+        viewModel = SavedVocabViewModel(repository, pronunciationRepository)
     }
 
     // ─── Trạng thái ban đầu ───────────────────────────────────────────────────
@@ -186,7 +186,7 @@ class SavedVocabViewModelTest {
     fun playsTheSameWordOnEachTap() {
         viewModel.playWord("resilience")
         viewModel.playWord("resilience")
-        verify(exactly = 2) { pronunciationPlayer.speak("resilience", any()) }
+        verify(exactly = 2) { pronunciationRepository.playText("resilience") }
     }
 }
 

@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.ui.call.components.CallAudioVisualizer
@@ -47,7 +48,9 @@ fun CallRoute(
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
     communicativeGoal: String = "",
-    onCallFinished: ((CallSessionState) -> Unit)? = null
+    onCallFinished: ((CallSessionState) -> Unit)? = null,
+    activityContext: CallActivityContext? = null,
+    onPracticeCompleted: ((String) -> Unit)? = null
 ) {
     val viewModel: CallViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -55,6 +58,7 @@ fun CallRoute(
     val activity = LocalActivity.current
     val onExitRequested by rememberUpdatedState(onExit)
     val onFinished by rememberUpdatedState(onCallFinished)
+    val onCompleted by rememberUpdatedState(onPracticeCompleted)
     val lifecycleOwner = LocalLifecycleOwner.current
     val finishedSession = state.finishedSession
     val settingsUnavailable = stringResource(R.string.call_permission_settings_unavailable)
@@ -75,7 +79,11 @@ fun CallRoute(
 
     fun startWithPermission() {
         shouldOpenSettings = false
-        viewModel.startCall(scenario, activityType, communicativeGoal)
+        val callContext = activityContext ?: when (activityType) {
+            CallActivityType.FREE_PRACTICE -> CallActivityContext.FreePractice(scenario)
+            else -> CallActivityContext.Assessment(scenario, activityType, communicativeGoal)
+        }
+        viewModel.startCall(callContext)
     }
 
     fun requestStart() {
@@ -117,6 +125,15 @@ fun CallRoute(
         LaunchedEffect(finishedSession, lifecycleOwner) {
             lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 onFinished?.invoke(finishedSession)
+            }
+        }
+    }
+    val completionAttemptId = state.completionAttemptId
+    if (onPracticeCompleted != null && completionAttemptId != null && !state.isExiting) {
+        LaunchedEffect(completionAttemptId, lifecycleOwner) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.handoffCompletion()
+                onCompleted?.invoke(completionAttemptId)
             }
         }
     }

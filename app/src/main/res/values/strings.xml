@@ -237,7 +237,7 @@
     <string name="call_pronunciation_unavailable">Chưa phát được âm thanh.</string>
     <string name="unit_result_partial">Đạt một phần</string>
     <string name="unit_result_missing_action">Chưa hoàn thành yêu cầu</string>
-    <string name="unit_result_insufficient">Không đủ dữ liệu</string>
+    <string name="unit_result_insufficient">Chưa có kết quả</string>
     <string name="unit_result_processing">Đang đánh giá phiên</string>
     <string name="unit_result_required_actions">Yêu cầu giao tiếp</string>
     <string name="unit_result_action_completed">Hoàn thành</string>
@@ -483,4 +483,19 @@
     <string name="session_detail_preview_message_5_text">Of course. A large iced latte with less sugar.</string>
     <string name="session_detail_preview_message_6_metadata">BẠN · 01:31</string>
     <string name="session_detail_preview_message_6_text">Yes, that\'s correct. Thank you.</string>
+    <string name="training_goal_number">Mục tiêu %1$d</string>
+    <string name="training_progress_invalid">Tiến độ hiện tại không khớp với lộ trình. Hãy thử tải lại.</string>
+    <string name="training_assessment_description">Hoàn thành bài kiểm tra để mở khóa mục tiêu tiếp theo.</string>
+    <string name="preparation_unit_context">Học liệu Bài học</string>
+    <string name="preparation_vocabulary_count">%1$d mục cần dùng</string>
+    <string name="preparation_grammar_count">%1$d điểm ngữ pháp</string>
+    <string name="preparation_patterns_count">%1$d mẫu câu</string>
+    <string name="preparation_unit_locked">Bài học này chưa được mở trong tiến độ hiện tại.</string>
+    <string name="unit_result_retry_save">Thử lưu lại</string>
+    <string name="unit_result_save_failed">Kết quả chưa được lưu. Hãy thử lưu lại.</string>
+    <string name="unit_result_unavailable">Phiên đánh giá không còn trong bộ nhớ. Hãy thử lại bài học.</string>
+    <string name="unit_result_runtime_required_action">Bạn đạt %1$d/5 tiêu chí nhưng còn yêu cầu giao tiếp bắt buộc chưa hoàn thành.</string>
+    <string name="unit_result_runtime_criteria">Bạn đạt %1$d/5 tiêu chí. Hãy xem đánh giá chi tiết bên dưới.</string>
+    <string name="unit_result_runtime_criteria_heading">Đánh giá chi tiết · %1$d/5 đạt</string>
+    <string name="unit_result_criterion_unknown">Chưa đủ dữ liệu để đánh giá tiêu chí này.</string>
 </resources>

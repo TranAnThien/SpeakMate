@@ -45,7 +45,7 @@ fun TrainingGoalCard(
             RoundedCornerShape(16.dp)).padding(17.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onToggle), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(goal.label, style = DesignTypography.SectionLabel, color = DesignColor.Muted, modifier = Modifier.weight(1f))
+                Text(goal.label.ifBlank { stringResource(R.string.training_goal_number, goal.order + 1) }, style = DesignTypography.SectionLabel, color = DesignColor.Muted, modifier = Modifier.weight(1f))
                 Text(stringResource(when (goal.status) {
                     TrainingProgressStatus.CURRENT -> R.string.training_current
                     TrainingProgressStatus.COMPLETED -> R.string.training_completed
@@ -66,7 +66,7 @@ fun TrainingGoalCard(
         }
         if (goal.isExpanded) {
             Spacer(Modifier.height(8.dp))
-            Text(goal.unitsHeading, style = DesignTypography.SectionLabel, color = DesignColor.Muted)
+            Text(goal.unitsHeading.ifBlank { stringResource(R.string.training_units_heading) }, style = DesignTypography.SectionLabel, color = DesignColor.Muted)
             Spacer(Modifier.height(8.dp))
             goal.units.forEachIndexed { index, unit ->
                 key(unit.id) {

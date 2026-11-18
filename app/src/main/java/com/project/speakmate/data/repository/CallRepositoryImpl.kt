@@ -1,7 +1,7 @@
 package com.project.speakmate.data.repository
 
 import com.project.speakmate.data.session.CallSessionManager
-import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.repository.CallRepository
 import javax.inject.Inject
@@ -20,7 +20,10 @@ class CallRepositoryImpl @Inject constructor(private val session: CallSessionMan
     override val sessionState get() = session.sessionState
     override val audioLevel get() = session.audioLevel
 
-    override fun startCall(scenario: Scenario, activityType: CallActivityType, communicativeGoal: String) {
+    override fun startCall(context: CallActivityContext) {
+        val scenario = context.scenario
+        val activityType = context.activityType
+        val communicativeGoal = context.communicativeGoal
         val instruction = when (activityType) {
             CallActivityType.FREE_PRACTICE -> FREE_PRACTICE_INSTRUCTION
             CallActivityType.INITIAL_PLACEMENT -> PLACEMENT_INSTRUCTION

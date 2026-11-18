@@ -40,7 +40,8 @@ fun UnitResultScreen(
     onRetryUnit: () -> Unit,
     onReviewLesson: () -> Unit,
     modifier: Modifier = Modifier,
-    scrollState: ScrollState = rememberScrollState()
+    scrollState: ScrollState = rememberScrollState(),
+    onRetrySave: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
         PreparationHeader(if (state.presentation == UnitResultPresentation.PROCESSING)
@@ -73,7 +74,8 @@ fun UnitResultScreen(
                 }
             }
             UnitResultFooter(state.presentation == UnitResultPresentation.PASS,
-                onContinuePath, onReplayUnit, onRetryUnit, onReviewLesson)
+                onContinuePath, onReplayUnit, onRetryUnit, onReviewLesson,
+                hasSaveFailed = state.saveFailed, onRetrySave = onRetrySave)
         }
     }
 }

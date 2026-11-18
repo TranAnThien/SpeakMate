@@ -11,5 +11,6 @@ data class PreparationGrammarUiState(
     val explanation: String = "",
     val structure: String = "",
     val example: PreparationExampleUiState = PreparationExampleUiState(),
-    val usageNote: String = ""
+    val usageNote: String = "",
+    val examples: List<PreparationExampleUiState> = emptyList()
 )

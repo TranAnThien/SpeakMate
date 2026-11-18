@@ -83,7 +83,7 @@ fun TrainingPathScreen(
                     TrainingContentStatus.ERROR -> TrainingUnavailableContent(
                         isLoading = false,
                         onRetry = onRetry,
-                        errorMessage = state.errorMessage
+                        errorMessage = if (state.progressProblem != null) stringResource(R.string.training_progress_invalid) else state.errorMessage
                     )
                     TrainingContentStatus.ERROR_DIALOG -> Unit
                 }

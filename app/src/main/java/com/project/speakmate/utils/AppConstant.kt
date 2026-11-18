@@ -10,4 +10,10 @@ object AppConstant {
     const val SECONDS_PER_MINUTE = 60L
     const val STATE_SUBSCRIPTION_TIMEOUT_MILLIS = 5_000L
     const val TOO_MANY_REQUESTS = 429
+    const val UNIT_ID_ARGUMENT = "unitId"
+    const val ATTEMPT_ID_ARGUMENT = "attemptId"
+    const val TRAINING_PATH_ROUTE = "training_path"
+    const val UNIT_PREPARATION_ROUTE = "training_unit/{unitId}"
+    const val UNIT_CALL_ROUTE = "training_unit_call/{unitId}"
+    const val UNIT_RESULT_ROUTE = "training_unit_result/{unitId}/{attemptId}"
 }

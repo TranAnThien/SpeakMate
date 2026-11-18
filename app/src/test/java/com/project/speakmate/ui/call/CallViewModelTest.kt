@@ -1,6 +1,22 @@
 package com.project.speakmate.ui.call
 
+import com.project.speakmate.data.session.PracticeCompletionManager
+import com.project.speakmate.data.repository.PracticeCompletionRepositoryImpl
+import com.project.speakmate.test.FakeAuthRepository
+import com.project.speakmate.domain.model.CallActivityContext
+import com.project.speakmate.domain.model.CallOutcome
+import com.project.speakmate.domain.model.CallFailure
+import com.project.speakmate.domain.model.PracticeCompletion
+import com.project.speakmate.domain.model.RequiredAction
+import com.project.speakmate.domain.rules.AssessmentRules
+import com.project.speakmate.domain.rules.PracticeCompletionRules
+import com.project.speakmate.data.session.PracticeCompletionTestFixtures
 import com.project.speakmate.domain.model.AssessmentOutcome
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import org.junit.After
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.CallSessionState
@@ -8,7 +24,6 @@ import com.project.speakmate.domain.model.CallState
 import com.project.speakmate.domain.model.DictionaryLookupResult
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.model.LearningExample
-import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SenderType
@@ -44,6 +59,10 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallViewModelTest {
+    companion object {
+        private const val EPOCH_START_MILLIS = 1_700_000_000_000L
+        private const val ORDER_ACTION_ID = "order_drink"
+    }
 
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
@@ -58,6 +77,7 @@ class CallViewModelTest {
     private lateinit var speakingAssessmentRepository: SpeakingAssessmentRepository
 
     private lateinit var viewModel: CallViewModel
+    private lateinit var completionScope: CoroutineScope
 
     private val testScenario = Scenario(
         scenarioId = "cafe_ordering",
@@ -85,20 +105,23 @@ class CallViewModelTest {
         every { callRepository.sessionState } returns sessionStateFlow
         every { callRepository.audioLevel } returns audioLevelFlow
 
-        coEvery { historyRepository.savePracticeAttempt(any()) } returns Result.success(Unit)
+        coEvery { historyRepository.saveCompletedPractice(any(), any()) } returns Result.success(Unit)
+        completionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val completionRepository = PracticeCompletionRepositoryImpl(
+            PracticeCompletionManager(completionScope, FakeAuthRepository(), historyRepository, speakingAssessmentRepository)
+        )
 
         viewModel = CallViewModel(
             repository = callRepository,
             dictionaryRepository = dictionaryRepository,
             savedVocabularyRepository = savedVocabularyRepository,
-            historyRepository = historyRepository,
-            speakingAssessmentRepository = speakingAssessmentRepository
+            completionRepository = completionRepository
         )
     }
 
     @Test
     fun callEndedCanceledWhenUserDidNotSpeakDoesNotSaveHistory() = runTest {
-        viewModel.startCall(testScenario, CallActivityType.TRAINING_UNIT)
+        viewModel.startCall(trainingContext())
 
         sessionStateFlow.value = CallSessionState(
             state = CallState.ACTIVE,
@@ -110,15 +133,15 @@ class CallViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.onCallEnded(isNetworkError = false)
+        finishCall(isNetworkError = false)
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { historyRepository.savePracticeAttempt(any()) }
+        coVerify(exactly = 0) { historyRepository.saveCompletedPractice(any(), any()) }
     }
 
     @Test
     fun callEndedFailedDueToNetworkErrorDoesNotSaveHistory() = runTest {
-        viewModel.startCall(testScenario, CallActivityType.TRAINING_UNIT)
+        viewModel.startCall(trainingContext())
 
         sessionStateFlow.value = CallSessionState(
             state = CallState.ACTIVE,
@@ -130,15 +153,15 @@ class CallViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.onCallEnded(isNetworkError = true)
+        finishCall(isNetworkError = true)
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { historyRepository.savePracticeAttempt(any()) }
+        coVerify(exactly = 0) { historyRepository.saveCompletedPractice(any(), any()) }
     }
 
     @Test
     fun callEndedNullResultWhenAiServiceThrowsExceptionStillSavesAttemptWithNullResult() = runTest {
-        viewModel.startCall(testScenario, CallActivityType.TRAINING_UNIT)
+        viewModel.startCall(trainingContext())
 
         sessionStateFlow.value = CallSessionState(
             state = CallState.ACTIVE,
@@ -153,26 +176,25 @@ class CallViewModelTest {
 
         coEvery { speakingAssessmentRepository.evaluate(any()) } throws RuntimeException("AI evaluation timeout")
 
-        val attemptSlot = slot<PracticeAttempt>()
-        coEvery { historyRepository.savePracticeAttempt(capture(attemptSlot)) } returns Result.success(Unit)
+        val attemptSlot = slot<PracticeCompletion>()
+        coEvery { historyRepository.saveCompletedPractice(any(), capture(attemptSlot)) } returns Result.success(Unit)
 
-        viewModel.onCallEnded(isNetworkError = false)
+        finishCall(isNetworkError = false)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { historyRepository.savePracticeAttempt(any()) }
-        val savedAttempt = attemptSlot.captured
+        coVerify(exactly = 1) { historyRepository.saveCompletedPractice(any(), any()) }
+        val savedAttempt = attemptSlot.captured.attempt
         assertEquals("cafe_ordering", savedAttempt.scenarioId)
         assertEquals(PracticeType.TRAINING_UNIT, savedAttempt.practiceType)
         assertNull(savedAttempt.result)
         assertNull(savedAttempt.criteriaResult)
-        assertNotNull(savedAttempt.feedbackSummary)
-        assertTrue(savedAttempt.feedbackSummary!!.contains("chưa thể đánh giá"))
+        assertNull(savedAttempt.feedbackSummary)
         assertEquals(1, savedAttempt.transcripts.size)
     }
 
     @Test
     fun callEndedNullResultWhenAiReturnsInsufficientEvidenceSavesAttemptWithNullResult() = runTest {
-        viewModel.startCall(testScenario, CallActivityType.TRAINING_UNIT)
+        viewModel.startCall(trainingContext())
 
         sessionStateFlow.value = CallSessionState(
             state = CallState.ACTIVE,
@@ -189,21 +211,21 @@ class CallViewModelTest {
             InsufficientEvidenceReason.NOT_ENOUGH_SPEECH
         )
 
-        val attemptSlot = slot<PracticeAttempt>()
-        coEvery { historyRepository.savePracticeAttempt(capture(attemptSlot)) } returns Result.success(Unit)
+        val attemptSlot = slot<PracticeCompletion>()
+        coEvery { historyRepository.saveCompletedPractice(any(), capture(attemptSlot)) } returns Result.success(Unit)
 
-        viewModel.onCallEnded(isNetworkError = false)
+        finishCall(isNetworkError = false)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { historyRepository.savePracticeAttempt(any()) }
-        val savedAttempt = attemptSlot.captured
+        coVerify(exactly = 1) { historyRepository.saveCompletedPractice(any(), any()) }
+        val savedAttempt = attemptSlot.captured.attempt
         assertNull(savedAttempt.result)
         assertNull(savedAttempt.criteriaResult)
     }
 
     @Test
     fun callEndedHappyPathSavesAttemptWithPassResult() = runTest {
-        viewModel.startCall(testScenario, CallActivityType.TRAINING_UNIT)
+        viewModel.startCall(trainingContext())
 
         sessionStateFlow.value = CallSessionState(
             state = CallState.ACTIVE,
@@ -224,14 +246,14 @@ class CallViewModelTest {
             evaluation = mockEvaluation
         )
 
-        val attemptSlot = slot<PracticeAttempt>()
-        coEvery { historyRepository.savePracticeAttempt(capture(attemptSlot)) } returns Result.success(Unit)
+        val attemptSlot = slot<PracticeCompletion>()
+        coEvery { historyRepository.saveCompletedPractice(any(), capture(attemptSlot)) } returns Result.success(Unit)
 
-        viewModel.onCallEnded(isNetworkError = false)
+        finishCall(isNetworkError = false)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { historyRepository.savePracticeAttempt(any()) }
-        val savedAttempt = attemptSlot.captured
+        coVerify(exactly = 1) { historyRepository.saveCompletedPractice(any(), any()) }
+        val savedAttempt = attemptSlot.captured.attempt
         assertEquals(AssessmentResult.PASS, savedAttempt.result)
         assertEquals(sampleCriteriaResult, savedAttempt.criteriaResult)
         assertEquals(mapOf("order_drink" to true), savedAttempt.requiredActionResults)
@@ -240,7 +262,7 @@ class CallViewModelTest {
 
     @Test
     fun callEndedFreePracticeDoesNotCallAiAssessmentAndSavesWithNullResult() = runTest {
-        viewModel.startCall(testScenario, CallActivityType.FREE_PRACTICE)
+        viewModel.startCall(CallActivityContext.FreePractice(testScenario))
 
         sessionStateFlow.value = CallSessionState(
             state = CallState.ACTIVE,
@@ -253,23 +275,23 @@ class CallViewModelTest {
         )
         advanceUntilIdle()
 
-        val attemptSlot = slot<PracticeAttempt>()
-        coEvery { historyRepository.savePracticeAttempt(capture(attemptSlot)) } returns Result.success(Unit)
+        val attemptSlot = slot<PracticeCompletion>()
+        coEvery { historyRepository.saveCompletedPractice(any(), capture(attemptSlot)) } returns Result.success(Unit)
 
-        viewModel.onCallEnded(isNetworkError = false)
+        finishCall(isNetworkError = false)
         advanceUntilIdle()
 
         coVerify(exactly = 0) { speakingAssessmentRepository.evaluate(any()) }
-        coVerify(exactly = 1) { historyRepository.savePracticeAttempt(any()) }
-        val savedAttempt = attemptSlot.captured
+        coVerify(exactly = 1) { historyRepository.saveCompletedPractice(any(), any()) }
+        val savedAttempt = attemptSlot.captured.attempt
         assertEquals(PracticeType.FREE_PRACTICE, savedAttempt.practiceType)
         assertNull(savedAttempt.result)
-        assertEquals("Luyện tập tự do không chấm điểm.", savedAttempt.feedbackSummary)
+        assertNull(savedAttempt.feedbackSummary)
     }
 
     @Test
     fun callEndedPlacementOrReassessmentDoesNotSavePracticeAttempt() = runTest {
-        viewModel.startCall(testScenario, CallActivityType.INITIAL_PLACEMENT)
+        viewModel.startCall(CallActivityContext.Assessment(testScenario, CallActivityType.INITIAL_PLACEMENT, ""))
 
         sessionStateFlow.value = CallSessionState(
             state = CallState.ACTIVE,
@@ -282,16 +304,16 @@ class CallViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.onCallEnded(isNetworkError = false)
+        finishCall(isNetworkError = false)
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { historyRepository.savePracticeAttempt(any()) }
+        coVerify(exactly = 0) { historyRepository.saveCompletedPractice(any(), any()) }
     }
 
     @Test
     fun calculateSpeakingResultReturnsFailWhenRequiredActionIsFalse() {
         val actions = mapOf("action_1" to true, "action_2" to false)
-        val result = viewModel.calculateSpeakingResult(sampleCriteriaResult, actions)
+        val result = calculateResult(sampleCriteriaResult, actions)
         assertEquals(AssessmentResult.FAIL, result)
     }
 
@@ -300,13 +322,13 @@ class CallViewModelTest {
         val allMetActions = mapOf("action_1" to true)
 
         val fourMet = sampleCriteriaResult.copy(rangeMet = false)
-        assertEquals(AssessmentResult.PASS, viewModel.calculateSpeakingResult(fourMet, allMetActions))
+        assertEquals(AssessmentResult.PASS, calculateResult(fourMet, allMetActions))
 
         val threeMet = sampleCriteriaResult.copy(rangeMet = false, accuracyMet = false)
-        assertEquals(AssessmentResult.PARTIAL, viewModel.calculateSpeakingResult(threeMet, allMetActions))
+        assertEquals(AssessmentResult.PARTIAL, calculateResult(threeMet, allMetActions))
 
         val twoMet = sampleCriteriaResult.copy(rangeMet = false, accuracyMet = false, fluencyMet = false)
-        assertEquals(AssessmentResult.FAIL, viewModel.calculateSpeakingResult(twoMet, allMetActions))
+        assertEquals(AssessmentResult.FAIL, calculateResult(twoMet, allMetActions))
     }
 
     @Test
@@ -318,7 +340,7 @@ class CallViewModelTest {
             TranscriptMessage("4", SenderType.USER, "A coffee please", 3, isFinal = true, isInterrupted = true)
         )
 
-        val result = viewModel.extractFinalTranscripts(raw)
+        val result = PracticeCompletionRules.getFinalTranscripts(raw)
 
         assertEquals(2, result.size)
         assertEquals("How can I help?", result[0].content)
@@ -370,4 +392,33 @@ class CallViewModelTest {
         advanceUntilIdle()
         assertEquals(CallVocabularySaveStatus.MOVED_TO_TOP, viewModel.uiState.value.dictionary?.saveStatus)
     }
+    @After
+    fun tearDown() {
+        completionScope.cancel()
+    }
+
+    private fun trainingContext() = CallActivityContext.Training(
+        PracticeCompletionTestFixtures.training.copy(
+            scenario = testScenario,
+            requiredActions = listOf(RequiredAction(ORDER_ACTION_ID, ORDER_ACTION_ID))
+        )
+    )
+
+    private fun finishCall(isNetworkError: Boolean) {
+        val session = sessionStateFlow.value
+        sessionStateFlow.value = session.copy(
+            state = if (isNetworkError) CallState.FAILED else CallState.ENDED,
+            failure = if (isNetworkError) CallFailure.NETWORK else null,
+            outcome = when {
+                isNetworkError -> CallOutcome.FAILED
+                session.hasUserSpeech -> CallOutcome.COMPLETED
+                else -> CallOutcome.CANCELLED
+            },
+            startedAtEpochMillis = EPOCH_START_MILLIS
+        )
+    }
+
+    private fun calculateResult(criteria: SpeakingCriteriaResult, actions: Map<String, Boolean>): AssessmentResult =
+        AssessmentRules.calculateResult(criteria, actions.keys.map { RequiredAction(it, it) }, actions)
+
 }

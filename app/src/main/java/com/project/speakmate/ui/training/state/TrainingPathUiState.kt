@@ -2,6 +2,7 @@ package com.project.speakmate.ui.training.state
 
 import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
+import com.project.speakmate.domain.model.ProgressProblem
 
 @Keep
 @Immutable
@@ -10,5 +11,6 @@ data class TrainingPathUiState(
     val errorMessage: String = "",
     val level: String = "",
     val goals: List<TrainingGoalUiState> = emptyList(),
-    val canContinue: Boolean = false
+    val canContinue: Boolean = false,
+    val progressProblem: ProgressProblem? = null
 )

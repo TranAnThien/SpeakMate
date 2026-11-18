@@ -12,5 +12,8 @@ data class UnitResultUiState(
     val criteriaHeading: String = "",
     val feedback: String = "",
     val requiredActions: List<UnitResultActionUiState> = emptyList(),
-    val criteria: List<UnitResultCriterionUiState> = emptyList()
+    val criteria: List<UnitResultCriterionUiState> = emptyList(),
+    val saveFailed: Boolean = false,
+    val isSaving: Boolean = false,
+    val isUnavailable: Boolean = false
 )

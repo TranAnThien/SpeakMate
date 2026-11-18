@@ -3,7 +3,7 @@ package com.project.speakmate.ui.profile.savedvocab
 import com.project.speakmate.utils.AppConstant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.project.speakmate.data.audio.PronunciationPlayer
+import com.project.speakmate.domain.repository.PronunciationRepository
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import com.project.speakmate.ui.profile.savedvocab.state.SavedVocabUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,7 +18,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SavedVocabViewModel @Inject constructor(
     private val savedVocabularyRepository: SavedVocabularyRepository,
-    private val pronunciationPlayer: PronunciationPlayer
+    private val pronunciationRepository: PronunciationRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -55,7 +55,7 @@ class SavedVocabViewModel @Inject constructor(
     )
 
     override fun onCleared() {
-        pronunciationPlayer.release()
+        pronunciationRepository.release()
         super.onCleared()
     }
 
@@ -77,6 +77,10 @@ class SavedVocabViewModel @Inject constructor(
     }
 
     fun playWord(word: String) {
-        pronunciationPlayer.speak(word) {}
+        pronunciationRepository.playText(word)
+    }
+
+    fun stopPronunciation() {
+        pronunciationRepository.stop()
     }
 }

@@ -1,6 +1,7 @@
 package com.project.speakmate.ui
 
 import android.app.Activity
+import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,8 +52,12 @@ import com.project.speakmate.ui.profile.state.ProfileSkillUiState
 import com.project.speakmate.ui.profile.state.ProfileUiState
 import com.project.speakmate.ui.profile.state.SettingsUiState
 import com.project.speakmate.ui.training.TrainingPathScreen
-import com.project.speakmate.ui.training.TrainingViewModel
-import com.project.speakmate.ui.training.UnitPreparationScreen
+import com.project.speakmate.ui.training.TrainingPathViewModel
+import com.project.speakmate.ui.training.UnitPreparationViewModel
+import com.project.speakmate.ui.training.UnitPreparationRoute
+import com.project.speakmate.ui.training.UnitResultRoute
+import com.project.speakmate.domain.model.CallActivityContext
+import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.ui.training.GoalDetailScreen
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
 import com.project.speakmate.ui.training.state.GoalDetailUiState
@@ -194,7 +199,7 @@ fun AppNavigation(
         }
 
         composable("training_path") {
-            val trainingViewModel: TrainingViewModel = hiltViewModel()
+            val trainingViewModel: TrainingPathViewModel = hiltViewModel()
             val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
 
             TrainingPathScreen(
@@ -237,71 +242,105 @@ fun AppNavigation(
             )
         }
 
-        composable("training_unit/{unitId}") { entry ->
-            val unitId = entry.arguments?.getString("unitId").orEmpty()
-            val trainingViewModel: TrainingViewModel = hiltViewModel()
-            val preparationState by trainingViewModel.preparationState.collectAsStateWithLifecycle()
-            LaunchedEffect(unitId) { trainingViewModel.loadUnitPreparation(unitId) }
-            when (preparationState.status) {
-                TrainingContentStatus.CONTENT -> UnitPreparationScreen(
-                    state = preparationState,
-                    onBack = navController::popBackStack,
-                    onSelectSection = trainingViewModel::selectPreparationSection,
-                    onStartRoleplay = {
-                        navController.navigate("training_unit_call/$unitId")
-                    },
-                    onPlayWord = {},
-                    onPlayPattern = {},
-                    onPlayExample = {}
-                )
-                TrainingContentStatus.LOADING -> TrainingUnavailableContent(
-                    isLoading = true,
-                    onRetry = { trainingViewModel.loadUnitPreparation(unitId) },
-                    loadingTitleRes = R.string.preparation_loading_title,
-                    loadingDescriptionRes = R.string.preparation_loading_description,
-                    errorTitleRes = R.string.preparation_error_title,
-                    errorDescriptionRes = R.string.preparation_error_description
-                )
-                else -> TrainingUnavailableContent(
-                    isLoading = false,
-                    onRetry = { trainingViewModel.loadUnitPreparation(unitId) },
-                    errorMessage = preparationState.errorMessage,
-                    loadingTitleRes = R.string.preparation_loading_title,
-                    loadingDescriptionRes = R.string.preparation_loading_description,
-                    errorTitleRes = R.string.preparation_error_title,
-                    errorDescriptionRes = R.string.preparation_error_description
-                )
+        composable(AppConstant.UNIT_PREPARATION_ROUTE) { entry ->
+            val unitId = entry.arguments?.getString(AppConstant.UNIT_ID_ARGUMENT).orEmpty()
+            UnitPreparationRoute(
+                unitId = unitId,
+                onBack = navController::popBackStack,
+                onStartRoleplay = { navController.navigate(unitDestination(AppConstant.UNIT_CALL_ROUTE, unitId)) }
+            )
+        }
+
+        composable(AppConstant.UNIT_CALL_ROUTE) { entry ->
+            val unitId = entry.arguments?.getString(AppConstant.UNIT_ID_ARGUMENT).orEmpty()
+            val preparationRoute = unitDestination(AppConstant.UNIT_PREPARATION_ROUTE, unitId)
+            val unitEntry = remember(entry, unitId) {
+                try {
+                    navController.getBackStackEntry(preparationRoute)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+            }
+            if (unitEntry == null) {
+                LaunchedEffect(entry, preparationRoute) {
+                    navController.navigate(preparationRoute) {
+                        popUpTo(AppConstant.UNIT_CALL_ROUTE) { inclusive = true }
+                    }
+                }
+            } else {
+                val preparationViewModel: UnitPreparationViewModel = hiltViewModel(unitEntry)
+                val preparationState by preparationViewModel.uiState.collectAsStateWithLifecycle()
+                val activity = remember(entry) { preparationState.activity }
+                if (activity == null) {
+                    TrainingUnavailableContent(isLoading = false, onRetry = { navController.popBackStack() })
+                } else {
+                    CallRoute(
+                        scenario = activity.scenario,
+                        activityType = CallActivityType.TRAINING_UNIT,
+                        onExit = { navController.popBackStack() },
+                        activityContext = CallActivityContext.Training(activity),
+                        onPracticeCompleted = { attemptId ->
+                            val resultRoute = unitDestination(AppConstant.UNIT_RESULT_ROUTE, unitId)
+                                .replace("{"+AppConstant.ATTEMPT_ID_ARGUMENT+"}", Uri.encode(attemptId))
+                            navController.navigate(resultRoute) {
+                                popUpTo(AppConstant.UNIT_CALL_ROUTE) { inclusive = true }
+                            }
+                        }
+                    )
+                }
             }
         }
 
-        composable("training_unit_call/{unitId}") { entry ->
-            val unitId = entry.arguments?.getString("unitId").orEmpty()
+        composable(AppConstant.UNIT_RESULT_ROUTE) { entry ->
+            val unitId = entry.arguments?.getString(AppConstant.UNIT_ID_ARGUMENT).orEmpty()
+            val preparationRoute = unitDestination(AppConstant.UNIT_PREPARATION_ROUTE, unitId)
             val unitEntry = remember(entry, unitId) {
-                navController.getBackStackEntry("training_unit/$unitId")
-            }
-            val trainingViewModel: TrainingViewModel = hiltViewModel(unitEntry)
-            val scenario = trainingViewModel.currentLoadedScenario
-            val unit = trainingViewModel.currentLoadedUnit
-            if (scenario == null || unit == null) {
-                LaunchedEffect(Unit) {
-                    navController.popBackStack()
+                try {
+                    navController.getBackStackEntry(preparationRoute)
+                } catch (_: IllegalArgumentException) {
+                    null
                 }
-            } else {
-                CallRoute(
-                    scenario = scenario,
-                    activityType = CallActivityType.TRAINING_UNIT,
-                    communicativeGoal = unit.communicativeFocus,
-                    onExit = {
-                        navController.popBackStack()
-                    }
-                )
             }
+            val preparationViewModel: UnitPreparationViewModel? = if (unitEntry != null) hiltViewModel(unitEntry) else null
+            val retryUnit: () -> Unit = {
+                if (preparationViewModel?.uiState?.value?.canStartRoleplay == true) {
+                    preparationViewModel.prepareRetry()
+                    preparationViewModel.stopPronunciation()
+                    navController.navigate(unitDestination(AppConstant.UNIT_CALL_ROUTE, unitId)) {
+                        popUpTo(AppConstant.UNIT_PREPARATION_ROUTE) { inclusive = false }
+                    }
+                } else if (unitEntry != null) {
+                    navController.popBackStack(preparationRoute, false)
+                } else {
+                    navController.navigate(preparationRoute) {
+                        popUpTo(AppConstant.UNIT_RESULT_ROUTE) { inclusive = true }
+                    }
+                }
+            }
+            val returnToPath = {
+                if (!navController.popBackStack(AppConstant.TRAINING_PATH_ROUTE, false)) {
+                    navController.navigate(AppConstant.TRAINING_PATH_ROUTE)
+                }
+            }
+            UnitResultRoute(
+                onBack = navController::popBackStack,
+                onContinuePath = returnToPath,
+                onReplayUnit = retryUnit,
+                onRetryUnit = retryUnit,
+                onReviewLesson = { navController.popBackStack() }
+            )
         }
 
         composable("training_goal/{goalId}") { entry ->
             val goalId = entry.arguments?.getString("goalId").orEmpty()
-            val pathEntry = remember(entry) { navController.getBackStackEntry("training_path") }
-            val trainingViewModel: TrainingViewModel = hiltViewModel(pathEntry)
+            val pathEntry = remember(entry) {
+                try {
+                    navController.getBackStackEntry(AppConstant.TRAINING_PATH_ROUTE)
+                } catch (_: IllegalArgumentException) {
+                    entry
+                }
+            }
+            val trainingViewModel: TrainingPathViewModel = hiltViewModel(pathEntry)
             val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
             val goal = trainingState.goals.firstOrNull { it.id == goalId }
             val detailState = goal?.let {
@@ -488,3 +527,7 @@ fun AppNavigation(
         }
     }
 }
+
+
+private fun unitDestination(route: String, unitId: String): String =
+    route.replace("{"+AppConstant.UNIT_ID_ARGUMENT+"}", Uri.encode(unitId))
