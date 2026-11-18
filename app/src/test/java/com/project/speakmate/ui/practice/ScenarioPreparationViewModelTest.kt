@@ -3,6 +3,7 @@ package com.project.speakmate.ui.practice
 import androidx.lifecycle.SavedStateHandle
 import com.project.speakmate.domain.model.FreePractice
 import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.ScenarioPreparationMetadata
 import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.ui.practice.state.ScenarioPreparationPresentation
 import kotlinx.coroutines.Dispatchers
@@ -55,12 +56,12 @@ private class ScenarioPrepPracticeRepository : PracticeRepository {
     override suspend fun getScenarioCatalog(): Result<List<FreePractice>> =
         Result.success(listOf(FreePractice("fp-1", scenario.scenarioId, "Daily")))
     override suspend fun getScenario(scenarioId: String): Result<Scenario> = Result.success(scenario)
-    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<Map<String, String>> = Result.success(
-        mapOf(
-            "imageUrl" to "https://example.com/coffee.jpg",
-            "uiContext" to "You are in a coffee shop",
-            "aiRole" to "Barista",
-            "preCallHint" to "Ask about the menu"
+    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<ScenarioPreparationMetadata> = Result.success(
+        ScenarioPreparationMetadata(
+            imageUrl = "https://example.com/coffee.jpg",
+            uiContext = "You are in a coffee shop",
+            aiRole = "Barista",
+            preCallHint = "Ask about the menu"
         )
     )
 }

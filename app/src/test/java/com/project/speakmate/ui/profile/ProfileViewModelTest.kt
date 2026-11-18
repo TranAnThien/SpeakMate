@@ -49,7 +49,7 @@ class ProfileViewModelTest {
 
     @Test
     fun initialState_userProfileIsNull() {
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
+        every { authRepository.observeSignedInUserId() } returns flowOf(null)
 
         val viewModel = createViewModel()
 
@@ -59,7 +59,7 @@ class ProfileViewModelTest {
     @Test
     fun observeCurrentUser_setsUserProfile_whenUidAndDocumentExist() = runTest {
         val user = User("uid-1", "Quân", "quan@test.com", "https://photo.url/q.jpg", SpeakingLevel.A1)
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-1")
+        every { authRepository.observeSignedInUserId() } returns flowOf("uid-1")
         coEvery { userRepository.getUser("uid-1") } returns Result.success(user)
 
         val viewModel = createViewModel()
@@ -73,7 +73,7 @@ class ProfileViewModelTest {
 
     @Test
     fun observeCurrentUser_forceSignOut_whenUidExistsButNoDocument() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-orphan")
+        every { authRepository.observeSignedInUserId() } returns flowOf("uid-orphan")
         coEvery { userRepository.getUser("uid-orphan") } returns Result.success(null)
 
         createViewModel()
@@ -85,7 +85,7 @@ class ProfileViewModelTest {
 
     @Test
     fun observeCurrentUser_forceSignOut_whenFirestoreFails() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-err")
+        every { authRepository.observeSignedInUserId() } returns flowOf("uid-err")
         coEvery { userRepository.getUser("uid-err") } returns
                 Result.failure(RuntimeException("Network error"))
 
@@ -98,7 +98,7 @@ class ProfileViewModelTest {
 
     @Test
     fun observeCurrentUser_setsNull_whenUidIsNull() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
+        every { authRepository.observeSignedInUserId() } returns flowOf(null)
 
         val viewModel = createViewModel()
         advanceUntilIdle()
@@ -109,7 +109,7 @@ class ProfileViewModelTest {
     @Test
     fun observeCurrentUser_updatesProfile_whenUidChanges() = runTest {
         val uidFlow = MutableSharedFlow<String?>(replay = 1)
-        every { authRepository.getSignedInUserId() } returns uidFlow
+        every { authRepository.observeSignedInUserId() } returns uidFlow
 
         val userA = User("uid-a", "User A", "a@test.com", "", SpeakingLevel.A1)
         val userB = User("uid-b", "User B", "b@test.com", "", SpeakingLevel.B2)
@@ -130,7 +130,7 @@ class ProfileViewModelTest {
 
     @Test
     fun signOut_callsAuthRepositorySignOut() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
+        every { authRepository.observeSignedInUserId() } returns flowOf(null)
 
         val viewModel = createViewModel()
         var callbackInvoked = false
@@ -144,7 +144,7 @@ class ProfileViewModelTest {
 
     @Test
     fun signOut_invokesCallback_afterSignOut() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-1")
+        every { authRepository.observeSignedInUserId() } returns flowOf("uid-1")
         coEvery { userRepository.getUser("uid-1") } returns Result.success(
             User("uid-1", "Test", "t@t.com", "")
         )

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AppBottomBar
 import com.project.speakmate.ui.components.AppDestination
+import com.project.speakmate.ui.components.UserProfileLoadError
 import com.project.speakmate.ui.profile.components.ProfileHeader
 import com.project.speakmate.ui.profile.components.ProfileIdentity
 import com.project.speakmate.ui.profile.components.ProfileSkillCard
@@ -41,13 +42,20 @@ fun ProfileScreen(
     onOpenHistory: () -> Unit,
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
-    listState: LazyListState = rememberLazyListState()
+    listState: LazyListState = rememberLazyListState(),
+    onRetryProfile: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
         ProfileHeader(onOpenSettings)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState,
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.isProfileLoadFailed) {
+                item(key = "profile-load-error", contentType = "profile-load-error") {
+                    UserProfileLoadError(onRetryProfile)
+                }
+                return@LazyColumn
+            }
             item(key = "profile-summary", contentType = ProfileUiState::class) {
                 Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     ProfileIdentity(

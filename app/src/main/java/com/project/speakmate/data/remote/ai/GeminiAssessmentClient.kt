@@ -40,27 +40,8 @@ class GeminiAssessmentClient @Inject constructor(
         private const val MAX_ATTEMPTS = 2
         private const val RETRY_DELAY_MILLIS = 1_000L
         private const val MAX_INLINE_REQUEST_BYTES = 20_000_000
-        private const val TOO_MANY_REQUESTS = 429
         private const val SERVER_ERROR_START = 500
         private const val SERVER_ERROR_END = 599
-        private const val API_KEY_HEADER = "x-goog-api-key"
-        private const val JSON_MIME_TYPE = "application/json"
-        private const val WAV_MIME_TYPE = "audio/wav"
-        private const val MODEL = "model"
-        private const val STORE = "store"
-        private const val INPUT = "input"
-        private const val TYPE = "type"
-        private const val TEXT = "text"
-        private const val AUDIO = "audio"
-        private const val MIME_TYPE = "mime_type"
-        private const val DATA = "data"
-        private const val RESPONSE_FORMAT = "response_format"
-        private const val SCHEMA = "schema"
-        private const val STATUS = "status"
-        private const val COMPLETED = "completed"
-        private const val STEPS = "steps"
-        private const val MODEL_OUTPUT = "model_output"
-        private const val CONTENT = "content"
     }
 
     private class HttpFailure(val statusCode: Int) : IOException()
@@ -71,15 +52,15 @@ class GeminiAssessmentClient @Inject constructor(
     suspend fun evaluate(evidence: AssessmentEvidence, wav: ByteArray): SpeakingEvaluation = withContext(Dispatchers.IO) {
         require(apiKey.isNotBlank())
         require(wav.size <= MAX_INLINE_REQUEST_BYTES)
-        val input = JSONArray().put(JSONObject().put(TYPE, TEXT).put(TEXT, AssessmentPrompt.create(evidence)))
-            .put(JSONObject().put(TYPE, AUDIO).put(MIME_TYPE, WAV_MIME_TYPE).put(DATA, Base64.getEncoder().encodeToString(wav)))
-        val format = JSONObject().put(TYPE, TEXT).put(MIME_TYPE, JSON_MIME_TYPE)
-            .put(SCHEMA, SpeakingEvaluationResponse.createSchema(evidence.requiredActions.map { it.requiredActionId }))
-        val body = JSONObject().put(MODEL, MODEL_ID).put(STORE, false).put(INPUT, input).put(RESPONSE_FORMAT, format)
+        val input = JSONArray().put(JSONObject().put(GeminiWireField.TYPE, GeminiWireField.TEXT).put(GeminiWireField.TEXT, AssessmentPrompt.create(evidence)))
+            .put(JSONObject().put(GeminiWireField.TYPE, GeminiWireField.AUDIO).put(GeminiWireField.INTERACTIONS_MIME_TYPE, GeminiWireField.WAV_MIME_TYPE).put(GeminiWireField.DATA, Base64.getEncoder().encodeToString(wav)))
+        val format = JSONObject().put(GeminiWireField.TYPE, GeminiWireField.TEXT).put(GeminiWireField.INTERACTIONS_MIME_TYPE, GeminiWireField.JSON_MIME_TYPE)
+            .put(GeminiWireField.SCHEMA, SpeakingEvaluationResponse.createSchema(evidence.requiredActions.map { it.requiredActionId }))
+        val body = JSONObject().put(GeminiWireField.MODEL, MODEL_ID).put(GeminiWireField.STORE, false).put(GeminiWireField.INPUT, input).put(GeminiWireField.RESPONSE_FORMAT, format)
             .toString().toByteArray(Charsets.UTF_8)
         require(body.size <= MAX_INLINE_REQUEST_BYTES)
-        val request = Request.Builder().url(ENDPOINT).header(API_KEY_HEADER, apiKey)
-            .post(body.toRequestBody(JSON_MIME_TYPE.toMediaType())).build()
+        val request = Request.Builder().url(ENDPOINT).header(GeminiWireField.API_KEY_HEADER, apiKey)
+            .post(body.toRequestBody(GeminiWireField.JSON_MIME_TYPE.toMediaType())).build()
         for (attempt in 0 until MAX_ATTEMPTS) {
             currentCoroutineContext().ensureActive()
             try {
@@ -88,7 +69,7 @@ class GeminiAssessmentClient @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: IOException) {
-                val isTransient = failure !is HttpFailure || failure.statusCode == TOO_MANY_REQUESTS ||
+                val isTransient = failure !is HttpFailure || failure.statusCode == AppConstant.TOO_MANY_REQUESTS ||
                     failure.statusCode in SERVER_ERROR_START..SERVER_ERROR_END
                 if (!isTransient || attempt == MAX_ATTEMPTS - 1) throw failure
                 delay(RETRY_DELAY_MILLIS)
@@ -109,7 +90,7 @@ class GeminiAssessmentClient @Inject constructor(
                 response.use {
                     try {
                         if (!it.isSuccessful) throw HttpFailure(it.code)
-                        val body = it.body ?: throw JSONException(CONTENT)
+                        val body = it.body ?: throw JSONException(GeminiWireField.CONTENT)
                         val text = body.string()
                         if (continuation.isActive) continuation.resume(text)
                     } catch (failure: Exception) {
@@ -122,20 +103,20 @@ class GeminiAssessmentClient @Inject constructor(
 
     private fun readOutput(response: String): String {
         val json = JSONObject(response)
-        if (json.getString(STATUS) != COMPLETED) throw JSONException(STATUS)
-        val steps = json.getJSONArray(STEPS)
+        if (json.getString(GeminiWireField.STATUS) != GeminiWireField.COMPLETED) throw JSONException(GeminiWireField.STATUS)
+        val steps = json.getJSONArray(GeminiWireField.STEPS)
         val text = buildString {
             for (index in 0 until steps.length()) {
                 val step = steps.getJSONObject(index)
-                if (step.getString(TYPE) != MODEL_OUTPUT) continue
-                val content = step.getJSONArray(CONTENT)
+                if (step.getString(GeminiWireField.TYPE) != GeminiWireField.MODEL_OUTPUT) continue
+                val content = step.getJSONArray(GeminiWireField.CONTENT)
                 for (part in 0 until content.length()) {
                     val item = content.getJSONObject(part)
-                    if (item.getString(TYPE) == TEXT) append(item.getString(TEXT))
+                    if (item.getString(GeminiWireField.TYPE) == GeminiWireField.TEXT) append(item.getString(GeminiWireField.TEXT))
                 }
             }
         }
-        if (text.isBlank()) throw JSONException(CONTENT)
+        if (text.isBlank()) throw JSONException(GeminiWireField.CONTENT)
         return text
     }
 }

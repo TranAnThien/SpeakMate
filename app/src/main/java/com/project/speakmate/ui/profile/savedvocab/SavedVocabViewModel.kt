@@ -1,5 +1,6 @@
 package com.project.speakmate.ui.profile.savedvocab
 
+import com.project.speakmate.utils.AppConstant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.data.audio.PronunciationPlayer
@@ -25,7 +26,7 @@ class SavedVocabViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<SavedVocabUiState> = combine(
-        savedVocabularyRepository.getSavedVocabularies(),
+        savedVocabularyRepository.observeSavedVocabularies(),
         _searchQuery,
         _isLoading,
         _error
@@ -49,7 +50,7 @@ class SavedVocabViewModel @Inject constructor(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.WhileSubscribed(AppConstant.STATE_SUBSCRIPTION_TIMEOUT_MILLIS),
         initialValue = SavedVocabUiState()
     )
 

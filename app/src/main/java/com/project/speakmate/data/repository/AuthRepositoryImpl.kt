@@ -33,7 +33,9 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getSignedInUserId(): Flow<String?> {
-        return authDataSource.getSignedInUserId()
+    override fun observeSignedInUserId(): Flow<String?> {
+        return authDataSource.observeSignedInUserId()
     }
+
+    override fun requireCurrentUserId(): String = authDataSource.requireCurrentUserId()
 }

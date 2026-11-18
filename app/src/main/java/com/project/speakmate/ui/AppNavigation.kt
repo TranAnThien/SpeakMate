@@ -36,6 +36,7 @@ import com.project.speakmate.ui.history.SessionDetailScreen
 import com.project.speakmate.ui.history.SessionDetailViewModel
 import com.project.speakmate.ui.home.HomeScreen
 import com.project.speakmate.ui.home.HomeViewModel
+import com.project.speakmate.ui.home.state.HomePresentation
 import com.project.speakmate.ui.practice.PracticeViewModel
 import com.project.speakmate.ui.practice.ScenarioCatalogScreen
 import com.project.speakmate.ui.practice.ScenarioPreparationScreen
@@ -69,6 +70,7 @@ fun AppNavigation(
 ) {
     val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
     val userProfile by profileViewModel.userProfile.collectAsStateWithLifecycle()
+    val isProfileLoadFailed by profileViewModel.isProfileLoadFailed.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         authViewModel.signInSuccess.collect {
@@ -152,13 +154,15 @@ fun AppNavigation(
             }
 
             HomeScreen(
-                state = homeUiState,
+                state = if (isProfileLoadFailed) {
+                    homeUiState.copy(presentation = HomePresentation.PROFILE_LOAD_ERROR)
+                } else homeUiState,
                 onStartAssessment = { navController.navigate(PlacementDestination.GRAPH) { launchSingleTop = true } },
                 onContinuePath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onStartReassessment = {},
                 onReviewPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onSelectScenario = { navController.navigate("practice") { launchSingleTop = true } },
-                onRetry = homeViewModel::retry,
+                onRetry = if (isProfileLoadFailed) profileViewModel::retryProfile else homeViewModel::retry,
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
@@ -426,7 +430,7 @@ fun AppNavigation(
         }
 
         composable("profile") {
-            val profileUiState = remember(userProfile) {
+            val profileUiState = remember(userProfile, isProfileLoadFailed) {
                 val user = userProfile
                 val skillsList = if (user?.latestAssessmentCriteria != null) {
                     val criteria = user.latestAssessmentCriteria
@@ -445,7 +449,8 @@ fun AppNavigation(
                     avatarUrl = user?.photoUrl,
                     levelLabel = user?.level?.name ?: "CHƯA ĐÁNH GIÁ",
                     assessmentDescription = if (user?.level == SpeakingLevel.NOT_ASSESSED) "Bạn chưa thực hiện bài đánh giá trình độ." else "Trình độ nói hiện tại của bạn.",
-                    skills = skillsList
+                    skills = skillsList,
+                    isProfileLoadFailed = isProfileLoadFailed
                 )
             }
 
@@ -453,6 +458,7 @@ fun AppNavigation(
                 state = profileUiState,
                 onOpenSettings = { navController.navigate("settings") },
                 onOpenVocabulary = { navController.navigate("saved_vocab") { launchSingleTop = true } },
+                onRetryProfile = profileViewModel::retryProfile,
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },

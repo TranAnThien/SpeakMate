@@ -1,5 +1,6 @@
 package com.project.speakmate.data.repository
 
+import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
@@ -49,7 +50,7 @@ class SavedVocabularyRepositoryImplFakeTest {
         every { auth.currentUser } returns user
         every { user.uid } returns "uid123"
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, auth)
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth))
         val result = repo.saveVocabulary(makeItem(word = "   ", mean = "meaning"))
 
         assertTrue(result.isFailure)
@@ -64,7 +65,7 @@ class SavedVocabularyRepositoryImplFakeTest {
         every { auth.currentUser } returns user
         every { user.uid } returns "uid123"
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, auth)
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth))
         val result = repo.saveVocabulary(makeItem(word = "run", mean = "   "))
 
         assertTrue(result.isFailure)
@@ -76,7 +77,7 @@ class SavedVocabularyRepositoryImplFakeTest {
         val firestore = mockk<FirebaseFirestore>()
         every { auth.currentUser } returns null
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, auth)
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth))
         val result = repo.saveVocabulary(makeItem("hello", "xin chào"))
 
         assertTrue(result.isFailure)
@@ -91,7 +92,7 @@ class SavedVocabularyRepositoryImplFakeTest {
         val firestore = mockk<FirebaseFirestore>()
         every { auth.currentUser } returns null
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, auth)
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth))
         val result = repo.removeVocabulary("hello", "noun")
 
         assertTrue(result.isFailure)
@@ -148,7 +149,7 @@ class SavedVocabularyRepositoryImplFakeTest {
         assertTrue(result.isSuccess)
 
         val remaining = mutableListOf<VocabularyItem>()
-        fakeRepo.getSavedVocabularies().collect { remaining.addAll(it) }
+        fakeRepo.observeSavedVocabularies().collect { remaining.addAll(it) }
         assertTrue(remaining.none { it.word == "run" && it.partOfSpeech == "verb" })
         assertTrue(remaining.any { it.word == "run" && it.partOfSpeech == "noun" })
     }
@@ -160,7 +161,7 @@ private class FakeSavedVocabularyRepository : com.project.speakmate.domain.repos
 
     private val list = mutableListOf<VocabularyItem>()
 
-    override fun getSavedVocabularies(): kotlinx.coroutines.flow.Flow<List<VocabularyItem>> =
+    override fun observeSavedVocabularies(): kotlinx.coroutines.flow.Flow<List<VocabularyItem>> =
         kotlinx.coroutines.flow.flowOf(list.toList())
 
     override suspend fun saveVocabulary(item: VocabularyItem): Result<VocabularySaveResult> {

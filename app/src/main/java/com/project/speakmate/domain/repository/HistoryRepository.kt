@@ -5,6 +5,6 @@ import kotlinx.coroutines.flow.Flow
 
 interface HistoryRepository {
     suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit>
-    fun getPracticeHistoryList(): Flow<List<PracticeAttempt>>
+    fun observePracticeHistory(): Flow<List<PracticeAttempt>>
     suspend fun getSessionDetail(attemptId: String): Result<PracticeAttempt>
 }

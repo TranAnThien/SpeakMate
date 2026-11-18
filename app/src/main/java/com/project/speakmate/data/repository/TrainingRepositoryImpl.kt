@@ -1,13 +1,23 @@
 package com.project.speakmate.data.repository
 
+import com.project.speakmate.data.remote.firebase.required
+import com.project.speakmate.data.remote.firebase.requiredActions
+import com.project.speakmate.data.remote.firebase.requiredExampleList
+import com.project.speakmate.data.remote.firebase.requiredLevel
+import com.project.speakmate.data.remote.firebase.requiredMap
+import com.project.speakmate.data.remote.firebase.requiredReferenceIds
+import com.project.speakmate.data.remote.firebase.requiredString
+import com.project.speakmate.data.remote.firebase.requiredStringList
+import com.project.speakmate.data.remote.firebase.stringOrId
+import com.project.speakmate.data.remote.firebase.toExample
+import com.project.speakmate.data.remote.firebase.FirestoreCollection
+import com.project.speakmate.data.remote.firebase.FirestoreField
 import com.project.speakmate.utils.extension.suspendRunCatching
 
-import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.domain.model.GrammarPoint
 import com.project.speakmate.domain.model.GoalAssessment
 import com.project.speakmate.domain.model.LearningExample
-import com.project.speakmate.domain.model.RequiredAction
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SentencePattern
 import com.project.speakmate.domain.model.SpeakingLevel
@@ -17,6 +27,7 @@ import com.project.speakmate.domain.model.TrainingUnit
 import com.project.speakmate.domain.model.UnitPreparation
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.repository.TrainingRepository
+import com.project.speakmate.domain.repository.ScenarioRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.async
@@ -26,22 +37,22 @@ import kotlinx.coroutines.tasks.await
 
 @Singleton
 class TrainingRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val scenarioRepository: ScenarioRepository
 ) : TrainingRepository {
-    private val paths get() = firestore.collection("training_paths")
-    private val goals get() = firestore.collection("training_goals")
-    private val units get() = firestore.collection("training_units")
-    private val assessments get() = firestore.collection("goal_assessments")
-    private val scenarios get() = firestore.collection("scenarios")
+    private val paths get() = firestore.collection(FirestoreCollection.TRAINING_PATHS)
+    private val goals get() = firestore.collection(FirestoreCollection.TRAINING_GOALS)
+    private val units get() = firestore.collection(FirestoreCollection.TRAINING_UNITS)
+    private val assessments get() = firestore.collection(FirestoreCollection.GOAL_ASSESSMENTS)
 
     override suspend fun getTrainingPath(level: SpeakingLevel): Result<TrainingPath> = suspendRunCatching {
         require(level != SpeakingLevel.NOT_ASSESSED) { "A training path requires an assessed level." }
         val document = paths.document(level.name).get().await().required("Training path ${level.name}")
-        val goalIds = document.requiredStringList("goals")
+        val goalIds = document.requiredStringList(FirestoreField.GOALS)
         TrainingPath(
-            pathId = document.stringOrId("pathId"),
-            targetLevel = document.requiredLevel("targetLevel"),
-            title = document.requiredString("title"),
+            pathId = document.stringOrId(FirestoreField.PATH_ID),
+            targetLevel = document.requiredLevel(FirestoreField.TARGET_LEVEL),
+            title = document.requiredString(FirestoreField.TITLE),
             goals = coroutineScope { goalIds.map { id -> async { loadGoal(id) } }.awaitAll() }
         )
     }
@@ -51,30 +62,20 @@ class TrainingRepositoryImpl @Inject constructor(
     override suspend fun getTrainingUnit(unitId: String): Result<TrainingUnit> = suspendRunCatching { loadUnit(unitId) }
 
     override suspend fun getScenario(scenarioId: String): Result<Scenario> = suspendRunCatching {
-        val document = scenarios.document(scenarioId).get().await().required("Scenario $scenarioId")
-        Scenario(
-            scenarioId = document.stringOrId("scenarioId"),
-            name = document.requiredString("name"),
-            description = document.requiredString("description"),
-            promptTemplate = document.requiredString("promptTemplate")
-        )
+        checkNotNull(scenarioRepository.getScenario(scenarioId)) { "Scenario '$scenarioId' is missing or invalid." }
     }
 
-    override suspend fun getScenarioImageUrl(scenarioId: String): Result<String> = suspendRunCatching {
-        scenarios.document(scenarioId).get().await()
-            .required("Scenario $scenarioId")
-            .getString("imageUrl")
-            .orEmpty()
-    }
+    override suspend fun getScenarioImageUrl(scenarioId: String): Result<String> =
+        suspendRunCatching { scenarioRepository.getScenarioImageUrl(scenarioId) }
 
     private suspend fun loadGoal(goalId: String): TrainingGoal {
         val document = goals.document(goalId).get().await().required("Training goal $goalId")
-        val unitIds = document.requiredStringList("units")
+        val unitIds = document.requiredStringList(FirestoreField.UNITS)
         return TrainingGoal(
-            goalId = document.stringOrId("goalId"),
-            title = document.requiredString("title"),
-            canDoDescription = document.requiredString("canDoDescription"),
-            goalAssessment = loadAssessment(document.requiredString("goalAssessment")),
+            goalId = document.stringOrId(FirestoreField.GOAL_ID),
+            title = document.requiredString(FirestoreField.TITLE),
+            canDoDescription = document.requiredString(FirestoreField.CAN_DO_DESCRIPTION),
+            goalAssessment = loadAssessment(document.requiredString(FirestoreField.GOAL_ASSESSMENT)),
             units = coroutineScope { unitIds.map { id -> async { loadUnit(id) } }.awaitAll() }
         )
     }
@@ -82,18 +83,18 @@ class TrainingRepositoryImpl @Inject constructor(
     private suspend fun loadAssessment(assessmentId: String): GoalAssessment {
         val document = assessments.document(assessmentId).get().await().required("Goal assessment $assessmentId")
         return GoalAssessment(
-            scenarioId = document.requiredString("scenarioId"),
-            title = document.requiredString("title"),
+            scenarioId = document.requiredString(FirestoreField.SCENARIO_ID),
+            title = document.requiredString(FirestoreField.TITLE),
             requiredActions = document.requiredActions()
         )
     }
 
     private suspend fun loadUnit(unitId: String): TrainingUnit {
         val document = units.document(unitId).get().await().required("Training unit $unitId")
-        val preparation = document.requiredMap("preparation")
-        val vocabularyIds = preparation.requiredReferenceIds("vocabulary")
-        val grammarIds = preparation.requiredReferenceIds("grammarPoints")
-        val patternIds = preparation.requiredReferenceIds("sentencePatterns")
+        val preparation = document.requiredMap(FirestoreField.PREPARATION)
+        val vocabularyIds = preparation.requiredReferenceIds(FirestoreField.VOCABULARY)
+        val grammarIds = preparation.requiredReferenceIds(FirestoreField.GRAMMAR_POINTS)
+        val patternIds = preparation.requiredReferenceIds(FirestoreField.SENTENCE_PATTERNS)
         val loadedPreparation = coroutineScope {
             val vocabulary = async { vocabularyIds.map { id -> loadVocabulary(id) } }
             val grammar = async { grammarIds.map { id -> loadGrammar(id) } }
@@ -101,96 +102,44 @@ class TrainingRepositoryImpl @Inject constructor(
             UnitPreparation(vocabulary.await(), grammar.await(), patterns.await())
         }
         return TrainingUnit(
-            unitId = document.stringOrId("unitId"),
-            scenarioId = document.requiredString("scenarioId"),
-            title = document.requiredString("title"),
-            communicativeFocus = document.requiredString("communicativeFocus"),
+            unitId = document.stringOrId(FirestoreField.UNIT_ID),
+            scenarioId = document.requiredString(FirestoreField.SCENARIO_ID),
+            title = document.requiredString(FirestoreField.TITLE),
+            communicativeFocus = document.requiredString(FirestoreField.COMMUNICATIVE_FOCUS),
             preparation = loadedPreparation,
             requiredActions = document.requiredActions()
         )
     }
 
     private suspend fun loadVocabulary(id: String): VocabularyItem {
-        val document = firestore.collection("vocabularies").document(id).get().await().required("Vocabulary $id")
+        val document = firestore.collection(FirestoreCollection.VOCABULARIES).document(id).get().await().required("Vocabulary $id")
         return VocabularyItem(
-            word = document.requiredString("word"),
-            mean = document.requiredString("mean"),
-            phonetic = document.requiredString("phonetic"),
-            partOfSpeech = document.requiredString("partOfSpeech"),
-            example = document.requiredMap("example").toExample("Vocabulary $id example")
+            word = document.requiredString(FirestoreField.WORD),
+            mean = document.requiredString(FirestoreField.MEAN),
+            phonetic = document.requiredString(FirestoreField.PHONETIC),
+            partOfSpeech = document.requiredString(FirestoreField.PART_OF_SPEECH),
+            example = document.requiredMap(FirestoreField.EXAMPLE).toExample("Vocabulary $id example")
         )
     }
 
     private suspend fun loadGrammar(id: String): GrammarPoint {
-        val document = firestore.collection("grammar_points").document(id).get().await().required("Grammar point $id")
+        val document = firestore.collection(FirestoreCollection.GRAMMAR_POINTS).document(id).get().await().required("Grammar point $id")
         return GrammarPoint(
-            title = document.requiredString("title"),
-            structure = document.requiredString("structure"),
-            explanation = document.requiredString("explanation"),
-            usage = document.requiredString("usage"),
-            examples = document.requiredExampleList("examples", "Grammar point $id")
+            title = document.requiredString(FirestoreField.TITLE),
+            structure = document.requiredString(FirestoreField.STRUCTURE),
+            explanation = document.requiredString(FirestoreField.EXPLANATION),
+            usage = document.requiredString(FirestoreField.USAGE),
+            examples = document.requiredExampleList(FirestoreField.EXAMPLES, "Grammar point $id")
         )
     }
 
     private suspend fun loadPattern(id: String): SentencePattern {
-        val document = firestore.collection("sentence_patterns").document(id).get().await().required("Sentence pattern $id")
+        val document = firestore.collection(FirestoreCollection.SENTENCE_PATTERNS).document(id).get().await().required("Sentence pattern $id")
         return SentencePattern(
-            pattern = document.requiredString("pattern"),
-            mean = document.requiredString("mean"),
-            usage = document.requiredString("usage"),
-            examples = document.requiredExampleList("examples", "Sentence pattern $id")
+            pattern = document.requiredString(FirestoreField.PATTERN),
+            mean = document.requiredString(FirestoreField.MEAN),
+            usage = document.requiredString(FirestoreField.USAGE),
+            examples = document.requiredExampleList(FirestoreField.EXAMPLES, "Sentence pattern $id")
         )
     }
 }
-
-private fun DocumentSnapshot.required(label: String): DocumentSnapshot =
-    takeIf { exists() } ?: error("$label is missing from Firestore.")
-
-private fun DocumentSnapshot.stringOrId(field: String): String = getString(field)?.takeIf(String::isNotBlank) ?: id
-
-private fun DocumentSnapshot.requiredString(field: String): String =
-    getString(field)?.takeIf(String::isNotBlank) ?: error("Document '$id' is missing '$field'.")
-
-private fun DocumentSnapshot.requiredLevel(field: String): SpeakingLevel =
-    runCatching { SpeakingLevel.valueOf(requiredString(field)) }.getOrElse {
-        error("Document '$id' has an invalid '$field'.")
-    }
-
-private fun DocumentSnapshot.requiredStringList(field: String): List<String> =
-    (get(field) as? List<*>)?.mapIndexed { index, value ->
-        value as? String ?: error("Document '$id' has an invalid '$field[$index]'.")
-    }?.takeIf(List<String>::isNotEmpty) ?: error("Document '$id' is missing '$field'.")
-
-private fun DocumentSnapshot.requiredMap(field: String): Map<*, *> =
-    get(field) as? Map<*, *> ?: error("Document '$id' is missing '$field'.")
-
-private fun DocumentSnapshot.requiredActions(): List<RequiredAction> =
-    (get("requiredActions") as? List<*>)?.mapIndexed { index, value ->
-        (value as? Map<*, *>)?.toRequiredAction("Document '$id' requiredActions[$index]")
-            ?: error("Document '$id' has an invalid requiredActions[$index].")
-    } ?: error("Document '$id' is missing 'requiredActions'.")
-
-private fun Map<*, *>.requiredReferenceIds(field: String): List<String> =
-    (this[field] as? List<*>)?.mapIndexed { index, value ->
-        val reference = value as? Map<*, *> ?: error("Preparation has an invalid '$field[$index]'.")
-        reference["id"] as? String ?: error("Preparation '$field[$index]' is missing its id.")
-    } ?: error("Preparation is missing '$field'.")
-
-private fun DocumentSnapshot.requiredExampleList(field: String, label: String): List<LearningExample> =
-    (get(field) as? List<*>)?.mapIndexed { index, value ->
-        (value as? Map<*, *>)?.toExample("$label $field[$index]")
-            ?: error("$label has an invalid '$field[$index]'.")
-    } ?: error("$label is missing '$field'.")
-
-private fun Map<*, *>.toExample(label: String): LearningExample = LearningExample(
-    sentence = requiredText("sentence", label),
-    translate = requiredText("translate", label)
-)
-
-private fun Map<*, *>.toRequiredAction(label: String): RequiredAction = RequiredAction(
-    requiredActionId = requiredText("requiredActionId", label),
-    description = requiredText("description", label)
-)
-
-private fun Map<*, *>.requiredText(field: String, label: String): String =
-    this[field] as? String ?: error("$label is missing '$field'.")

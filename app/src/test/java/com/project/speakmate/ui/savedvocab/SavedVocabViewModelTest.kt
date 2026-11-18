@@ -46,7 +46,7 @@ class SavedVocabViewModelTest {
     @Before
     fun setUp() {
         repository = mockk(relaxed = true)
-        io.mockk.every { repository.getSavedVocabularies() } returns fakeVocabFlow
+        io.mockk.every { repository.observeSavedVocabularies() } returns fakeVocabFlow
         pronunciationPlayer = mockk(relaxed = true)
         viewModel = SavedVocabViewModel(repository, pronunciationPlayer)
     }

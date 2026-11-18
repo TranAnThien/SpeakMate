@@ -52,10 +52,10 @@ class ScenarioPreparationViewModel @Inject constructor(
                     practiceId = practiceId,
                     scenarioId = scenario.scenarioId,
                     title = scenario.name,
-                    imageUrl = metadata.getValue("imageUrl"),
-                    context = metadata.getValue("uiContext"),
-                    aiRole = metadata.getValue("aiRole"),
-                    preCallHint = metadata.getValue("preCallHint"),
+                    imageUrl = metadata.imageUrl,
+                    context = metadata.uiContext,
+                    aiRole = metadata.aiRole,
+                    preCallHint = metadata.preCallHint,
                     scenario = scenario,
                     isInitializing = false
                 )

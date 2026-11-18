@@ -1,8 +1,10 @@
 package com.project.speakmate.data.repository
 
+import com.project.speakmate.data.remote.firebase.FirestoreCollection
+import com.project.speakmate.data.remote.firebase.FirestoreField
 import kotlinx.coroutines.CancellationException
 
-import com.google.firebase.auth.FirebaseAuth
+import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.VocabularyItem
@@ -16,18 +18,19 @@ import javax.inject.Inject
 
 class SavedVocabularyRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val authDataSource: FirebaseAuthDataSource
 ) : SavedVocabularyRepository {
 
-    override fun getSavedVocabularies(): Flow<List<VocabularyItem>> = callbackFlow {
-        val uid = auth.currentUser?.uid
-        if (uid == null) {
+    override fun observeSavedVocabularies(): Flow<List<VocabularyItem>> = callbackFlow {
+        val uid = try {
+            authDataSource.requireCurrentUserId()
+        } catch (_: IllegalStateException) {
             trySend(emptyList())
             close()
             return@callbackFlow
         }
 
-        val userRef = firestore.collection("users").document(uid)
+        val userRef = firestore.collection(FirestoreCollection.USERS).document(uid)
 
         val listener = userRef.addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null || !snapshot.exists()) {
@@ -35,7 +38,7 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
                 return@addSnapshotListener
             }
 
-            val dataList = snapshot.get("savedVocabularies") as? List<*> ?: emptyList<Any>()
+            val dataList = snapshot.get(FirestoreField.SAVED_VOCABULARIES) as? List<*> ?: emptyList<Any>()
             val vocabList = dataList.mapNotNull {
                 (it as? Map<*, *>)?.let(::mapToVocabularyItem)
             }
@@ -46,8 +49,11 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun saveVocabulary(item: VocabularyItem): Result<VocabularySaveResult> {
-        val uid = auth.currentUser?.uid
-            ?: return Result.failure(Exception("User not logged in"))
+        val uid = try {
+            authDataSource.requireCurrentUserId()
+        } catch (failure: IllegalStateException) {
+            return Result.failure(failure)
+        }
 
         val normalizedWord = item.word.trim().lowercase()
         val normalizedMean = item.mean.trim()
@@ -68,13 +74,13 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
             }
         )
 
-        val userRef = firestore.collection("users").document(uid)
+        val userRef = firestore.collection(FirestoreCollection.USERS).document(uid)
 
         return try {
             val saveResult = firestore.runTransaction { transaction ->
                 val snapshot = transaction.get(userRef)
                 val currentDataList =
-                    snapshot.get("savedVocabularies") as? List<*> ?: emptyList<Any>()
+                    snapshot.get(FirestoreField.SAVED_VOCABULARIES) as? List<*> ?: emptyList<Any>()
                 val currentList = currentDataList.mapNotNull {
                     (it as? Map<*, *>)?.let(::mapToVocabularyItem)
                 }.toMutableList()
@@ -100,7 +106,7 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
                     }
                 }
 
-                transaction.update(userRef, "savedVocabularies", currentList)
+                transaction.update(userRef, FirestoreField.SAVED_VOCABULARIES, currentList)
                 finalResult
             }.await()
 
@@ -116,16 +122,19 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
         word: String,
         partOfSpeech: String
     ): Result<Unit> {
-        val uid = auth.currentUser?.uid
-            ?: return Result.failure(Exception("User not logged in"))
+        val uid = try {
+            authDataSource.requireCurrentUserId()
+        } catch (failure: IllegalStateException) {
+            return Result.failure(failure)
+        }
 
-        val userRef = firestore.collection("users").document(uid)
+        val userRef = firestore.collection(FirestoreCollection.USERS).document(uid)
 
         return try {
             firestore.runTransaction { transaction ->
                 val snapshot = transaction.get(userRef)
                 val currentDataList =
-                    snapshot.get("savedVocabularies") as? List<*> ?: emptyList<Any>()
+                    snapshot.get(FirestoreField.SAVED_VOCABULARIES) as? List<*> ?: emptyList<Any>()
                 val currentList = currentDataList.mapNotNull {
                     (it as? Map<*, *>)?.let(::mapToVocabularyItem)
                 }.toMutableList()
@@ -135,7 +144,7 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
                 }
 
                 if (removed) {
-                    transaction.update(userRef, "savedVocabularies", currentList)
+                    transaction.update(userRef, FirestoreField.SAVED_VOCABULARIES, currentList)
                 }
             }.await()
 
@@ -148,20 +157,20 @@ class SavedVocabularyRepositoryImpl @Inject constructor(
     }
 
     private fun mapToVocabularyItem(map: Map<*, *>): VocabularyItem? {
-        val word = map["word"] as? String ?: return null
-        val mean = map["mean"] as? String ?: return null
+        val word = map[FirestoreField.WORD] as? String ?: return null
+        val mean = map[FirestoreField.MEAN] as? String ?: return null
 
-        val exampleMap = map["example"] as? Map<*, *>
+        val exampleMap = map[FirestoreField.EXAMPLE] as? Map<*, *>
         val example = LearningExample(
-            sentence = exampleMap?.get("sentence") as? String ?: "",
-            translate = exampleMap?.get("translate") as? String ?: ""
+            sentence = exampleMap?.get(FirestoreField.SENTENCE) as? String ?: "",
+            translate = exampleMap?.get(FirestoreField.TRANSLATE) as? String ?: ""
         )
 
         return VocabularyItem(
             word = word,
             mean = mean,
-            phonetic = map["phonetic"] as? String ?: "",
-            partOfSpeech = map["partOfSpeech"] as? String ?: "",
+            phonetic = map[FirestoreField.PHONETIC] as? String ?: "",
+            partOfSpeech = map[FirestoreField.PART_OF_SPEECH] as? String ?: "",
             example = example
         )
     }

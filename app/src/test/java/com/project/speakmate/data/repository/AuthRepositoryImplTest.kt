@@ -66,18 +66,18 @@ class AuthRepositoryImplTest {
 
     @Test
     fun getSignedInUserId_emitsUid() = runTest {
-        every { authDataSource.getSignedInUserId() } returns flowOf("uid-123")
+        every { authDataSource.observeSignedInUserId() } returns flowOf("uid-123")
 
-        val uid = repository.getSignedInUserId().first()
+        val uid = repository.observeSignedInUserId().first()
 
         assertEquals("uid-123", uid)
     }
 
     @Test
     fun getSignedInUserId_emitsNull_whenNotSignedIn() = runTest {
-        every { authDataSource.getSignedInUserId() } returns flowOf(null)
+        every { authDataSource.observeSignedInUserId() } returns flowOf(null)
 
-        val uid = repository.getSignedInUserId().first()
+        val uid = repository.observeSignedInUserId().first()
 
         assertNull(uid)
     }

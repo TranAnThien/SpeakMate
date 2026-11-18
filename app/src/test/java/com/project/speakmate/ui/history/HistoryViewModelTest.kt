@@ -57,7 +57,7 @@ class HistoryViewModelTest {
     fun setUp() {
         historyRepository = mockk(relaxed = true)
         practiceRepository = mockk(relaxed = true)
-        every { historyRepository.getPracticeHistoryList() } returns historyListFlow
+        every { historyRepository.observePracticeHistory() } returns historyListFlow
         coEvery { practiceRepository.getScenario(any()) } returns Result.failure(RuntimeException("Not found"))
         viewModel = HistoryViewModel(historyRepository, practiceRepository)
     }

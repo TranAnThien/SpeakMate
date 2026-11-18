@@ -36,7 +36,7 @@ class AuthViewModelTest {
         Dispatchers.setMain(testDispatcher)
         authRepository = mockk(relaxed = true)
         userRepository = mockk(relaxed = true)
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
+        every { authRepository.observeSignedInUserId() } returns flowOf(null)
         viewModel = AuthViewModel(authRepository, userRepository)
     }
 

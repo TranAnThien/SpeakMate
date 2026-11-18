@@ -77,7 +77,7 @@ class PlacementViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            authRepository.getSignedInUserId().distinctUntilChanged().catch { failure ->
+            authRepository.observeSignedInUserId().distinctUntilChanged().catch { failure ->
                 if (failure is CancellationException) throw failure
                 showUndetermined()
             }.collectLatest { uid ->

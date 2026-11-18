@@ -1,5 +1,6 @@
 package com.project.speakmate.ui.history
 
+import com.project.speakmate.utils.AppConstant
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -57,7 +58,7 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     private fun toDetailUiState(attempt: PracticeAttempt, scenarioTitle: String): SessionDetailUiState {
-        val durationFormatted = String.format(Locale.ROOT, "%02d:%02d", attempt.durationInSeconds / 60, attempt.durationInSeconds % 60)
+        val durationFormatted = String.format(Locale.ROOT, "%02d:%02d", attempt.durationInSeconds / AppConstant.SECONDS_PER_MINUTE, attempt.durationInSeconds % AppConstant.SECONDS_PER_MINUTE)
         val dateFormatted = dateFormatter.format(attempt.endedAt)
 
         val criteriaList = attempt.criteriaResult?.let { criteria ->

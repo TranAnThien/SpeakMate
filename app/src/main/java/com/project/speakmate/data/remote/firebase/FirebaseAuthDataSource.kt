@@ -21,7 +21,9 @@ class FirebaseAuthDataSource @Inject constructor(
         auth.signOut()
     }
 
-    fun getSignedInUserId(): Flow<String?> = callbackFlow {
+    fun requireCurrentUserId(): String = checkNotNull(auth.currentUser?.uid) { "User not logged in" }
+
+    fun observeSignedInUserId(): Flow<String?> = callbackFlow {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             trySend(firebaseAuth.currentUser?.uid)
         }

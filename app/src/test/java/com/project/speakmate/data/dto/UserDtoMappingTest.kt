@@ -1,5 +1,8 @@
 package com.project.speakmate.data.dto
 
+import com.project.speakmate.domain.model.InvalidUserProfileException
+import org.junit.Assert.assertThrows
+
 import com.project.speakmate.domain.model.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -128,7 +131,7 @@ class UserDtoMappingTest {
     }
 
     @Test
-    fun toDomain_fallsBackToDefaults_whenLevelIsInvalid() {
+    fun rejectsAnInvalidProfileLevel() {
         val dto = UserDto(
             userId = "uid-invalid",
             displayName = "Test",
@@ -136,13 +139,11 @@ class UserDtoMappingTest {
             level = "C1_INVALID"
         )
 
-        val user = dto.toDomain()
-
-        assertEquals(SpeakingLevel.NOT_ASSESSED, user.level)
+        assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
     }
 
     @Test
-    fun toDomain_fallsBackToDefaults_whenTrainingStageIsInvalid() {
+    fun rejectsAnInvalidTrainingStage() {
         val dto = UserDto(
             userId = "uid-invalid",
             displayName = "Test",
@@ -150,10 +151,7 @@ class UserDtoMappingTest {
             trainingProgress = TrainingProgressDto(1, 1, "INVALID_STAGE")
         )
 
-        val user = dto.toDomain()
-
-        assertNotNull(user.trainingProgress)
-        assertEquals(TrainingStage.UNIT, user.trainingProgress!!.stage)
+        assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
     }
 
     @Test

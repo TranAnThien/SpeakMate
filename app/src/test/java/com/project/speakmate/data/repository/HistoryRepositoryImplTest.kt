@@ -1,6 +1,7 @@
 package com.project.speakmate.data.repository
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.util.CustomClassMapper
 import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.domain.model.AssessmentResult
@@ -51,7 +52,7 @@ class HistoryRepositoryImplTest {
         assertEquals(Timestamp(sampleAttempt.endedAt), dto.endedAt)
         assertEquals(AssessmentResult.PASS.name, dto.result)
         assertNotNull(dto.criteriaResult)
-        assertTrue(dto.criteriaResult!!["rangeMet"] == true)
+        assertEquals(true, dto.criteriaResult?.rangeMet)
         assertEquals(mapOf("order_coffee" to true), dto.requiredActionResults)
         assertEquals("Great pronunciation!", dto.feedbackSummary)
     }
@@ -99,8 +100,8 @@ class HistoryRepositoryImplTest {
         assertEquals(SenderType.AI.name, dto.senderType)
         assertEquals("Welcome!", dto.content)
         assertEquals(0, dto.orderIndex)
-        assertTrue(dto.isFinal)
-        assertTrue(dto.isInterrupted)
+        assertEquals(true, dto.isFinal)
+        assertEquals(true, dto.isInterrupted)
 
         val backToDomain = dto.toDomain()
         assertEquals(msg, backToDomain)
@@ -120,5 +121,47 @@ class HistoryRepositoryImplTest {
     fun transcriptMappingRejectsUnknownSenderType() {
         val dto = sampleAttempt.transcripts.first().toDto().copy(senderType = "UNKNOWN_SENDER")
         assertNull(dto.toDomain())
+    }
+
+    @Test
+    fun transcriptMappingUsesBothLegacyFlagsWhenCanonicalFlagsAreMissing() {
+        val dto = sampleAttempt.transcripts.first().toDto().copy(isFinal = null, isInterrupted = null)
+
+        val message = requireNotNull(dto.toDomain(legacyFinal = false, legacyInterrupted = true))
+
+        assertEquals(false, message.isFinal)
+        assertEquals(true, message.isInterrupted)
+    }
+
+    @Test
+    fun transcriptMappingKeepsCanonicalFalseFlagsWhenLegacyFlagsAreTrue() {
+        val dto = sampleAttempt.transcripts.first().toDto().copy(isFinal = false, isInterrupted = false)
+
+        val message = requireNotNull(dto.toDomain(legacyFinal = true, legacyInterrupted = true))
+
+        assertEquals(false, message.isFinal)
+        assertEquals(false, message.isInterrupted)
+    }
+
+    @Test
+    fun firestoreMapperWritesAndReadsCanonicalTranscriptFlagsOnly() {
+        val message = sampleAttempt.transcripts.first().copy(isFinal = false, isInterrupted = true)
+        val persisted = CustomClassMapper.convertToPlainJavaTypes(message.toDto()) as Map<*, *>
+
+        assertEquals(false, persisted["isFinal"])
+        assertEquals(true, persisted["isInterrupted"])
+        assertTrue("final" !in persisted)
+        assertTrue("interrupted" !in persisted)
+
+        val dto = CustomClassMapper.convertToCustomClass(persisted, message.toDto()::class.java, null)
+        assertEquals(message, dto.toDomain())
+    }
+
+    @Test
+    fun firestoreMapperPreservesTheNestedCriteriaFieldNames() {
+        val persisted = CustomClassMapper.convertToPlainJavaTypes(sampleAttempt.toDto()) as Map<*, *>
+        val criteria = persisted["criteriaResult"] as Map<*, *>
+
+        assertEquals(setOf("rangeMet", "accuracyMet", "fluencyMet", "interactionMet", "coherenceMet"), criteria.keys)
     }
 }

@@ -12,5 +12,6 @@ data class ProfileUiState(
     val avatarUrl: String? = null,
     val levelLabel: String = "",
     val assessmentDescription: String = "",
-    val skills: List<ProfileSkillUiState> = emptyList()
+    val skills: List<ProfileSkillUiState> = emptyList(),
+    val isProfileLoadFailed: Boolean = false
 )

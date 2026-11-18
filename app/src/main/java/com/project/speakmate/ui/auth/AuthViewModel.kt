@@ -3,6 +3,7 @@ package com.project.speakmate.ui.auth
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.speakmate.domain.model.InvalidUserProfileException
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
@@ -27,7 +28,7 @@ class AuthViewModel @Inject constructor(
     private val userRepository: UserRepository
 ) : ViewModel() {
 
-    val signedInUserId: Flow<String?> = authRepository.getSignedInUserId()
+    val signedInUserId: Flow<String?> = authRepository.observeSignedInUserId()
 
     private val _uiState = MutableStateFlow(GoogleSignInUiState())
     val uiState: StateFlow<GoogleSignInUiState> = _uiState.asStateFlow()
@@ -68,11 +69,11 @@ class AuthViewModel @Inject constructor(
             savedVocabularies = emptyList()
         )
 
-        val result = userRepository.getOrCreateUser(defaultUser)
-        result.onSuccess {
+        val error = userRepository.getOrCreateUser(defaultUser).exceptionOrNull()
+        if (error == null || error is InvalidUserProfileException) {
             _uiState.update { it.copy(status = GoogleSignInStatus.NORMAL) }
             _signInSuccess.emit(Unit)
-        }.onFailure { error ->
+        } else {
             Log.e("AuthViewModel", "Firestore getOrCreateUser failed", error)
             authRepository.signOut()
             _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }

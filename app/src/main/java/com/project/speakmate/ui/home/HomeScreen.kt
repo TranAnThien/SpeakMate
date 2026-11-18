@@ -37,6 +37,7 @@ import com.project.speakmate.ui.components.AppBottomBar
 import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.components.UserProfileLoadError
 import com.project.speakmate.ui.components.StateIllustration
 import com.project.speakmate.ui.home.components.HomeLoadingContent
 import com.project.speakmate.ui.home.state.HomePresentation
@@ -65,6 +66,7 @@ fun HomeScreen(
             Box(Modifier.weight(1f)) {
                 when (state.presentation) {
                     HomePresentation.LOADING -> HomeLoadingContent()
+                    HomePresentation.PROFILE_LOAD_ERROR -> UserProfileLoadError(onRetry, Modifier.padding(24.dp))
                     HomePresentation.ERROR, HomePresentation.ERROR_DIALOG -> HomeUnavailableContent(
                         state.presentation == HomePresentation.ERROR_DIALOG, onRetry
                     )

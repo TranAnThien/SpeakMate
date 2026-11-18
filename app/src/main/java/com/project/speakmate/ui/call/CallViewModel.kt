@@ -1,5 +1,6 @@
 package com.project.speakmate.ui.call
 
+import com.project.speakmate.utils.AppConstant
 import kotlinx.coroutines.CancellationException
 
 import android.os.SystemClock
@@ -66,8 +67,6 @@ class CallViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
-        private const val MILLIS_PER_SECOND = 1_000L
-        private const val SECONDS_PER_MINUTE = 60L
         private const val DURATION_FORMAT = "%02d:%02d"
         private val SENTENCE_DELIMITERS = charArrayOf('.', '!', '?')
     }
@@ -94,7 +93,7 @@ class CallViewModel @Inject constructor(
         flow {
             while (true) {
                 emit(Unit)
-                delay(MILLIS_PER_SECOND)
+                delay(AppConstant.MILLIS_PER_SECOND.toLong())
             }
         }
     ) { session, _ ->
@@ -571,13 +570,13 @@ class CallViewModel @Inject constructor(
             ?: SystemClock.elapsedRealtime()
 
         val seconds = (until - startedAt - session.totalPausedMillis)
-            .coerceAtLeast(0L) / MILLIS_PER_SECOND
+            .coerceAtLeast(0L) / AppConstant.MILLIS_PER_SECOND
 
         return String.format(
             Locale.ROOT,
             DURATION_FORMAT,
-            seconds / SECONDS_PER_MINUTE,
-            seconds % SECONDS_PER_MINUTE
+            seconds / AppConstant.SECONDS_PER_MINUTE,
+            seconds % AppConstant.SECONDS_PER_MINUTE
         )
     }
 }

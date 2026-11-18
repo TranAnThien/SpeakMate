@@ -90,9 +90,9 @@ class PracticeViewModel @Inject constructor(
                 id = fp.practiceId,
                 title = scenario.name,
                 categoryLabel = fp.category,
-                roleLabel = metadata?.get("aiRole") ?: "Luyện hội thoại tự do",
+                roleLabel = metadata?.aiRole ?: "Luyện hội thoại tự do",
                 description = scenario.description,
-                imageUrl = metadata?.get("imageUrl"),
+                imageUrl = metadata?.imageUrl,
                 imageRes = null
             )
         } }.awaitAll() }

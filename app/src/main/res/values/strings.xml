@@ -428,6 +428,8 @@
     <string name="profile_skill_improve">Cần cải thiện</string>
     <string name="profile_estimated_level">Trình độ nói ước lượng: %1$s</string>
     <string name="profile_saved_vocabulary">Từ vựng đã lưu →</string>
+    <string name="user_profile_load_error_title">Không thể tải hồ sơ</string>
+    <string name="user_profile_load_error_description">Hãy thử tải lại hồ sơ.</string>
     <string name="profile_saved_vocabulary_description">Xem, tìm kiếm và quản lý các từ đã lưu.</string>
     <string name="saved_vocab_title">Từ vựng đã lưu</string>
     <string name="saved_vocab_back">Quay lại</string>

@@ -1,5 +1,6 @@
 package com.project.speakmate.ui.history
 
+import com.project.speakmate.utils.AppConstant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.AssessmentResult
@@ -43,10 +44,6 @@ class HistoryViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository
 ) : ViewModel() {
 
-    companion object {
-        private const val STOP_TIMEOUT_MILLIS = 5_000L
-    }
-
     private val selectedFilter = MutableStateFlow("all")
     private val loadRequest = MutableStateFlow(0)
     private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
@@ -62,7 +59,7 @@ class HistoryViewModel @Inject constructor(
             }
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+        started = SharingStarted.WhileSubscribed(AppConstant.STATE_SUBSCRIPTION_TIMEOUT_MILLIS),
         initialValue = loadState(HistoryPresentation.LOADING)
     )
 
@@ -81,7 +78,7 @@ class HistoryViewModel @Inject constructor(
     )
 
     private fun observeHistory(): Flow<HistoryUiState> = combine(
-        flow { emitAll(historyRepository.getPracticeHistoryList()) },
+        flow { emitAll(historyRepository.observePracticeHistory()) },
         selectedFilter
     ) { attempts, filterId ->
         val filtered = when (filterId) {
@@ -138,8 +135,8 @@ class HistoryViewModel @Inject constructor(
     }
 
     private fun toSessionUiState(attempt: PracticeAttempt, scenarioTitle: String): HistorySessionUiState {
-        val durationMinutes = attempt.durationInSeconds / 60
-        val durationSecs = attempt.durationInSeconds % 60
+        val durationMinutes = attempt.durationInSeconds / AppConstant.SECONDS_PER_MINUTE
+        val durationSecs = attempt.durationInSeconds % AppConstant.SECONDS_PER_MINUTE
         val durationFormatted = String.format(Locale.ROOT, "%02d:%02d", durationMinutes, durationSecs)
         val typeLabel = when (attempt.practiceType) {
             PracticeType.FREE_PRACTICE -> "Luyện tập tự do"

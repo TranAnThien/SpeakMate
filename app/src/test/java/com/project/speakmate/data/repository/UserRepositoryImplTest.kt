@@ -1,12 +1,21 @@
 package com.project.speakmate.data.repository
 
 import com.project.speakmate.data.dto.UserDto
+import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
+import com.project.speakmate.domain.model.InvalidUserProfileException
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.User
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import java.util.Date
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -125,6 +134,41 @@ class UserRepositoryImplTest {
                 dto.email == "verify@test.com" &&
                 dto.level == "A2"
             })
+        }
+    }
+
+    @Test
+    fun observesBothMissingAndValidProfiles() = runTest {
+        every { firestoreDataSource.observeUser("uid") } returns flowOf(null, UserDto(userId = "uid", level = "A2"))
+
+        val updates = repository.observeUser("uid").toList()
+
+        assertNull(updates.first())
+        assertEquals(SpeakingLevel.A2, updates.last()?.level)
+    }
+
+    @Test
+    fun returnsInvalidLevelAsLoadFailureWithoutWriting() = runTest {
+        coEvery { firestoreDataSource.getUser("uid") } returns UserDto(userId = "uid", level = "UNKNOWN")
+
+        val result = repository.getUser("uid")
+
+        assertTrue(result.exceptionOrNull() is InvalidUserProfileException)
+        coVerify(exactly = 0) { firestoreDataSource.getOrCreateUser(any()) }
+    }
+
+    @Test
+    fun mapsAssessmentFieldsTogetherForTheDataSource() = runTest {
+        val criteria = SpeakingCriteriaResult(true, false, true, false, true)
+        val progress = TrainingProgress(0, 0, TrainingStage.UNIT)
+        val assessedAtMillis = 25_000L
+        coEvery { firestoreDataSource.saveAssessedLevel(any(), any(), any(), any()) } returns Unit
+
+        val result = repository.saveAssessedLevel(SpeakingLevel.A2, criteria, assessedAtMillis, progress)
+
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) {
+            firestoreDataSource.saveAssessedLevel("A2", criteria.toDto(), Date(assessedAtMillis), progress.toDto())
         }
     }
 }

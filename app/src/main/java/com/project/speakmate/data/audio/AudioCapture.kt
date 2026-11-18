@@ -13,11 +13,10 @@ import kotlinx.coroutines.isActive
 class AudioCapture {
     companion object {
         private const val CHUNK_MILLIS = 40
-        private const val MILLIS_PER_SECOND = 1_000
         private const val READ_POLL_MILLIS = 10L
         private const val MAX_READ_STALL_MILLIS = 2_000L
         private const val BUFFER_CHUNKS = 4
-        private const val CHUNK_SAMPLES = AppConstant.CALL_INPUT_SAMPLE_RATE * CHUNK_MILLIS / MILLIS_PER_SECOND
+        private const val CHUNK_SAMPLES = AppConstant.CALL_INPUT_SAMPLE_RATE * CHUNK_MILLIS / AppConstant.MILLIS_PER_SECOND
         private const val CHUNK_BYTES = CHUNK_SAMPLES * AppConstant.PCM16_BYTES_PER_SAMPLE
     }
 

@@ -4,6 +4,7 @@ import com.project.speakmate.domain.model.FreePractice
 import com.project.speakmate.domain.model.GoalAssessment
 import com.project.speakmate.domain.model.RequiredAction
 import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.ScenarioPreparationMetadata
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingGoal
 import com.project.speakmate.domain.model.TrainingPath
@@ -73,12 +74,12 @@ internal class FakePracticeRepository(
     private val scenarioResult: Result<Scenario> = Result.success(
         Scenario("scenario-1", "Order coffee", "Order a drink", "Prompt")
     ),
-    private val metadataResult: Result<Map<String, String>> = Result.success(
-        mapOf(
-            "imageUrl" to "https://example.com/cafe.jpg",
-            "uiContext" to "At a coffee shop",
-            "aiRole" to "Barista",
-            "preCallHint" to "Order a drink naturally"
+    private val metadataResult: Result<ScenarioPreparationMetadata> = Result.success(
+        ScenarioPreparationMetadata(
+            imageUrl = "https://example.com/cafe.jpg",
+            uiContext = "At a coffee shop",
+            aiRole = "Barista",
+            preCallHint = "Order a drink naturally"
         )
     )
 ) : PracticeRepository {
@@ -87,5 +88,5 @@ internal class FakePracticeRepository(
     override suspend fun getScenario(scenarioId: String): Result<Scenario> =
         scenarioResult.map { it.copy(scenarioId = scenarioId) }
 
-    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<Map<String, String>> = metadataResult
+    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<ScenarioPreparationMetadata> = metadataResult
 }
