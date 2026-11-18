@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PlacementResult
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.call.CallRoute
@@ -27,6 +28,7 @@ import com.project.speakmate.ui.placement.state.PlacementResultUiState
 import com.project.speakmate.ui.placement.state.PlacementSkillUiState
 import com.project.speakmate.ui.placement.state.PlacementStatus
 import com.project.speakmate.ui.placement.state.PlacementStatusUiState
+import com.project.speakmate.utils.extension.default
 
 @Composable
 fun PlacementRoute(
@@ -75,7 +77,7 @@ fun PlacementRoute(
         return
     }
     when (state.phase) {
-        PlacementPhase.INTRODUCTION -> PlacementIntroductionScreen(viewModel::exit, viewModel::start, viewModel::skip, modifier)
+        PlacementPhase.INTRODUCTION -> PlacementIntroductionScreen(viewModel::exit, viewModel::start, viewModel::skip, modifier, state.saveFailed)
         PlacementPhase.RESUME_PROMPT -> Box(modifier) {
             PlacementIntroductionScreen(viewModel::exit, viewModel::start, viewModel::skip, Modifier.clearAndSetSemantics {})
             PlacementResumeDialog(viewModel::resume, viewModel::restart)
@@ -112,14 +114,23 @@ fun PlacementRoute(
         }
         PlacementPhase.RESULT -> {
             val result = state.result
-            if (result != null) PlacementCompletedResult(result, viewModel::exit, modifier)
+            if (result != null) PlacementCompletedResult(
+                result, state.isSavingResult, state.saveFailed, viewModel::exit, viewModel::confirmResultSaved, modifier
+            )
         }
         PlacementPhase.LOADING -> Unit
     }
 }
 
 @Composable
-private fun PlacementCompletedResult(result: PlacementResult, onHome: () -> Unit, modifier: Modifier) {
+private fun PlacementCompletedResult(
+    result: PlacementResult,
+    isSavingResult: Boolean,
+    saveFailed: Boolean,
+    onBack: () -> Unit,
+    onSaveOrHome: () -> Unit,
+    modifier: Modifier
+) {
     val levelLabel = when (result.level) {
         SpeakingLevel.A1 -> stringResource(R.string.placement_a1_label)
         SpeakingLevel.A2 -> stringResource(R.string.placement_a2_label)
@@ -127,16 +138,37 @@ private fun PlacementCompletedResult(result: PlacementResult, onHome: () -> Unit
         SpeakingLevel.B2 -> stringResource(R.string.placement_b2_label)
         SpeakingLevel.NOT_ASSESSED -> ""
     }
-    val state = remember(result, levelLabel) {
+    val passedFeedback = stringResource(R.string.placement_criterion_met_feedback)
+    val failedFeedback = stringResource(R.string.placement_criterion_unmet_feedback)
+    val state = remember(result, levelLabel, isSavingResult, saveFailed, passedFeedback, failedFeedback) {
         PlacementResultUiState(
             level = result.level.name,
             levelLabel = levelLabel,
-            range = PlacementSkillUiState(hasPassed = result.speakingProfile.rangeMet),
-            accuracy = PlacementSkillUiState(hasPassed = result.speakingProfile.accuracyMet),
-            fluency = PlacementSkillUiState(hasPassed = result.speakingProfile.fluencyMet),
-            interaction = PlacementSkillUiState(hasPassed = result.speakingProfile.interactionMet),
-            coherence = PlacementSkillUiState(hasPassed = result.speakingProfile.coherenceMet)
+            range = PlacementSkillUiState(
+                result.feedback.range.takeIf(String::isNotBlank).default(if (result.speakingProfile.rangeMet) passedFeedback else failedFeedback),
+                result.speakingProfile.rangeMet
+            ),
+            accuracy = PlacementSkillUiState(
+                result.feedback.accuracy.takeIf(String::isNotBlank).default(if (result.speakingProfile.accuracyMet) passedFeedback else failedFeedback),
+                result.speakingProfile.accuracyMet
+            ),
+            fluency = PlacementSkillUiState(
+                result.feedback.fluency.takeIf(String::isNotBlank).default(if (result.speakingProfile.fluencyMet) passedFeedback else failedFeedback),
+                result.speakingProfile.fluencyMet
+            ),
+            interaction = PlacementSkillUiState(
+                result.feedback.interaction.takeIf(String::isNotBlank).default(if (result.speakingProfile.interactionMet) passedFeedback else failedFeedback),
+                result.speakingProfile.interactionMet
+            ),
+            coherence = PlacementSkillUiState(
+                result.feedback.coherence.takeIf(String::isNotBlank).default(if (result.speakingProfile.coherenceMet) passedFeedback else failedFeedback),
+                result.speakingProfile.coherenceMet
+            ),
+            isLowestLevelAssigned = result.level == SpeakingLevel.A1 &&
+                result.taskResult in listOf(AssessmentResult.PARTIAL, AssessmentResult.FAIL),
+            isSavingResult = isSavingResult,
+            saveFailed = saveFailed
         )
     }
-    PlacementResultScreen(state, onHome, onHome, modifier)
+    PlacementResultScreen(state, onBack, onSaveOrHome, modifier)
 }

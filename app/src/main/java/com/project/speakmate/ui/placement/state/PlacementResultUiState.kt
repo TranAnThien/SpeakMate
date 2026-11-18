@@ -12,5 +12,8 @@ data class PlacementResultUiState(
     val accuracy: PlacementSkillUiState = PlacementSkillUiState(),
     val fluency: PlacementSkillUiState = PlacementSkillUiState(),
     val interaction: PlacementSkillUiState = PlacementSkillUiState(),
-    val coherence: PlacementSkillUiState = PlacementSkillUiState()
+    val coherence: PlacementSkillUiState = PlacementSkillUiState(),
+    val isLowestLevelAssigned: Boolean = false,
+    val isSavingResult: Boolean = false,
+    val saveFailed: Boolean = false
 )

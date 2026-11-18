@@ -6,6 +6,7 @@ import com.project.speakmate.domain.model.AssessmentTask
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.model.PlacementCheckpoint
 import com.project.speakmate.domain.model.PlacementResult
+import com.project.speakmate.domain.model.PlacementFeedback
 import com.project.speakmate.domain.model.PlacementRole
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementStopReason
@@ -120,7 +121,19 @@ object PlacementRules {
             technicalRetryCount = 0
         )
         if (nextStep == null) {
-            val result = PlacementResult(checkpoint.step.level, outcome.criteria, nowMillis)
+            val result = PlacementResult(
+                level = checkpoint.step.level,
+                speakingProfile = outcome.criteria,
+                assessedAtMillis = nowMillis,
+                taskResult = outcome.result,
+                feedback = PlacementFeedback(
+                    range = outcome.evaluation.range.feedback,
+                    accuracy = outcome.evaluation.accuracy.feedback,
+                    fluency = outcome.evaluation.fluency.feedback,
+                    interaction = outcome.evaluation.interaction.feedback,
+                    coherence = outcome.evaluation.coherence.feedback
+                )
+            )
             return PlacementTransition.Confirmed(updated.copy(candidateLevel = result.level, pendingResult = result), result)
         }
         if (updated.records.size >= MAX_VALID_TASKS) return PlacementTransition.Stopped(PlacementStopReason.TASK_LIMIT_REACHED)

@@ -18,6 +18,12 @@
     <string name="placement_start">Bắt đầu đánh giá</string>
     <string name="placement_later">Để sau</string>
     <string name="placement_result_title">Kết quả đánh giá</string>
+    <string name="placement_saving">Đang lưu…</string>
+    <string name="placement_retry_save">Thử lưu lại</string>
+    <string name="placement_save_failed">Chưa lưu được thay đổi. Hãy thử lại.</string>
+    <string name="placement_a1_assigned_disclaimer">Bạn bắt đầu ở lộ trình A1 vì đây là mức thấp nhất được hỗ trợ. Kết quả bài xác nhận chưa đạt đầy đủ yêu cầu. Đây là mức học ước lượng.</string>
+    <string name="placement_criterion_met_feedback">Bạn đã đáp ứng tiêu chí này trong bài xác nhận.</string>
+    <string name="placement_criterion_unmet_feedback">Bạn cần luyện thêm tiêu chí này trong bài xác nhận.</string>
     <string name="placement_estimated_level">TRÌNH ĐỘ NÓI ƯỚC LƯỢNG</string>
     <string name="placement_a2_label">TIỀN TRUNG CẤP</string>
     <string name="placement_a1_label">SƠ CẤP</string>

@@ -149,20 +149,14 @@ fun AppNavigation(
             val homeViewModel: HomeViewModel = hiltViewModel()
             val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
-            LaunchedEffect(userProfile) {
-                homeViewModel.updateUserData(userProfile)
-            }
-
             HomeScreen(
-                state = if (isProfileLoadFailed) {
-                    homeUiState.copy(presentation = HomePresentation.PROFILE_LOAD_ERROR)
-                } else homeUiState,
+                state = homeUiState,
                 onStartAssessment = { navController.navigate(PlacementDestination.GRAPH) { launchSingleTop = true } },
                 onContinuePath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onStartReassessment = {},
                 onReviewPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onSelectScenario = { navController.navigate("practice") { launchSingleTop = true } },
-                onRetry = if (isProfileLoadFailed) profileViewModel::retryProfile else homeViewModel::retry,
+                onRetry = homeViewModel::retry,
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
@@ -202,10 +196,6 @@ fun AppNavigation(
         composable("training_path") {
             val trainingViewModel: TrainingViewModel = hiltViewModel()
             val trainingState by trainingViewModel.uiState.collectAsStateWithLifecycle()
-
-            LaunchedEffect(userProfile) {
-                trainingViewModel.updateUserData(userProfile)
-            }
 
             TrainingPathScreen(
                 state = trainingState,

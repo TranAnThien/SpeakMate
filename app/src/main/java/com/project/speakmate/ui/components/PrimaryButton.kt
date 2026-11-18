@@ -23,12 +23,13 @@ fun PrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    minHeight: Dp = 56.dp
+    minHeight: Dp = 56.dp,
+    enabled: Boolean = true
 ) {
     Box(
         modifier = modifier.fillMaxWidth().heightIn(min = minHeight)
             .clip(RoundedCornerShape(16.dp)).background(DesignColor.Primary)
-            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = (minHeight / 2 - 12.dp).coerceAtLeast(0.dp)),
+            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = (minHeight / 2 - 12.dp).coerceAtLeast(0.dp)),
         contentAlignment = Alignment.Center
     ) {
         Text(text, style = DesignTypography.Button, color = DesignColor.Surface, textAlign = TextAlign.Center)

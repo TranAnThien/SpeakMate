@@ -6,6 +6,7 @@ import com.project.speakmate.utils.extension.requireString
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PlacementCheckpoint
 import com.project.speakmate.domain.model.PlacementResult
+import com.project.speakmate.domain.model.PlacementFeedback
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementTaskRecord
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
@@ -41,6 +42,12 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
         private const val FLUENCY_MET = "fluencyMet"
         private const val INTERACTION_MET = "interactionMet"
         private const val COHERENCE_MET = "coherenceMet"
+        private const val FEEDBACK = "feedback"
+        private const val RANGE = "range"
+        private const val ACCURACY = "accuracy"
+        private const val FLUENCY = "fluency"
+        private const val INTERACTION = "interaction"
+        private const val COHERENCE = "coherence"
 
         fun fromCheckpoint(checkpoint: PlacementCheckpoint): PlacementCheckpointDto {
             val json = JSONObject()
@@ -69,6 +76,13 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
             .put(LEVEL, result.level.name)
             .put(SPEAKING_PROFILE, toCriteriaJson(result.speakingProfile))
             .put(ASSESSED_AT_MILLIS, result.assessedAtMillis)
+            .put(RESULT, result.taskResult?.name.default<Any>(JSONObject.NULL))
+            .put(FEEDBACK, JSONObject()
+                .put(RANGE, result.feedback.range)
+                .put(ACCURACY, result.feedback.accuracy)
+                .put(FLUENCY, result.feedback.fluency)
+                .put(INTERACTION, result.feedback.interaction)
+                .put(COHERENCE, result.feedback.coherence))
 
         private fun toCriteriaJson(criteria: SpeakingCriteriaResult): JSONObject = JSONObject()
             .put(RANGE_MET, criteria.rangeMet)
@@ -97,7 +111,12 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
             technicalRetryCount = retryCount.toInt(),
             createdAtMillis = json.requireLong(CREATED_AT_MILLIS),
             expiresAtMillis = json.requireLong(EXPIRES_AT_MILLIS),
-            pendingResult = if (json.get(PENDING_RESULT) == JSONObject.NULL) null else readResult(json.getJSONObject(PENDING_RESULT))
+            pendingResult = if (json.get(PENDING_RESULT) == JSONObject.NULL) null else {
+                val result = readResult(json.getJSONObject(PENDING_RESULT))
+                val record = if (records.length() > 0) readRecord(records.getJSONObject(records.length() - 1)) else null
+                if (json.getJSONObject(PENDING_RESULT).has(RESULT)) result
+                else result.copy(taskResult = record?.result)
+            }
         )
     } catch (_: JSONException) {
         null
@@ -116,7 +135,22 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
     private fun readResult(json: JSONObject): PlacementResult {
         val level = SpeakingLevel.valueOf(json.requireString(LEVEL))
         require(level != SpeakingLevel.NOT_ASSESSED)
-        return PlacementResult(level, readCriteria(json.getJSONObject(SPEAKING_PROFILE)), json.requireLong(ASSESSED_AT_MILLIS))
+        val taskResult = if (!json.has(RESULT) || json.isNull(RESULT)) null
+            else AssessmentResult.valueOf(json.requireString(RESULT))
+        val feedback = if (json.has(FEEDBACK)) {
+            val fields = json.getJSONObject(FEEDBACK)
+            PlacementFeedback(
+                range = fields.requireString(RANGE),
+                accuracy = fields.requireString(ACCURACY),
+                fluency = fields.requireString(FLUENCY),
+                interaction = fields.requireString(INTERACTION),
+                coherence = fields.requireString(COHERENCE)
+            )
+        } else PlacementFeedback()
+        return PlacementResult(
+            level, readCriteria(json.getJSONObject(SPEAKING_PROFILE)), json.requireLong(ASSESSED_AT_MILLIS),
+            taskResult, feedback
+        )
     }
 
     private fun readCriteria(json: JSONObject): SpeakingCriteriaResult = SpeakingCriteriaResult(

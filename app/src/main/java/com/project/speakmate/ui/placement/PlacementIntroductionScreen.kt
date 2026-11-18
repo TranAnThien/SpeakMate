@@ -41,7 +41,8 @@ fun PlacementIntroductionScreen(
     onBack: () -> Unit,
     onStartAssessment: () -> Unit,
     onSkipAssessment: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hasSaveFailed: Boolean = false
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
         PlacementAppBar("", onBack)
@@ -66,7 +67,7 @@ fun PlacementIntroductionScreen(
                 PlacementRequirementRow(R.drawable.ic_placement_history, stringResource(R.string.placement_no_history))
             }
             Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.placement_introduction_disclaimer), style = DesignTypography.Caption,
+            Text(stringResource(if (hasSaveFailed) R.string.placement_save_failed else R.string.placement_introduction_disclaimer), style = DesignTypography.Caption,
                 color = DesignColor.Muted, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 12.dp),

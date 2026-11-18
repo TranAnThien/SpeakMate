@@ -47,7 +47,7 @@ fun PlacementResultScreen(
         PlacementAppBar(stringResource(R.string.placement_result_title), onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 32.dp)) {
-            PlacementLevelCard(state.level, state.levelLabel)
+            PlacementLevelCard(state.level, state.levelLabel, state.isLowestLevelAssigned)
             Spacer(Modifier.height(16.dp))
             Text(stringResource(R.string.placement_skill_details), color = DesignColor.Primary, style = DesignTypography.Button)
             Spacer(Modifier.height(16.dp))
@@ -61,13 +61,21 @@ fun PlacementResultScreen(
         }
         Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp)
             .padding(top = 16.dp, bottom = 24.dp)) {
-            PrimaryButton(stringResource(R.string.placement_home), onStartTrainingPath)
+            PrimaryButton(
+                text = stringResource(when {
+                    state.isSavingResult -> R.string.placement_saving
+                    state.saveFailed -> R.string.placement_retry_save
+                    else -> R.string.placement_home
+                }),
+                onClick = onStartTrainingPath,
+                enabled = !state.isSavingResult
+            )
         }
     }
 }
 
 @Composable
-private fun PlacementLevelCard(level: String, levelLabel: String) {
+private fun PlacementLevelCard(level: String, levelLabel: String, isLowestLevelAssigned: Boolean) {
     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Text(stringResource(R.string.placement_estimated_level), color = DesignColor.Muted, style = DesignTypography.Label)
@@ -78,7 +86,7 @@ private fun PlacementLevelCard(level: String, levelLabel: String) {
         Spacer(Modifier.height(8.dp))
         PlacementBadge(levelLabel)
         Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.placement_result_disclaimer), style = DesignTypography.Caption,
+        Text(stringResource(if (isLowestLevelAssigned) R.string.placement_a1_assigned_disclaimer else R.string.placement_result_disclaimer), style = DesignTypography.Caption,
             color = DesignColor.Muted, textAlign = TextAlign.Center)
     }
 }

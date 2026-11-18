@@ -8,6 +8,8 @@ import com.project.speakmate.domain.model.TrainingPath
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.TrainingUnit
 import com.project.speakmate.domain.model.User
+import com.project.speakmate.domain.repository.AuthRepository
+import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.domain.repository.TrainingRepository
 import com.project.speakmate.ui.training.state.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,11 +18,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class TrainingViewModel @Inject constructor(
-    private val trainingRepository: TrainingRepository
+    private val trainingRepository: TrainingRepository,
+    private val authRepository: AuthRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TrainingPathUiState())
@@ -34,57 +42,82 @@ class TrainingViewModel @Inject constructor(
     var currentLoadedUnit: TrainingUnit? = null
         private set
 
-    private var currentUser: User? = null
+    private var userObservationJob: Job? = null
 
-    fun updateUserData(currentUser: User?) {
-        this.currentUser = currentUser
-        viewModelScope.launch {
-            if (currentUser == null) {
-                _uiState.update { it.copy(status = TrainingContentStatus.LOADING) }
-                return@launch
-            }
+    init {
+        observeCurrentUser()
+    }
 
-            if (currentUser.trainingProgress == null) {
-                _uiState.update {
-                    it.copy(
-                        status = TrainingContentStatus.ERROR,
-                        errorMessage = "Hồ sơ trình độ ${currentUser.level.name} chưa có trainingProgress. " +
-                            "Hãy tạo currentGoalOrder = 0, currentUnitOrder = 0, stage = UNIT."
-                    )
+    private fun observeCurrentUser() {
+        userObservationJob?.cancel()
+        userObservationJob = viewModelScope.launch {
+            try {
+                authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
+                    _uiState.update { TrainingPathUiState() }
+                    if (uid != null) {
+                        try {
+                            userRepository.observeUser(uid).collectLatest { user -> updateUserData(user) }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            _uiState.update { it.copy(status = TrainingContentStatus.ERROR) }
+                        }
+                    }
                 }
-                return@launch
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { it.copy(status = TrainingContentStatus.ERROR) }
             }
+        }
+    }
 
+    private suspend fun updateUserData(currentUser: User?) {
+        if (currentUser == null) {
             _uiState.update { it.copy(status = TrainingContentStatus.LOADING) }
-            val currentPath: TrainingPath = trainingRepository.getTrainingPath(currentUser.level).getOrElse { error ->
-                _uiState.update { state ->
-                    state.copy(
-                        status = TrainingContentStatus.ERROR,
-                        errorMessage = error.message ?: "Không thể nạp cấu hình lộ trình từ Firestore."
-                    )
-                }
-                return@launch
-            }
-            val progress = currentUser.trainingProgress
+            return
+        }
 
-            val progressError = validateProgress(currentPath, progress)
-            if (progressError != null) {
-                _uiState.update { state -> state.copy(status = TrainingContentStatus.ERROR, errorMessage = progressError) }
-                return@launch
-            }
-
-            val goalUiStates = currentPath.goals.mapIndexed { index, goal ->
-                mapGoalToUiState(goal, index, progress.currentGoalOrder, progress.currentUnitOrder, progress.stage)
-            }
-
+        if (currentUser.trainingProgress == null) {
             _uiState.update {
                 it.copy(
-                    status = TrainingContentStatus.CONTENT,
-                    level = currentUser.level.name,
-                    goals = goalUiStates,
-                    canContinue = true
+                    status = TrainingContentStatus.ERROR,
+                    errorMessage = "Hồ sơ trình độ ${currentUser.level.name} chưa có trainingProgress. " +
+                        "Hãy tạo currentGoalOrder = 0, currentUnitOrder = 0, stage = UNIT."
                 )
             }
+            return
+        }
+
+        _uiState.update { it.copy(status = TrainingContentStatus.LOADING) }
+        val currentPath: TrainingPath = trainingRepository.getTrainingPath(currentUser.level).getOrElse { error ->
+            _uiState.update { state ->
+                state.copy(
+                    status = TrainingContentStatus.ERROR,
+                    errorMessage = error.message ?: "Không thể nạp cấu hình lộ trình từ Firestore."
+                )
+            }
+            return
+        }
+        val progress = currentUser.trainingProgress
+
+        val progressError = validateProgress(currentPath, progress)
+        if (progressError != null) {
+            _uiState.update { state -> state.copy(status = TrainingContentStatus.ERROR, errorMessage = progressError) }
+            return
+        }
+
+        val goalUiStates = currentPath.goals.mapIndexed { index, goal ->
+            mapGoalToUiState(goal, index, progress.currentGoalOrder, progress.currentUnitOrder, progress.stage)
+        }
+
+        _uiState.update {
+            it.copy(
+                status = TrainingContentStatus.CONTENT,
+                level = currentUser.level.name,
+                goals = goalUiStates,
+                canContinue = true
+            )
         }
     }
 
@@ -242,7 +275,7 @@ class TrainingViewModel @Inject constructor(
         _preparationState.update { it.copy(section = section) }
     }
 
-    fun retry() = updateUserData(currentUser)
+    fun retry() = observeCurrentUser()
 
     private fun validateProgress(path: TrainingPath, progress: com.project.speakmate.domain.model.TrainingProgress): String? {
         val goal = path.goals.getOrNull(progress.currentGoalOrder)

@@ -336,6 +336,23 @@ class PlacementRulesTest {
         assertEquals(expected, PlacementRules.getNextStep(step, AssessmentResult.PASS))
     }
 
+    @Test
+    fun a1ConfirmationPreservesTheActualOutcomeAndFeedbackForEveryValidResult() {
+        AssessmentResult.entries.forEach { result ->
+            val checkpoint = PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION)
+            val task = tasks.first { it.taskId == checkpoint.currentTaskId }
+            val outcome = PlacementTestFixtures.getOutcome(result)
+            val transition = PlacementRules.applyOutcome(
+                checkpoint, task, outcome, tasks, random(), checkpoint.createdAtMillis + 1
+            ) as PlacementTransition.Confirmed
+
+            assertEquals(result, transition.result.taskResult)
+            assertEquals(outcome.criteria, transition.result.speakingProfile)
+            assertEquals(outcome.evaluation.accuracy.feedback, transition.result.feedback.accuracy)
+            assertEquals(outcome.evaluation.range.feedback, transition.result.feedback.range)
+        }
+    }
+
     private fun assertNotPassed(step: PlacementStep, expected: PlacementStep?) {
         assertEquals(expected, PlacementRules.getNextStep(step, AssessmentResult.PARTIAL))
         assertEquals(expected, PlacementRules.getNextStep(step, AssessmentResult.FAIL))
