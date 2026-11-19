@@ -503,4 +503,26 @@
     <string name="goal_assessment_runtime_feedback">Hãy xem lại mục tiêu giao tiếp và các yêu cầu trước khi luyện tập tiếp.</string>
     <string name="path_completion_runtime_description">Bạn đã hoàn thành các mục tiêu của lộ trình %1$s. Trình độ nói hiện tại vẫn là %1$s.</string>
     <string name="path_completion_runtime_notice">Bạn có thể đánh giá lên %1$s hoặc luyện lại nội dung đã hoàn tất. Hoàn thành lộ trình không tự tăng trình độ.</string>
+    <string name="promotion_runtime_introduction_title">Đánh giá từ %1$s lên %2$s</string>
+    <string name="promotion_runtime_introduction_description">Lộ trình %1$s đã hoàn tất. Trò chuyện với AI để kiểm tra khả năng lên %2$s. Bài đánh giá không có Transcript/từ điển và không lưu vào Lịch sử.</string>
+    <string name="promotion_runtime_condition_title">Chỉ khi xác nhận %1$s đạt</string>
+    <string name="promotion_runtime_condition_description">Chỉ bước xác nhận %2$s đạt mới cập nhật trình độ và hồ sơ kỹ năng. Nếu chưa xác nhận được, %1$s và tiến trình được giữ nguyên.</string>
+    <string name="promotion_runtime_current_confirmation">Xác nhận trình độ %1$s hiện tại.</string>
+    <string name="promotion_runtime_next_probe">Thử sức với tình huống ở %1$s.</string>
+    <string name="promotion_runtime_next_confirmation">Xác nhận %1$s trong bối cảnh khác.</string>
+    <string name="promotion_runtime_next_task">Tiếp tục bước đánh giá</string>
+    <string name="promotion_runtime_load_error">Chưa thể tiếp tục đánh giá</string>
+    <string name="promotion_runtime_load_error_description">Không tải được hồ sơ hoặc nội dung đánh giá. Trình độ và tiến trình chưa thay đổi. Hãy thử lại.</string>
+    <string name="promotion_runtime_save_title">Đã đạt điều kiện thăng cấp</string>
+    <string name="promotion_runtime_qualified_description">Bước xác nhận cấp tiếp theo đã đạt. Đang chờ xác nhận lưu hồ sơ; chỉ mở lộ trình mới sau khi lưu thành công.</string>
+    <string name="promotion_runtime_save_failed">%1$s\n\n%2$s</string>
+    <string name="promotion_runtime_promoted_title">Đã xác nhận trình độ %1$s</string>
+    <string name="promotion_runtime_promoted_description">Trình độ %2$s và hồ sơ kỹ năng nói đã được cập nhật. Lộ trình mới bắt đầu từ Mục tiêu 1 → Bài học 1. Bài đánh giá không lưu vào Lịch sử.</string>
+    <string name="promotion_runtime_maintained_title">Chưa thăng cấp</string>
+    <string name="promotion_runtime_maintained_description">Chưa xác nhận được %2$s. Trình độ %1$s và tiến trình hiện tại được giữ nguyên, không hạ cấp. Lần đánh giá này đã kết thúc và không lưu vào Lịch sử.</string>
+    <string name="promotion_runtime_insufficient_description">Chưa đủ dữ liệu để kết luận bước đánh giá này. Trình độ %1$s và tiến trình được giữ nguyên. Kiểm tra micro và kết nối rồi thử lại đúng bước.</string>
+    <string name="promotion_runtime_retry_limit">Đã hết %3$d lần thử lại cho bước này. Lần đánh giá đã kết thúc; trình độ và tiến trình được giữ nguyên. Bạn có thể bắt đầu lần đánh giá mới từ màn hoàn tất lộ trình.</string>
+    <string name="promotion_runtime_unavailable_description">Nội dung đánh giá chưa đủ để tiếp tục. Lần đánh giá này đã kết thúc, không thay đổi trình độ hoặc tiến trình.</string>
+    <string name="promotion_runtime_not_eligible">Chưa đủ điều kiện đánh giá lên cấp</string>
+    <string name="promotion_runtime_not_eligible_description">Chỉ trình độ A1, A2 hoặc B1 với lộ trình đã hoàn tất mới được đánh giá lên cấp. B2 là mức cao nhất hiện tại.</string>
 </resources>

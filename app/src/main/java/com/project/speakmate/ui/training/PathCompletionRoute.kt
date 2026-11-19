@@ -18,6 +18,7 @@ fun PathCompletionRoute(
     onBack: () -> Unit,
     onReturnToPath: () -> Unit,
     onFreePractice: () -> Unit,
+    onStartPromotion: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TrainingPathViewModel = hiltViewModel()
 ) {
@@ -43,11 +44,11 @@ fun PathCompletionRoute(
             notice = if (isHighestLevel) stringResource(R.string.path_completion_b2_notice) else stringResource(R.string.path_completion_runtime_notice, nextLevel)
         ),
         onBack = onBack,
-        onStartPromotion = {},
+        onStartPromotion = onStartPromotion,
         onReturnToPath = onReturnToPath,
         onReviewPath = onReturnToPath,
         onFreePractice = onFreePractice,
         modifier = modifier,
-        isPromotionEnabled = false
+        isPromotionEnabled = level.getNextLevel() != null
     )
 }

@@ -43,6 +43,8 @@ import com.project.speakmate.ui.practice.PracticeViewModel
 import com.project.speakmate.ui.practice.ScenarioCatalogScreen
 import com.project.speakmate.ui.practice.ScenarioPreparationScreen
 import com.project.speakmate.ui.practice.ScenarioPreparationViewModel
+import com.project.speakmate.ui.placement.ReassessmentRoute
+import com.project.speakmate.ui.placement.ReassessmentViewModel
 import com.project.speakmate.ui.placement.PlacementDestination
 import com.project.speakmate.ui.placement.PlacementRoute
 import com.project.speakmate.ui.placement.PlacementViewModel
@@ -174,7 +176,7 @@ fun AppNavigation(
                 state = homeUiState,
                 onStartAssessment = { navController.navigate(PlacementDestination.GRAPH) { launchSingleTop = true } },
                 onContinuePath = { navController.navigate("training_path") { launchSingleTop = true } },
-                onStartReassessment = {},
+                onStartReassessment = { navController.navigate(AppConstant.REASSESSMENT_GRAPH_ROUTE) { launchSingleTop = true } },
                 onReviewPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onSelectScenario = { navController.navigate("practice") { launchSingleTop = true } },
                 onRetry = homeViewModel::retry,
@@ -205,6 +207,56 @@ fun AppNavigation(
                             if (navController.currentDestination?.parent?.route == PlacementDestination.GRAPH) {
                                 navController.navigate("home") {
                                     popUpTo(PlacementDestination.GRAPH) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        navigation(startDestination = AppConstant.REASSESSMENT_INTRODUCTION_ROUTE, route = AppConstant.REASSESSMENT_GRAPH_ROUTE) {
+            listOf(AppConstant.REASSESSMENT_INTRODUCTION_ROUTE, AppConstant.REASSESSMENT_CALL_ROUTE, AppConstant.REASSESSMENT_STATUS_ROUTE, AppConstant.REASSESSMENT_RESULT_ROUTE).forEach { destination ->
+                composable(destination) { entry ->
+                    val graphEntry = remember(entry) { navController.getBackStackEntry(AppConstant.REASSESSMENT_GRAPH_ROUTE) }
+                    val reassessmentViewModel: ReassessmentViewModel = hiltViewModel(graphEntry)
+                    ReassessmentRoute(
+                        viewModel = reassessmentViewModel,
+                        currentDestination = destination,
+                        onNavigate = { nextDestination ->
+                            if (navController.currentBackStackEntry == entry) {
+                                navController.navigate(nextDestination) {
+                                    popUpTo(AppConstant.REASSESSMENT_INTRODUCTION_ROUTE)
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        onReturnToPath = {
+                            if (navController.currentDestination?.parent?.route == AppConstant.REASSESSMENT_GRAPH_ROUTE &&
+                                !navController.popBackStack(AppConstant.PATH_COMPLETION_ROUTE, false) &&
+                                !navController.popBackStack(AppConstant.TRAINING_PATH_ROUTE, false)
+                            ) {
+                                navController.navigate(AppConstant.TRAINING_PATH_ROUTE) {
+                                    popUpTo(AppConstant.REASSESSMENT_GRAPH_ROUTE) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        onOpenPromotedPath = {
+                            if (navController.currentDestination?.parent?.route == AppConstant.REASSESSMENT_GRAPH_ROUTE &&
+                                !navController.popBackStack(AppConstant.TRAINING_PATH_ROUTE, false)
+                            ) {
+                                navController.navigate(AppConstant.TRAINING_PATH_ROUTE) {
+                                    popUpTo(AppConstant.REASSESSMENT_GRAPH_ROUTE) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        onHome = {
+                            if (navController.currentDestination?.parent?.route == AppConstant.REASSESSMENT_GRAPH_ROUTE) {
+                                navController.navigate("home") {
+                                    popUpTo(AppConstant.REASSESSMENT_GRAPH_ROUTE) { inclusive = true }
                                     launchSingleTop = true
                                 }
                             }
@@ -387,6 +439,7 @@ fun AppNavigation(
             PathCompletionRoute(
                 onBack = navController::popBackStack,
                 onReturnToPath = returnToPath,
+                onStartPromotion = { navController.navigate(AppConstant.REASSESSMENT_GRAPH_ROUTE) { launchSingleTop = true } },
                 onFreePractice = {
                     navController.navigate("practice") {
                         popUpTo(AppConstant.PATH_COMPLETION_ROUTE) { inclusive = true }

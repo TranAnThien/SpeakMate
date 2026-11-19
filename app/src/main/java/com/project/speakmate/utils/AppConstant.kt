@@ -10,6 +10,11 @@ object AppConstant {
     const val SECONDS_PER_MINUTE = 60L
     const val STATE_SUBSCRIPTION_TIMEOUT_MILLIS = 5_000L
     const val TOO_MANY_REQUESTS = 429
+    const val REASSESSMENT_GRAPH_ROUTE = "reassessment"
+    const val REASSESSMENT_INTRODUCTION_ROUTE = "reassessment/intro"
+    const val REASSESSMENT_CALL_ROUTE = "reassessment/call"
+    const val REASSESSMENT_STATUS_ROUTE = "reassessment/status"
+    const val REASSESSMENT_RESULT_ROUTE = "reassessment/result"
     const val GOAL_ID_ARGUMENT = "goalId"
     const val IS_REPLAY_ARGUMENT = "isReplay"
     const val GOAL_DETAIL_ROUTE = "training_goal/{goalId}"

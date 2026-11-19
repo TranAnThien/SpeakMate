@@ -25,6 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.domain.model.ReassessmentStep
+import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.ui.placement.state.PlacementStatusFlow
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
@@ -48,7 +51,7 @@ fun PlacementStatusScreen(
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PlacementAppBar(stringResource(R.string.placement_title), onBack)
+        PlacementAppBar(stringResource(if (state.flow == PlacementStatusFlow.REASSESSMENT) R.string.promotion_header else R.string.placement_title), onBack)
         Surface(modifier = Modifier.fillMaxSize(), color = DesignColor.Scrim) {
             Box(Modifier.fillMaxSize().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
                 Column(Modifier.widthIn(max = 364.dp).fillMaxWidth().verticalScroll(rememberScrollState())
@@ -74,19 +77,35 @@ fun PlacementStatusScreen(
                         PlacementBadge(stringResource(badgeRes))
                         Spacer(Modifier.height(12.dp))
                     }
-                    Text(stringResource(when (state.status) {
-                        PlacementStatus.PROCESSING -> R.string.placement_processing_title
-                        PlacementStatus.CONFIRMATION -> R.string.placement_confirmation_title
-                        PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry_title
-                        PlacementStatus.UNDETERMINED -> R.string.placement_undetermined_title
+                    Text(stringResource(when {
+                        state.flow == PlacementStatusFlow.REASSESSMENT && state.status == PlacementStatus.CONFIRMATION -> R.string.promotion_runtime_next_task
+                        state.flow == PlacementStatusFlow.REASSESSMENT && state.status == PlacementStatus.UNDETERMINED -> R.string.promotion_runtime_load_error
+                        else -> when (state.status) {
+                            PlacementStatus.PROCESSING -> R.string.placement_processing_title
+                            PlacementStatus.CONFIRMATION -> R.string.placement_confirmation_title
+                            PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry_title
+                            PlacementStatus.UNDETERMINED -> R.string.placement_undetermined_title
+                        }
                     }), style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
-                    Text(stringResource(when (state.status) {
-                        PlacementStatus.PROCESSING -> R.string.placement_processing_description
-                        PlacementStatus.CONFIRMATION -> R.string.placement_confirmation_description
-                        PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry_description
-                        PlacementStatus.UNDETERMINED -> R.string.placement_undetermined_description
-                    }), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+                    val descriptionRes = when {
+                        state.flow == PlacementStatusFlow.REASSESSMENT -> when (state.status) {
+                            PlacementStatus.CONFIRMATION -> when (state.reassessmentStep) {
+                                ReassessmentStep.CURRENT_CONFIRMATION -> R.string.promotion_runtime_current_confirmation
+                                ReassessmentStep.NEXT_PROBE -> R.string.promotion_runtime_next_probe
+                                ReassessmentStep.NEXT_CONFIRMATION, null -> R.string.promotion_runtime_next_confirmation
+                            }
+                            PlacementStatus.UNDETERMINED -> R.string.promotion_runtime_load_error_description
+                            else -> R.string.placement_processing_description
+                        }
+                        else -> when (state.status) {
+                            PlacementStatus.PROCESSING -> R.string.placement_processing_description
+                            PlacementStatus.CONFIRMATION -> R.string.placement_confirmation_description
+                            PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry_description
+                            PlacementStatus.UNDETERMINED -> R.string.placement_undetermined_description
+                        }
+                    }
+                    Text(stringResource(descriptionRes, state.assessmentLevel.name), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
                     if (state.isTimeLimitReached) {
                         Spacer(Modifier.height(12.dp))
                         Text(stringResource(R.string.placement_time_limit_notice), style = DesignTypography.Body,
@@ -96,7 +115,7 @@ fun PlacementStatusScreen(
                         PlacementStatus.PROCESSING -> null
                         PlacementStatus.CONFIRMATION -> R.string.placement_continue
                         PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_retry
-                        PlacementStatus.UNDETERMINED -> R.string.placement_home
+                        PlacementStatus.UNDETERMINED -> if (state.flow == PlacementStatusFlow.REASSESSMENT) R.string.content_retry else R.string.placement_home
                     }
                     if (primaryTextRes != null) {
                         Spacer(Modifier.height(12.dp))
@@ -113,7 +132,7 @@ fun PlacementStatusScreen(
                     val secondaryTextRes = when (state.status) {
                         PlacementStatus.PROCESSING -> null
                         PlacementStatus.CONFIRMATION -> R.string.placement_later
-                        PlacementStatus.INSUFFICIENT_EVIDENCE -> R.string.placement_home
+                        PlacementStatus.INSUFFICIENT_EVIDENCE -> if (state.flow == PlacementStatusFlow.REASSESSMENT) R.string.goal_assessment_return_to_path else R.string.placement_home
                         PlacementStatus.UNDETERMINED -> null
                     }
                     if (secondaryTextRes != null) {
@@ -171,5 +190,28 @@ private fun PlacementUndeterminedScreenPreview() {
 private fun PlacementTimeLimitScreenPreview() {
     SpeakMateTheme {
         PlacementStatusScreen(PlacementStatusUiState(isTimeLimitReached = true), {}, {}, {}, {}, {})
+    }
+}
+
+@Preview(name = "Reassessment / Processing", widthDp = 412, heightDp = 835, showBackground = true)
+@Composable
+private fun ReassessmentProcessingScreenPreview() {
+    SpeakMateTheme {
+        PlacementStatusScreen(PlacementStatusUiState(flow = PlacementStatusFlow.REASSESSMENT), {}, {}, {}, {}, {})
+    }
+}
+
+@Preview(name = "Reassessment / Next confirmation", widthDp = 412, heightDp = 835, showBackground = true)
+@Composable
+private fun ReassessmentConfirmationScreenPreview() {
+    SpeakMateTheme {
+        PlacementStatusScreen(
+            PlacementStatusUiState(
+                status = PlacementStatus.CONFIRMATION,
+                flow = PlacementStatusFlow.REASSESSMENT,
+                reassessmentStep = ReassessmentStep.NEXT_CONFIRMATION,
+                assessmentLevel = SpeakingLevel.B1
+            ), {}, {}, {}, {}, {}
+        )
     }
 }
