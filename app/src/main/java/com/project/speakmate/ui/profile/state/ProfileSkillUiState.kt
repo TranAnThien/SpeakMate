@@ -1,10 +1,8 @@
 package com.project.speakmate.ui.profile.state
 
-import com.project.speakmate.ui.components.AssessmentCriterionType
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
+import com.project.speakmate.ui.components.AssessmentCriterionType
 
-@Keep
 @Immutable
 data class ProfileSkillUiState(
     val id: String = "",

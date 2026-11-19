@@ -1,10 +1,8 @@
 package com.project.speakmate.ui.history.state
 
-import com.project.speakmate.ui.components.AssessmentCriterionType
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
+import com.project.speakmate.ui.components.AssessmentCriterionType
 
-@Keep
 @Immutable
 data class SessionCriterionUiState(
     val id: String = "",

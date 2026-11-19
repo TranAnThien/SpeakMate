@@ -23,9 +23,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.SecondaryButton
-import com.project.speakmate.ui.practice.components.PracticeAppBar
 import com.project.speakmate.ui.practice.components.PracticeTextCard
 import com.project.speakmate.ui.practice.state.PracticeSummaryUiState
 import com.project.speakmate.ui.theme.DesignColor
@@ -40,7 +40,7 @@ fun PracticeSummaryScreen(
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PracticeAppBar(stringResource(R.string.practice_summary_header), onBack)
+        BackAppBar(stringResource(R.string.practice_summary_header), onBack)
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {

@@ -64,12 +64,12 @@ fun AuthRoute(
                         val token = GoogleIdTokenCredential.createFrom(credential.data)
                         viewModel.handleGoogleSignIn(token.idToken, token.displayName, token.id, token.profilePictureUri?.toString())
                     } catch (_: GetCredentialCancellationException) {
-                        viewModel.onGoogleSignInCancelled()
+                        viewModel.cancelSignIn()
                     } catch (cancelled: CancellationException) {
-                        viewModel.onGoogleSignInCancelled()
+                        viewModel.cancelSignIn()
                         throw cancelled
                     } catch (error: Exception) {
-                        viewModel.onGoogleSignInError(error)
+                        viewModel.showSignInError(error)
                     }
                 }
             }

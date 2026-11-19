@@ -1,8 +1,5 @@
 package com.project.speakmate.di
 
-import com.project.speakmate.data.repository.PracticeCompletionRepositoryImpl
-import com.project.speakmate.domain.repository.PracticeCompletionRepository
-import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -14,15 +11,10 @@ import kotlinx.coroutines.SupervisorJob
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class PracticeCompletionModule {
-    companion object {
-        @Provides
-        @Singleton
-        @ApplicationScope
-        fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    }
-
-    @Binds
+object PracticeCompletionModule {
+    @Provides
     @Singleton
-    abstract fun bindPracticeCompletionRepository(implementation: PracticeCompletionRepositoryImpl): PracticeCompletionRepository
+    @ApplicationScope
+    fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
 }

@@ -61,7 +61,7 @@ fun TrainingGoalCard(
             Text(goal.summary, style = DesignTypography.Detail, color = DesignColor.Muted)
             Text(stringResource(when {
                 goal.isExpanded -> R.string.training_collapse_units
-                goal.status == TrainingProgressStatus.LOCKED -> R.string.training_preview_units
+                goal.status == TrainingProgressStatus.LOCKED -> R.string.training_view_locked_units
                 else -> R.string.training_view_units
             }), style = DesignTypography.Link, color = DesignColor.Primary)
         }

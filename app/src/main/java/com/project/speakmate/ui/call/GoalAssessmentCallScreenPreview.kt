@@ -1,9 +1,7 @@
 package com.project.speakmate.ui.call
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import com.project.speakmate.R
 import com.project.speakmate.ui.call.components.CallDurationLabel
 import com.project.speakmate.ui.call.state.CallPresentation
 import com.project.speakmate.ui.call.state.CallUiState
@@ -16,7 +14,7 @@ private fun GoalAssessmentCallListeningScreenPreview() {
         CallScreen(
             state = CallUiState(
                 presentation = CallPresentation.LISTENING,
-                title = stringResource(R.string.goal_assessment_preview_call_title),
+                title = "Đánh giá: Tại quán cà phê",
                 isTranscriptAvailable = false
             ),
             durationContent = { CallDurationLabel("02:18") },

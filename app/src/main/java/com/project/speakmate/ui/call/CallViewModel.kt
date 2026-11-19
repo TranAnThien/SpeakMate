@@ -1,29 +1,25 @@
 package com.project.speakmate.ui.call
 
-import com.project.speakmate.utils.AppConstant
-import kotlinx.coroutines.CancellationException
-
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.CallActivityContext
-import com.project.speakmate.domain.model.CompletedPractice
-import com.project.speakmate.domain.model.PracticeCompletionState
+import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.CallInterruption
-import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.CallState
+import com.project.speakmate.domain.model.CompletedPractice
 import com.project.speakmate.domain.model.DictionaryLookupResult
 import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.model.PracticeCompletionState
 import com.project.speakmate.domain.model.PronunciationState
 import com.project.speakmate.domain.model.SenderType
 import com.project.speakmate.domain.model.TranscriptMessage
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
 import com.project.speakmate.domain.repository.CallRepository
-import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import com.project.speakmate.domain.repository.DictionaryRepository
+import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import com.project.speakmate.domain.rules.CallTimingRules
 import com.project.speakmate.ui.call.state.CallDictionaryStatus
@@ -34,9 +30,11 @@ import com.project.speakmate.ui.call.state.CallUiState
 import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import com.project.speakmate.ui.call.state.MicrophonePermissionPresentation
 import com.project.speakmate.ui.call.state.MicrophonePermissionUiState
+import com.project.speakmate.utils.AppConstant
+import com.project.speakmate.utils.extension.toDurationLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,8 +42,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -60,7 +58,6 @@ class CallViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
-        private const val DURATION_FORMAT = "%02d:%02d"
         private val SENTENCE_DELIMITERS = charArrayOf('.', '!', '?')
     }
 
@@ -452,11 +449,6 @@ class CallViewModel @Inject constructor(
         val durationMillis = CallTimingRules.getDurationMillis(session, SystemClock.elapsedRealtime()) ?: return ""
         val seconds = durationMillis / AppConstant.MILLIS_PER_SECOND
 
-        return String.format(
-            Locale.ROOT,
-            DURATION_FORMAT,
-            seconds / AppConstant.SECONDS_PER_MINUTE,
-            seconds % AppConstant.SECONDS_PER_MINUTE
-        )
+        return seconds.toDurationLabel()
     }
 }

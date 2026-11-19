@@ -16,7 +16,7 @@ fun ScenarioCatalogRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     ScenarioCatalogScreen(
         state = state,
-        onSelectCategory = viewModel::onCategorySelected,
+        onSelectCategory = viewModel::selectCategory,
         onSelectScenario = onSelectScenario,
         onRetry = viewModel::loadCatalog,
         onDismissError = {},

@@ -25,16 +25,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.R
 import com.project.speakmate.domain.model.ReassessmentStep
 import com.project.speakmate.domain.model.SpeakingLevel
-import com.project.speakmate.ui.placement.state.PlacementStatusFlow
-import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
-import com.project.speakmate.ui.placement.components.PlacementAppBar
 import com.project.speakmate.ui.placement.components.PlacementBadge
-import com.project.speakmate.ui.placement.components.PlacementSecondaryButton
 import com.project.speakmate.ui.placement.state.PlacementStatus
+import com.project.speakmate.ui.placement.state.PlacementStatusFlow
 import com.project.speakmate.ui.placement.state.PlacementStatusUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
@@ -51,7 +51,7 @@ fun PlacementStatusScreen(
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PlacementAppBar(stringResource(if (state.flow == PlacementStatusFlow.REASSESSMENT) R.string.promotion_header else R.string.placement_title), onBack)
+        BackAppBar(stringResource(if (state.flow == PlacementStatusFlow.REASSESSMENT) R.string.promotion_header else R.string.placement_title), onBack)
         Surface(modifier = Modifier.fillMaxSize(), color = DesignColor.Scrim) {
             Box(Modifier.fillMaxSize().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
                 Column(Modifier.widthIn(max = 364.dp).fillMaxWidth().verticalScroll(rememberScrollState())
@@ -137,7 +137,7 @@ fun PlacementStatusScreen(
                     }
                     if (secondaryTextRes != null) {
                         Spacer(Modifier.height(12.dp))
-                        PlacementSecondaryButton(
+                        SecondaryButton(
                             text = stringResource(secondaryTextRes),
                             onClick = when (state.status) {
                                 PlacementStatus.PROCESSING -> onGoHome

@@ -1,10 +1,8 @@
 package com.project.speakmate.ui.training.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 import com.project.speakmate.domain.model.TrainingActivityScenario
 
-@Keep
 @Immutable
 data class GoalAssessmentUiState(
     val presentation: GoalAssessmentPresentation = GoalAssessmentPresentation.INTRODUCTION,

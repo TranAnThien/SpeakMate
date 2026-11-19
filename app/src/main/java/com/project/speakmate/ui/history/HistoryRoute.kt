@@ -18,7 +18,7 @@ fun HistoryRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     HistoryScreen(
         state = state,
-        onSelectFilter = viewModel::onSelectFilter,
+        onSelectFilter = viewModel::selectFilter,
         onOpenSession = onOpenSession,
         onStartPractice = {
             if (viewModel.uiState.value.selectedFilterId == AppConstant.HISTORY_FILTER_FREE_PRACTICE) onOpenPractice()

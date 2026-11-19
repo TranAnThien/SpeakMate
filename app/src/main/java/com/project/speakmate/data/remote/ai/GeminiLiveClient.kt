@@ -3,6 +3,7 @@ package com.project.speakmate.data.remote.ai
 import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.utils.AppConstant
+import com.project.speakmate.utils.extension.default
 import java.util.Base64
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +14,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
-import org.json.JSONArray
 import org.json.JSONObject
 
 class GeminiLiveClient(
@@ -25,13 +25,9 @@ class GeminiLiveClient(
     companion object {
         private const val ENDPOINT =
             "https://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
-        private const val MODEL = "models/gemini-3.8-live"
         private const val MAX_UPLINK_BACKLOG_BYTES = 16_384L
         private const val MAX_FRAME_BYTES = 524_288
         private const val NORMAL_CLOSURE = 1000
-        private const val ACCESS_DENIED = 403
-        private const val UNAUTHORIZED = 401
-        private const val NOT_FOUND = 404
         private const val INPUT_MIME_TYPE = "${GeminiWireField.PCM_MIME_TYPE};rate=${AppConstant.CALL_INPUT_SAMPLE_RATE}"
     }
 
@@ -39,6 +35,8 @@ class GeminiLiveClient(
     val isTurnPending = mutableTurnPending.asStateFlow()
     private val socketLock = Any()
     private val audioParser = GeminiLiveAudioParser()
+    private val setupRequest = GeminiLiveSetupRequest()
+    private val failureMapper = GeminiLiveFailureMapper()
     private var socket: WebSocket? = null
     private var isOpen = false
     private var isClosed = false
@@ -55,7 +53,7 @@ class GeminiLiveClient(
             reportFailure(CallFailure.CONFIGURATION)
             return
         }
-        val setup = buildSetup(scenario, resumptionHandle)
+        val setup = setupRequest.buildSetup(scenario, resumptionHandle)
         val url = ENDPOINT.toHttpUrl().newBuilder().addQueryParameter(GeminiWireField.API_KEY_PARAMETER, apiKey).build()
         val request = Request.Builder().url(url).build()
         val listener = object : WebSocketListener() {
@@ -74,15 +72,15 @@ class GeminiLiveClient(
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 webSocket.close(NORMAL_CLOSURE, null)
-                reportFailure(getFailure(reason))
+                reportFailure(failureMapper.getFailure(reason))
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                reportFailure(getFailure(reason))
+                reportFailure(failureMapper.getFailure(reason))
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                reportFailure(getFailure("", response?.code))
+                reportFailure(failureMapper.getFailure("", response?.code))
             }
         }
         synchronized(socketLock) {
@@ -91,7 +89,7 @@ class GeminiLiveClient(
     }
 
     fun getConnectionFailure(): CallFailure? = synchronized(socketLock) {
-        if (isOpen) null else terminalFailure ?: CallFailure.NETWORK
+        if (isOpen) null else terminalFailure.default(CallFailure.NETWORK)
     }
 
     fun enableAudio(): Long? = synchronized(socketLock) {
@@ -104,7 +102,7 @@ class GeminiLiveClient(
     }
 
     fun enableDownlink(generation: Long, requiresIdleTurn: Boolean): CallFailure? = synchronized(socketLock) {
-        if (!isOpen) return terminalFailure ?: CallFailure.NETWORK
+        if (!isOpen) return terminalFailure.default(CallFailure.NETWORK)
         if (requiresIdleTurn && mutableTurnPending.value) return CallFailure.TIMEOUT
         playbackGeneration = generation
         null
@@ -147,23 +145,6 @@ class GeminiLiveClient(
         webSocket?.cancel()
     }
 
-    private fun buildSetup(scenario: Scenario, resumptionHandle: String?): String {
-        val instruction = "${scenario.name}\n" +
-            "${scenario.description}\n${scenario.promptTemplate}"
-        val generationConfig = JSONObject().put(GeminiWireField.RESPONSE_MODALITIES, JSONArray().put(GeminiWireField.AUDIO_MODALITY))
-        val systemInstruction = JSONObject().put(GeminiWireField.PARTS, JSONArray().put(JSONObject().put(GeminiWireField.TEXT, instruction)))
-        val realtimeConfig = JSONObject().put(GeminiWireField.AUTOMATIC_ACTIVITY_DETECTION, JSONObject().put(GeminiWireField.DISABLED, false))
-        val setup = JSONObject().put(GeminiWireField.MODEL, MODEL)
-            .put(GeminiWireField.GENERATION_CONFIG, generationConfig)
-            .put(GeminiWireField.SYSTEM_INSTRUCTION, systemInstruction)
-            .put(GeminiWireField.REALTIME_INPUT_CONFIG, realtimeConfig)
-            .put(GeminiWireField.INPUT_AUDIO_TRANSCRIPTION, JSONObject())
-            .put(GeminiWireField.OUTPUT_AUDIO_TRANSCRIPTION, JSONObject())
-            .put(GeminiWireField.SESSION_RESUMPTION, JSONObject().apply { resumptionHandle?.let { put(GeminiWireField.RESUMPTION_HANDLE, it) } })
-            .put(GeminiWireField.CONTEXT_WINDOW_COMPRESSION, JSONObject().put(GeminiWireField.SLIDING_WINDOW, JSONObject()))
-        return JSONObject().put(GeminiWireField.SETUP, setup).toString()
-    }
-
     private fun openSocket(webSocket: WebSocket, setup: String) {
         val sent = synchronized(socketLock) {
             if (isClosed || socket !== webSocket) null
@@ -197,7 +178,7 @@ class GeminiLiveClient(
         try {
             val frame = JSONObject(message)
             frame.optJSONObject(GeminiWireField.ERROR)?.let { error ->
-                reportFailure(getFailure(error.optString(GeminiWireField.STATUS) + " " + error.optString(GeminiWireField.MESSAGE), error.optInt(GeminiWireField.CODE)))
+                reportFailure(failureMapper.getFailure(error.optString(GeminiWireField.STATUS) + " " + error.optString(GeminiWireField.MESSAGE), error.optInt(GeminiWireField.CODE)))
                 return
             }
             audioParser.readServerEvents(frame, generation).forEach(::emitEvent)
@@ -256,16 +237,4 @@ class GeminiLiveClient(
         return socket.also { socket = null }
     }
 
-    private fun getFailure(reason: String, status: Int? = null): CallFailure {
-        val detail = reason.lowercase()
-        return when {
-            status == AppConstant.TOO_MANY_REQUESTS || "resource_exhausted" in detail || "resource has been exhausted" in detail ||
-                "quota" in detail -> CallFailure.QUOTA
-            status == UNAUTHORIZED || status == ACCESS_DENIED || "api key" in detail ||
-                "permission_denied" in detail || "unauthenticated" in detail -> CallFailure.ACCESS
-            status == NOT_FOUND || "model" in detail &&
-                ("not found" in detail || "not supported" in detail || "not available" in detail) -> CallFailure.MODEL
-            else -> CallFailure.NETWORK
-        }
-    }
 }

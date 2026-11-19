@@ -29,9 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.project.speakmate.ui.components.ContentStatusPanel
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.VocabularyItem
+import com.project.speakmate.ui.components.ContentStatusPanel
 import com.project.speakmate.ui.profile.savedvocab.components.VocabularyCard
 import com.project.speakmate.ui.profile.savedvocab.state.SavedVocabUiState
 
@@ -113,8 +113,8 @@ fun SavedVocabScreen(
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     itemsIndexed(
-                        items = uiState.filteredVocabularies,
-                        key = { index, item -> "$index:${item.word.length}:${item.word}${item.partOfSpeech}" },
+                        items = uiState.filteredVocabularies.distinctBy { it.word to it.partOfSpeech },
+                        key = { _, item -> "${item.word.length}:${item.word}${item.partOfSpeech}" },
                         contentType = { _, _ -> VocabularyItem::class }
                     ) { _, vocabItem ->
                         VocabularyCard(

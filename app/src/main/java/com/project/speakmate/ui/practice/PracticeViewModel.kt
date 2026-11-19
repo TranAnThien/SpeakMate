@@ -1,14 +1,15 @@
 package com.project.speakmate.ui.practice
 
-import com.project.speakmate.utils.extension.suspendRunCatching
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.speakmate.domain.model.FreePractice
 import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.ui.components.ContentFilterUiState
 import com.project.speakmate.ui.practice.state.ScenarioCatalogPresentation
 import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
 import com.project.speakmate.ui.practice.state.ScenarioItemUiState
+import com.project.speakmate.utils.AppConstant
+import com.project.speakmate.utils.extension.suspendRunCatching
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.async
@@ -28,7 +29,7 @@ class PracticeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ScenarioCatalogUiState())
     val uiState: StateFlow<ScenarioCatalogUiState> = _uiState.asStateFlow()
 
-    private var allPractices = emptyList<com.project.speakmate.domain.model.FreePractice>()
+    private var allPractices = emptyList<FreePractice>()
 
     init {
         loadCatalog()
@@ -44,7 +45,7 @@ class PracticeViewModel @Inject constructor(
             }
 
             val distinctCategories = allPractices.map { it.category }.distinct()
-            val filters = mutableListOf(ContentFilterUiState(id = "ALL", label = "Tất cả"))
+            val filters = mutableListOf(ContentFilterUiState(id = AppConstant.PRACTICE_CATEGORY_ALL, label = ""))
             filters.addAll(distinctCategories.map { category ->
                 ContentFilterUiState(id = category, label = category)
             })
@@ -58,17 +59,17 @@ class PracticeViewModel @Inject constructor(
                 state.copy(
                     presentation = if (scenarioItems.isEmpty()) ScenarioCatalogPresentation.UNCONFIGURED else ScenarioCatalogPresentation.POPULATED,
                     categories = filters,
-                    selectedCategoryId = "ALL",
+                    selectedCategoryId = AppConstant.PRACTICE_CATEGORY_ALL,
                     scenarios = scenarioItems
                 )
             }
         }
     }
 
-    fun onCategorySelected(categoryId: String) {
+    fun selectCategory(categoryId: String) {
         _uiState.update { it.copy(selectedCategoryId = categoryId) }
         viewModelScope.launch {
-            val filteredPractices = if (categoryId == "ALL") allPractices else allPractices.filter { it.category == categoryId }
+            val filteredPractices = if (categoryId == AppConstant.PRACTICE_CATEGORY_ALL) allPractices else allPractices.filter { it.category == categoryId }
             val filteredItems = mapToUiState(filteredPractices).getOrElse {
                 _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
                 return@launch
@@ -82,7 +83,7 @@ class PracticeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun mapToUiState(practices: List<com.project.speakmate.domain.model.FreePractice>): Result<List<ScenarioItemUiState>> = suspendRunCatching {
+    private suspend fun mapToUiState(practices: List<FreePractice>): Result<List<ScenarioItemUiState>> = suspendRunCatching {
         coroutineScope { practices.map { fp -> async {
             val scenario = practiceRepository.getScenario(fp.scenarioId).getOrThrow()
             val metadata = practiceRepository.getScenarioPreparationMetadata(scenario.scenarioId).getOrNull()
@@ -90,7 +91,7 @@ class PracticeViewModel @Inject constructor(
                 id = fp.practiceId,
                 title = scenario.name,
                 categoryLabel = fp.category,
-                roleLabel = metadata?.aiRole ?: "Luyện hội thoại tự do",
+                roleLabel = metadata?.aiRole,
                 description = scenario.description,
                 imageUrl = metadata?.imageUrl,
                 imageRes = null

@@ -30,6 +30,7 @@ import com.project.speakmate.R
 import com.project.speakmate.ui.call.state.CallDictionaryStatus
 import com.project.speakmate.ui.call.state.CallDictionaryUiState
 import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -55,7 +56,7 @@ fun CallDictionaryPopup(
                 CallDictionaryStatus.NOT_FOUND -> CallDictionaryMessage(stringResource(R.string.call_dictionary_not_found))
                 CallDictionaryStatus.ERROR -> {
                     CallDictionaryMessage(stringResource(R.string.call_dictionary_error))
-                    CallSecondaryButton(stringResource(R.string.call_dictionary_retry), onRetry)
+                    SecondaryButton(stringResource(R.string.call_dictionary_retry), onRetry)
                 }
                 CallDictionaryStatus.SUCCESS -> CallDictionaryContent(state, onSaveWord)
             }
@@ -104,14 +105,14 @@ private fun CallDictionaryContent(state: CallDictionaryUiState, onSaveWord: () -
         return
     }
     when (state.saveStatus) {
-        CallVocabularySaveStatus.IDLE -> CallSecondaryButton(stringResource(R.string.call_dictionary_save), onSaveWord)
+        CallVocabularySaveStatus.IDLE -> SecondaryButton(stringResource(R.string.call_dictionary_save), onSaveWord)
         CallVocabularySaveStatus.SAVING -> CallDictionaryMessage(stringResource(R.string.call_dictionary_saving))
         CallVocabularySaveStatus.SAVED -> CallDictionaryMessage(stringResource(R.string.call_dictionary_saved))
         CallVocabularySaveStatus.MOVED_TO_TOP -> CallDictionaryMessage(stringResource(R.string.call_dictionary_moved_to_top))
         CallVocabularySaveStatus.SAVED_REPLACING_OLDEST -> CallDictionaryMessage(stringResource(R.string.call_dictionary_oldest_removed))
         CallVocabularySaveStatus.FAILED -> {
             CallDictionaryMessage(stringResource(R.string.call_dictionary_save_failed))
-            CallSecondaryButton(stringResource(R.string.call_dictionary_save), onSaveWord)
+            SecondaryButton(stringResource(R.string.call_dictionary_save), onSaveWord)
         }
     }
 }

@@ -17,7 +17,10 @@ import java.util.Date
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -33,7 +36,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getOrCreateUser_returnsSuccess_whenDataSourceSucceeds() = runTest {
+    fun getOrCreateUserReturnsSuccessWhenDataSourceSucceeds() = runTest {
         val inputUser = User(
             userId = "uid-1",
             displayName = "Quân",
@@ -58,7 +61,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getOrCreateUser_returnsFailure_whenDataSourceThrows() = runTest {
+    fun getOrCreateUserReturnsFailureWhenDataSourceThrows() = runTest {
         coEvery { firestoreDataSource.getOrCreateUser(any()) } throws RuntimeException("Firestore error")
 
         val user = User("uid-1", "Test", "t@t.com", "")
@@ -69,7 +72,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getUser_returnsUser_whenDocumentExists() = runTest {
+    fun getUserReturnsUserWhenDocumentExists() = runTest {
         val dto = UserDto(
             userId = "uid-2",
             displayName = "Thiên",
@@ -89,7 +92,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getUser_returnsNull_whenDocumentNotExists() = runTest {
+    fun getUserReturnsNullWhenDocumentNotExists() = runTest {
         coEvery { firestoreDataSource.getUser("uid-none") } returns null
 
         val result = repository.getUser("uid-none")
@@ -99,7 +102,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getUser_returnsFailure_whenDataSourceThrows() = runTest {
+    fun getUserReturnsFailureWhenDataSourceThrows() = runTest {
         coEvery { firestoreDataSource.getUser("uid-err") } throws RuntimeException("Network error")
 
         val result = repository.getUser("uid-err")
@@ -109,7 +112,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getOrCreateUser_passesCorrectDtoToDataSource() = runTest {
+    fun getOrCreateUserPassesCorrectDtoToDataSource() = runTest {
         val user = User(
             userId = "uid-verify",
             displayName = "Verify",

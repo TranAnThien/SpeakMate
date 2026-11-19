@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.extension.default
 
 @Composable
 fun ContentErrorDialog(title: String, description: String, onRetry: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier, primaryText: String? = null) {
@@ -41,7 +42,7 @@ fun ContentErrorDialog(title: String, description: String, onRetry: () -> Unit, 
                     }
                     Text(title, style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
                     Text(description, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
-                    PrimaryButton(primaryText ?: stringResource(R.string.content_reload), onRetry)
+                    PrimaryButton(primaryText.default(stringResource(R.string.content_reload)), onRetry)
                     SecondaryButton(stringResource(R.string.content_dismiss_notice), onDismiss)
                 }
             }

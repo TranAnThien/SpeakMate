@@ -1,23 +1,17 @@
 package com.project.speakmate.data.repository
 
-import com.project.speakmate.data.remote.firebase.required
+import com.google.firebase.firestore.FirebaseFirestore
+import com.project.speakmate.data.remote.firebase.FirestoreField
+import com.project.speakmate.data.remote.firebase.FirestoreTrainingDataSource
 import com.project.speakmate.data.remote.firebase.requiredActions
-import com.project.speakmate.data.remote.firebase.requiredExampleList
 import com.project.speakmate.data.remote.firebase.requiredLevel
 import com.project.speakmate.data.remote.firebase.requiredMap
 import com.project.speakmate.data.remote.firebase.requiredReferenceIds
 import com.project.speakmate.data.remote.firebase.requiredString
 import com.project.speakmate.data.remote.firebase.requiredStringList
 import com.project.speakmate.data.remote.firebase.stringOrId
-import com.project.speakmate.data.remote.firebase.toExample
-import com.project.speakmate.data.remote.firebase.FirestoreCollection
-import com.project.speakmate.data.remote.firebase.FirestoreField
-import com.project.speakmate.utils.extension.suspendRunCatching
-
-import com.google.firebase.firestore.FirebaseFirestore
-import com.project.speakmate.domain.model.GrammarPoint
 import com.project.speakmate.domain.model.GoalAssessment
-import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.model.GrammarPoint
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SentencePattern
 import com.project.speakmate.domain.model.SpeakingLevel
@@ -26,8 +20,9 @@ import com.project.speakmate.domain.model.TrainingPath
 import com.project.speakmate.domain.model.TrainingUnit
 import com.project.speakmate.domain.model.UnitPreparation
 import com.project.speakmate.domain.model.VocabularyItem
-import com.project.speakmate.domain.repository.TrainingRepository
 import com.project.speakmate.domain.repository.ScenarioRepository
+import com.project.speakmate.domain.repository.TrainingRepository
+import com.project.speakmate.utils.extension.suspendRunCatching
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.async
@@ -37,17 +32,15 @@ import kotlinx.coroutines.tasks.await
 
 @Singleton
 class TrainingRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
+    firestore: FirebaseFirestore,
     private val scenarioRepository: ScenarioRepository
 ) : TrainingRepository {
-    private val paths get() = firestore.collection(FirestoreCollection.TRAINING_PATHS)
-    private val goals get() = firestore.collection(FirestoreCollection.TRAINING_GOALS)
-    private val units get() = firestore.collection(FirestoreCollection.TRAINING_UNITS)
-    private val assessments get() = firestore.collection(FirestoreCollection.GOAL_ASSESSMENTS)
+    private val dataSource = FirestoreTrainingDataSource(firestore)
+    private val contentMapper = TrainingContentMapper()
 
     override suspend fun getTrainingPath(level: SpeakingLevel): Result<TrainingPath> = suspendRunCatching {
         require(level != SpeakingLevel.NOT_ASSESSED) { "A training path requires an assessed level." }
-        val document = paths.document(level.name).get().await().required("Training path ${level.name}")
+        val document = dataSource.getTrainingPath(level)
         val goalIds = document.requiredStringList(FirestoreField.GOALS)
         TrainingPath(
             pathId = document.stringOrId(FirestoreField.PATH_ID),
@@ -69,7 +62,7 @@ class TrainingRepositoryImpl @Inject constructor(
         suspendRunCatching { scenarioRepository.getScenarioImageUrl(scenarioId) }
 
     private suspend fun loadGoal(goalId: String): TrainingGoal {
-        val document = goals.document(goalId).get().await().required("Training goal $goalId")
+        val document = dataSource.getTrainingGoal(goalId)
         val unitIds = document.requiredStringList(FirestoreField.UNITS)
         return TrainingGoal(
             goalId = document.stringOrId(FirestoreField.GOAL_ID),
@@ -81,16 +74,12 @@ class TrainingRepositoryImpl @Inject constructor(
     }
 
     private suspend fun loadAssessment(assessmentId: String): GoalAssessment {
-        val document = assessments.document(assessmentId).get().await().required("Goal assessment $assessmentId")
-        return GoalAssessment(
-            scenarioId = document.requiredString(FirestoreField.SCENARIO_ID),
-            title = document.requiredString(FirestoreField.TITLE),
-            requiredActions = document.requiredActions()
-        )
+        val document = dataSource.getAssessment(assessmentId)
+        return contentMapper.toAssessment(document)
     }
 
     private suspend fun loadUnit(unitId: String): TrainingUnit {
-        val document = units.document(unitId).get().await().required("Training unit $unitId")
+        val document = dataSource.getTrainingUnit(unitId)
         val preparation = document.requiredMap(FirestoreField.PREPARATION)
         val vocabularyIds = preparation.requiredReferenceIds(FirestoreField.VOCABULARY)
         val grammarIds = preparation.requiredReferenceIds(FirestoreField.GRAMMAR_POINTS)
@@ -112,34 +101,17 @@ class TrainingRepositoryImpl @Inject constructor(
     }
 
     private suspend fun loadVocabulary(id: String): VocabularyItem {
-        val document = firestore.collection(FirestoreCollection.VOCABULARIES).document(id).get().await().required("Vocabulary $id")
-        return VocabularyItem(
-            word = document.requiredString(FirestoreField.WORD),
-            mean = document.requiredString(FirestoreField.MEAN),
-            phonetic = document.requiredString(FirestoreField.PHONETIC),
-            partOfSpeech = document.requiredString(FirestoreField.PART_OF_SPEECH),
-            example = document.requiredMap(FirestoreField.EXAMPLE).toExample("Vocabulary $id example")
-        )
+        val document = dataSource.getVocabulary(id)
+        return contentMapper.toVocabulary(document, id)
     }
 
     private suspend fun loadGrammar(id: String): GrammarPoint {
-        val document = firestore.collection(FirestoreCollection.GRAMMAR_POINTS).document(id).get().await().required("Grammar point $id")
-        return GrammarPoint(
-            title = document.requiredString(FirestoreField.TITLE),
-            structure = document.requiredString(FirestoreField.STRUCTURE),
-            explanation = document.requiredString(FirestoreField.EXPLANATION),
-            usage = document.requiredString(FirestoreField.USAGE),
-            examples = document.requiredExampleList(FirestoreField.EXAMPLES, "Grammar point $id")
-        )
+        val document = dataSource.getGrammar(id)
+        return contentMapper.toGrammar(document, id)
     }
 
     private suspend fun loadPattern(id: String): SentencePattern {
-        val document = firestore.collection(FirestoreCollection.SENTENCE_PATTERNS).document(id).get().await().required("Sentence pattern $id")
-        return SentencePattern(
-            pattern = document.requiredString(FirestoreField.PATTERN),
-            mean = document.requiredString(FirestoreField.MEAN),
-            usage = document.requiredString(FirestoreField.USAGE),
-            examples = document.requiredExampleList(FirestoreField.EXAMPLES, "Sentence pattern $id")
-        )
+        val document = dataSource.getPattern(id)
+        return contentMapper.toPattern(document, id)
     }
 }

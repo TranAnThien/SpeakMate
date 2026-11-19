@@ -282,7 +282,7 @@ class TrainingProgressRulesTest {
         assessmentStatuses: List<ContentStatus>
     ) {
         assertEquals(goalStatuses, path.goals.indices.map { rules.getGoalStatus(path, progress, it) })
-        assertEquals(goalStatuses, path.goals.indices.map { path.getGoalStatus(it, progress) })
+        assertEquals(goalStatuses, path.goals.indices.map { rules.getGoalStatus(path, progress, it) })
         assertEquals(assessmentStatuses, path.goals.indices.map { rules.getGoalAssessmentStatus(path, progress, it) })
         assertEquals(
             unitStatuses,
@@ -293,7 +293,7 @@ class TrainingProgressRulesTest {
         assertEquals(
             unitStatuses,
             path.goals.mapIndexed { goalIndex, goal ->
-                goal.units.indices.map { goal.getUnitStatus(goalIndex, it, progress) }
+                goal.units.indices.map { rules.getUnitStatus(goal, progress, goalIndex, it) }
             }
         )
     }

@@ -1,9 +1,7 @@
 package com.project.speakmate.ui.home.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 
-@Keep
 @Immutable
 data class HomeUiState(
     val presentation: HomePresentation = HomePresentation.LOADING,
@@ -12,6 +10,7 @@ data class HomeUiState(
     val goalTitle: String = "",
     val unitTitle: String = "",
     val unitDescription: String = "",
+    val isGoalAssessment: Boolean = false,
     val displayName: String = "",
     val email: String = "",
     val avatarUrl: String? = null

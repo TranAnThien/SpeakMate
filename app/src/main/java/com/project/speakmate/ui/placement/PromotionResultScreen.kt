@@ -25,9 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.placement.components.PlacementAppBar
-import com.project.speakmate.ui.placement.components.PlacementSecondaryButton
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.placement.state.PromotionResultPresentation
 import com.project.speakmate.ui.placement.state.PromotionResultUiState
 import com.project.speakmate.ui.theme.DesignColor
@@ -44,7 +44,7 @@ fun PromotionResultScreen(
     onRetrySave: () -> Unit = {}
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PlacementAppBar(stringResource(R.string.promotion_header), onBack)
+        BackAppBar(stringResource(R.string.promotion_header), onBack)
         Surface(Modifier.fillMaxSize(), color = DesignColor.Scrim) {
             Box(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
                 Surface(Modifier.widthIn(max = 364.dp).fillMaxWidth().offset(y = (-16).dp),
@@ -82,7 +82,7 @@ fun PromotionResultScreen(
                             enabled = !state.isSaving && (state.presentation != PromotionResultPresentation.PROMOTED || state.isResultSaved || state.isSaveFailed)
                         )
                         if (state.presentation == PromotionResultPresentation.INSUFFICIENT_EVIDENCE && state.canRetryAssessment) {
-                            PlacementSecondaryButton(stringResource(R.string.promotion_return_to_path, state.currentLevelLabel), onReturnToCurrentPath)
+                            SecondaryButton(stringResource(R.string.promotion_return_to_path, state.currentLevelLabel), onReturnToCurrentPath)
                         }
                     }
                 }

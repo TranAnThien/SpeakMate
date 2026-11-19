@@ -1,17 +1,19 @@
 package com.project.speakmate.data.repository
 
-import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.project.speakmate.data.local.ActiveCallLocalDataSource
+import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.verify
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -30,7 +32,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun signInWithGoogle_returnsSuccess_withUid() = runTest {
+    fun signInWithGoogleReturnsSuccessWithUid() = runTest {
         coEvery { authDataSource.signInWithGoogle("valid-token") } returns "uid-abc"
 
         val result = repository.signInWithGoogle("valid-token")
@@ -40,7 +42,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun signInWithGoogle_returnsFailure_whenAuthFails() = runTest {
+    fun signInWithGoogleReturnsFailureWhenAuthFails() = runTest {
         coEvery { authDataSource.signInWithGoogle("bad-token") } throws RuntimeException("Auth failed")
 
         val result = repository.signInWithGoogle("bad-token")
@@ -50,7 +52,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun signOut_returnsSuccess() = runTest {
+    fun signOutReturnsSuccess() = runTest {
         coEvery { authDataSource.signOut() } just runs
 
         val result = repository.signOut()
@@ -70,7 +72,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun signOut_returnsFailure_whenThrows() = runTest {
+    fun signOutReturnsFailureWhenThrows() = runTest {
         coEvery { authDataSource.signOut() } throws RuntimeException("Sign out error")
 
         val result = repository.signOut()
@@ -80,7 +82,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun getSignedInUserId_emitsUid() = runTest {
+    fun getSignedInUserIdEmitsUid() = runTest {
         every { authDataSource.observeSignedInUserId() } returns flowOf("uid-123")
 
         val uid = repository.observeSignedInUserId().first()
@@ -89,7 +91,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun getSignedInUserId_emitsNull_whenNotSignedIn() = runTest {
+    fun getSignedInUserIdEmitsNullWhenNotSignedIn() = runTest {
         every { authDataSource.observeSignedInUserId() } returns flowOf(null)
 
         val uid = repository.observeSignedInUserId().first()

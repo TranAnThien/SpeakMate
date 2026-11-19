@@ -52,7 +52,7 @@ fun PreparationOverviewContent(
     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.preparation_context), style = DesignTypography.Label, color = DesignColor.Muted)
-        Text(context.removePrefix("Bối cảnh:").trim(), style = DesignTypography.Detail, color = DesignColor.Text)
+        Text(context.removePrefix(stringResource(R.string.preparation_context_prefix)).trim(), style = DesignTypography.Detail, color = DesignColor.Text)
     }
     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -23,9 +23,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.placement.components.PlacementAppBar
-import com.project.speakmate.ui.placement.components.PlacementSecondaryButton
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.placement.components.PromotionStepsCard
 import com.project.speakmate.ui.placement.state.PromotionIntroductionUiState
 import com.project.speakmate.ui.theme.DesignColor
@@ -41,7 +41,7 @@ fun PromotionIntroductionScreen(
     scrollState: ScrollState = rememberScrollState()
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PlacementAppBar(stringResource(R.string.promotion_header), onBack)
+        BackAppBar(stringResource(R.string.promotion_header), onBack)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState).padding(horizontal = 24.dp)
             .padding(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -69,7 +69,7 @@ fun PromotionIntroductionScreen(
         Column(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             PrimaryButton(stringResource(R.string.placement_start), onStartAssessment)
-            PlacementSecondaryButton(stringResource(R.string.goal_assessment_return_to_path), onReturnToPath)
+            SecondaryButton(stringResource(R.string.goal_assessment_return_to_path), onReturnToPath)
         }
     }
 }

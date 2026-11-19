@@ -1,14 +1,11 @@
 package com.project.speakmate.ui.training.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 import com.project.speakmate.domain.model.TrainingActivityScenario
 
-@Keep
 @Immutable
 data class UnitPreparationUiState(
     val status: TrainingContentStatus = TrainingContentStatus.LOADING,
-    val errorMessage: String = "",
     val section: PreparationSection = PreparationSection.OVERVIEW,
     val contextLabel: String = "",
     val title: String = "",

@@ -30,12 +30,12 @@ import com.project.speakmate.ui.call.components.CallAvatar
 import com.project.speakmate.ui.call.components.CallControls
 import com.project.speakmate.ui.call.components.CallEndConfirmation
 import com.project.speakmate.ui.call.components.CallFailureContent
-import com.project.speakmate.ui.call.components.CallSecondaryButton
 import com.project.speakmate.ui.call.components.CallStatusHeader
 import com.project.speakmate.ui.call.components.CallTranscriptSheet
 import com.project.speakmate.ui.call.state.CallPresentation
 import com.project.speakmate.ui.call.state.CallUiState
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -123,7 +123,7 @@ fun CallScreen(
                         when {
                             isReady -> {
                                 PrimaryButton(stringResource(R.string.call_start), onStartCall)
-                                CallSecondaryButton(
+                                SecondaryButton(
                                     stringResource(if (state.isStandaloneCall) R.string.call_exit else R.string.call_return_to_preparation),
                                     onReturnToPreparation
                                 )
@@ -137,7 +137,7 @@ fun CallScreen(
                             )
                             else -> PrimaryButton(stringResource(R.string.call_continue), onResumeCall)
                         }
-                        if (isPaused) CallSecondaryButton(stringResource(R.string.call_end), onEndCall)
+                        if (isPaused) SecondaryButton(stringResource(R.string.call_end), onEndCall)
                     }
                 } else {
                     CallControls(state.isMuted, isConnecting, onToggleMute, onEndCall,

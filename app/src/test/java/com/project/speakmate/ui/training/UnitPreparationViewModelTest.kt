@@ -13,7 +13,7 @@ import com.project.speakmate.test.FakePronunciationRepository
 import com.project.speakmate.test.FakeTrainingRepository
 import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
-import com.project.speakmate.test.q2Path
+import com.project.speakmate.test.TrainingTestFixtures
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -96,7 +96,7 @@ class UnitPreparationViewModelTest {
 
     @Test
     fun preparationKeepsEveryGrammarAndSentencePatternExample() = runTest {
-        val path = q2Path()
+        val path = TrainingTestFixtures.getPath()
         val goal = path.goals.first()
         val unit = goal.units.first()
         val examples = listOf(LearningExample("First sentence", "First translation"), LearningExample("Second sentence", "Second translation"))

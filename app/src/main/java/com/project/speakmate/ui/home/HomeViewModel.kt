@@ -6,20 +6,20 @@ import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
-import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.domain.repository.TrainingRepository
+import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.ui.home.state.HomePresentation
 import com.project.speakmate.ui.home.state.HomeUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -120,7 +120,7 @@ class HomeViewModel @Inject constructor(
         val (unitTitle, unitDescription) = if (progress.stage == TrainingStage.GOAL_ASSESSMENT) {
             Pair(
                 currentGoal.goalAssessment.title,
-                "Hoàn thành bài kiểm tra để mở khóa mục tiêu tiếp theo."
+                ""
             )
         } else {
             val currentUnit = currentGoal.units.getOrNull(progress.currentUnitOrder)
@@ -141,6 +141,7 @@ class HomeViewModel @Inject constructor(
                 goalTitle = goalTitle,
                 unitTitle = unitTitle,
                 unitDescription = unitDescription,
+                isGoalAssessment = progress.stage == TrainingStage.GOAL_ASSESSMENT,
                 displayName = user.displayName,
                 email = user.email,
                 avatarUrl = user.photoUrl

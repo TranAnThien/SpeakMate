@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.theme.DesignColor
+import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.TrainingGoalCard
 import com.project.speakmate.ui.training.components.TrainingHeader
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
@@ -40,8 +42,6 @@ import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingGoalUiState
 import com.project.speakmate.ui.training.state.TrainingPathUiState
-import com.project.speakmate.ui.theme.DesignColor
-import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun TrainingPathScreen(
@@ -78,7 +78,7 @@ fun TrainingPathScreen(
                     TrainingContentStatus.ERROR -> TrainingUnavailableContent(
                         isLoading = false,
                         onRetry = onRetry,
-                        errorMessage = if (state.progressProblem != null) stringResource(R.string.training_progress_invalid) else state.errorMessage
+                        errorMessage = if (state.progressProblem != null) stringResource(R.string.training_progress_invalid) else ""
                     )
                     TrainingContentStatus.ERROR_DIALOG -> Unit
                 }

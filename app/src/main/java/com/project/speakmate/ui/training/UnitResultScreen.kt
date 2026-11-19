@@ -21,9 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
-import com.project.speakmate.ui.training.components.PreparationHeader
 import com.project.speakmate.ui.training.components.UnitResultCriterionCard
 import com.project.speakmate.ui.training.components.UnitResultFooter
 import com.project.speakmate.ui.training.components.UnitResultOutcome
@@ -44,7 +44,7 @@ fun UnitResultScreen(
     onRetrySave: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PreparationHeader(if (state.presentation == UnitResultPresentation.PROCESSING)
+        BackAppBar(if (state.presentation == UnitResultPresentation.PROCESSING)
             stringResource(R.string.unit_result_header) else state.title, onBack)
         if (state.presentation == UnitResultPresentation.PROCESSING) {
             Box(Modifier.weight(1f).fillMaxWidth(),

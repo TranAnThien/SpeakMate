@@ -1,9 +1,7 @@
 package com.project.speakmate.ui.history
 
-import com.project.speakmate.utils.AppConstant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.durationInSeconds
@@ -12,12 +10,14 @@ import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.ui.components.ContentFilterUiState
 import com.project.speakmate.ui.history.state.HistoryGroupUiState
 import com.project.speakmate.ui.history.state.HistoryPresentation
-import com.project.speakmate.ui.history.state.HistoryResultPresentation
 import com.project.speakmate.ui.history.state.HistorySessionUiState
 import com.project.speakmate.ui.history.state.HistoryUiState
+import com.project.speakmate.utils.AppConstant
+import com.project.speakmate.utils.extension.default
+import com.project.speakmate.utils.extension.toDateLabel
+import com.project.speakmate.utils.extension.toDurationLabel
+import com.project.speakmate.utils.extension.toTimeLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.SimpleDateFormat
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -46,8 +46,6 @@ class HistoryViewModel @Inject constructor(
 
     private val selectedFilter = MutableStateFlow(AppConstant.HISTORY_FILTER_ALL)
     private val loadRequest = MutableStateFlow(0)
-    private val dateFormatter = SimpleDateFormat(AppConstant.DISPLAY_DATE_PATTERN, Locale.getDefault())
-    private val timeFormatter = SimpleDateFormat(AppConstant.DISPLAY_TIME_PATTERN, Locale.getDefault())
     private val scenarioTitleCache = ConcurrentHashMap<String, String>()
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -64,7 +62,7 @@ class HistoryViewModel @Inject constructor(
         initialValue = loadState(HistoryPresentation.LOADING)
     )
 
-    fun onSelectFilter(filterId: String) {
+    fun selectFilter(filterId: String) {
         selectedFilter.value = filterId
     }
 
@@ -106,7 +104,7 @@ class HistoryViewModel @Inject constructor(
                         if (cached != null) {
                             id to cached
                         } else {
-                            val title = practiceRepository.getScenario(id).getOrNull()?.name?.takeIf { it.isNotBlank() } ?: id
+                            val title = practiceRepository.getScenario(id).getOrNull()?.name?.takeIf { it.isNotBlank() }.default(id)
                             scenarioTitleCache[id] = title
                             id to title
                         }
@@ -114,14 +112,13 @@ class HistoryViewModel @Inject constructor(
                 }.awaitAll().toMap()
             }
 
-            val groups = filtered.groupBy { dateFormatter.format(it.startedAt) }
+            val groups = filtered.groupBy { it.startedAt.toDateLabel() }
                 .map { (date, items) ->
                     HistoryGroupUiState(
                         id = date,
                         title = date,
                         sessions = items.map { attempt ->
-                            val resolvedTitle = titles[attempt.scenarioId]?.takeIf { it.isNotBlank() }
-                                ?: attempt.scenarioId
+                            val resolvedTitle = titles[attempt.scenarioId]?.takeIf { it.isNotBlank() }.default(attempt.scenarioId)
                             toSessionUiState(attempt, resolvedTitle)
                         }
                     )
@@ -136,15 +133,14 @@ class HistoryViewModel @Inject constructor(
     }
 
     private fun toSessionUiState(attempt: PracticeAttempt, scenarioTitle: String): HistorySessionUiState {
-        val duration = String.format(Locale.ROOT, AppConstant.DURATION_FORMAT,
-            attempt.durationInSeconds / AppConstant.SECONDS_PER_MINUTE, attempt.durationInSeconds % AppConstant.SECONDS_PER_MINUTE)
+        val duration = attempt.durationInSeconds.toDurationLabel()
         return HistorySessionUiState(
             id = attempt.attemptId,
             title = scenarioTitle,
             result = HistoryResultMapper.toPresentation(attempt.result, attempt.practiceType),
             practiceType = attempt.practiceType,
             duration = duration,
-            performedAt = timeFormatter.format(attempt.startedAt)
+            performedAt = attempt.startedAt.toTimeLabel()
         )
     }
 

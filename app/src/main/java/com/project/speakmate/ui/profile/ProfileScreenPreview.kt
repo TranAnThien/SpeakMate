@@ -3,10 +3,8 @@ package com.project.speakmate.ui.profile
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.project.speakmate.R
 import com.project.speakmate.ui.profile.state.ProfileSkillUiState
 import com.project.speakmate.ui.profile.state.ProfileUiState
 import com.project.speakmate.ui.theme.SpeakMateTheme
@@ -63,21 +61,21 @@ private fun ProfileLongNameBottomScreenPreview() {
 
 @Composable
 private fun rememberProfilePreviewState(isLongName: Boolean): ProfileUiState = ProfileUiState(
-    displayName = stringResource(if (isLongName) R.string.profile_preview_long_name else R.string.profile_preview_display_name),
-    email = stringResource(R.string.profile_preview_email),
+    displayName = if (isLongName) "Đặng Trần Anh Quân Nguyễn Hoàng Minh" else "Đặng Trần Anh Quân",
+    email = "quandang@example.com",
     avatarUrl = null,
     levelLabel = "A2",
-    assessmentDescription = stringResource(R.string.profile_preview_assessment_description),
+    assessmentDescription = "Đây là kết quả ước lượng phục vụ học tập.\nĐánh giá gần nhất: 07/10/2026",
     skills = listOf(
-        ProfileSkillUiState("range", stringResource(R.string.profile_preview_skill_0_title),
-            stringResource(R.string.profile_preview_skill_0_description), true),
-        ProfileSkillUiState("accuracy", stringResource(R.string.profile_preview_skill_1_title),
-            stringResource(R.string.profile_preview_skill_1_description), false),
-        ProfileSkillUiState("fluency", stringResource(R.string.profile_preview_skill_2_title),
-            stringResource(R.string.profile_preview_skill_2_description), true),
-        ProfileSkillUiState("interaction", stringResource(R.string.profile_preview_skill_3_title),
-            stringResource(R.string.profile_preview_skill_3_description), true),
-        ProfileSkillUiState("coherence", stringResource(R.string.profile_preview_skill_4_title),
-            stringResource(R.string.profile_preview_skill_4_description), false)
+        ProfileSkillUiState("range", "Range (Từ vựng)",
+            "Sử dụng từ vựng đa dạng, linh hoạt", true),
+        ProfileSkillUiState("accuracy", "Accuracy (Chính xác)",
+            "Ngữ pháp và phát âm đúng chuẩn", false),
+        ProfileSkillUiState("fluency", "Fluency (Trôi chảy)",
+            "Khả năng duy trì lời nói tương đối trôi chảy", true),
+        ProfileSkillUiState("interaction", "Interaction (Tương tác)",
+            "Khả năng phản hồi và dẫn dắt", true),
+        ProfileSkillUiState("coherence", "Coherence (Gắn kết)",
+            "Tính liên kết giữa các câu", false)
     )
 )

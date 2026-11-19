@@ -11,9 +11,13 @@ import com.project.speakmate.domain.model.TranscriptMessage
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.components.AssessmentCriterionType.FLUENCY
+import com.project.speakmate.ui.components.AssessmentCriterionType.RANGE
+import com.project.speakmate.ui.history.state.HistoryResultPresentation.NOT_EVALUATED
 import com.project.speakmate.ui.history.state.SessionDetailPresentation
 import io.mockk.coEvery
 import io.mockk.mockk
+import java.util.Date
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -21,7 +25,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import java.util.Date
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionDetailViewModelTest {
@@ -107,8 +110,8 @@ class SessionDetailViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(SessionDetailPresentation.COMPLETED, state.presentation)
         assertEquals(5, state.criteria.size)
-        assertTrue(state.criteria.first { it.criterion == com.project.speakmate.ui.components.AssessmentCriterionType.RANGE }.isPassed)
-        org.junit.Assert.assertFalse(state.criteria.first { it.criterion == com.project.speakmate.ui.components.AssessmentCriterionType.FLUENCY }.isPassed)
+        assertTrue(state.criteria.first { it.criterion == RANGE }.isPassed)
+        org.junit.Assert.assertFalse(state.criteria.first { it.criterion == FLUENCY }.isPassed)
     }
 
     @Test
@@ -134,7 +137,7 @@ class SessionDetailViewModelTest {
         coEvery { practice.getScenario(any()) } returns Result.failure(IllegalStateException())
         val viewModel = SessionDetailViewModel(SavedStateHandle(mapOf("attemptId" to "attempt_123")), history, practice)
         advanceUntilIdle()
-        assertEquals(com.project.speakmate.ui.history.state.HistoryResultPresentation.NOT_EVALUATED, viewModel.uiState.value.result)
+        assertEquals(NOT_EVALUATED, viewModel.uiState.value.result)
         assertTrue(viewModel.uiState.value.messages[0].isInterrupted)
         assertEquals(false, viewModel.uiState.value.messages[1].isInterrupted)
         assertEquals("Tốt", viewModel.uiState.value.feedbackSummary)

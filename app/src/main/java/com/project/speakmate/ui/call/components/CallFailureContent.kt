@@ -22,7 +22,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -36,7 +38,7 @@ fun CallFailureContent(
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        CallPageHeader(
+        BackAppBar(
             stringResource(if (isConnectionFailure) R.string.call_failure_header else R.string.call_failure_general_header),
             onExit,
             isClose = true
@@ -57,7 +59,7 @@ fun CallFailureContent(
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (retryLabel != null) PrimaryButton(retryLabel, onRetry)
-            CallSecondaryButton(stringResource(R.string.call_exit), onExit)
+            SecondaryButton(stringResource(R.string.call_exit), onExit)
         }
     }
 }

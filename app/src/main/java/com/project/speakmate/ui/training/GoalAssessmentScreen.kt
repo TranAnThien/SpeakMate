@@ -19,13 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.GoalAssessmentFooter
 import com.project.speakmate.ui.training.components.GoalAssessmentOutcome
 import com.project.speakmate.ui.training.components.GoalAssessmentRequiredActions
 import com.project.speakmate.ui.training.components.GoalAssessmentTextCard
-import com.project.speakmate.ui.training.components.PreparationHeader
 import com.project.speakmate.ui.training.state.GoalAssessmentPresentation
 import com.project.speakmate.ui.training.state.GoalAssessmentUiState
 
@@ -44,7 +44,7 @@ fun GoalAssessmentScreen(
     onRetrySave: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PreparationHeader(stringResource(R.string.goal_assessment_header), onBack)
+        BackAppBar(stringResource(R.string.goal_assessment_header), onBack)
         if (state.presentation == GoalAssessmentPresentation.PROCESSING) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 GoalAssessmentOutcome(state.presentation, state.title, state.description,

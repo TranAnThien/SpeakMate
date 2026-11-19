@@ -19,12 +19,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.project.speakmate.R
 import com.project.speakmate.ui.practice.state.ScenarioItemUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.extension.default
 
 @Composable
 fun ScenarioCard(scenario: ScenarioItemUiState, onSelectScenario: () -> Unit, modifier: Modifier = Modifier) {
@@ -48,7 +50,7 @@ fun ScenarioCard(scenario: ScenarioItemUiState, onSelectScenario: () -> Unit, mo
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(scenario.categoryLabel, style = DesignTypography.Label, color = DesignColor.Primary)
             Text(scenario.title, style = DesignTypography.Title, color = DesignColor.Text)
-            Text(scenario.roleLabel, style = DesignTypography.Detail, color = DesignColor.Primary)
+            Text(scenario.roleLabel.default(stringResource(R.string.practice_default_role)), style = DesignTypography.Detail, color = DesignColor.Primary)
             Text(scenario.description, style = DesignTypography.Detail, color = DesignColor.Muted)
         }
         Icon(painterResource(R.drawable.ic_content_chevron), null, Modifier.size(20.dp), tint = DesignColor.Muted)

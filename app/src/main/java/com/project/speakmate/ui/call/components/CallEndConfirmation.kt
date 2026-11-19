@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -59,7 +60,7 @@ fun CallEndConfirmation(
                     Text(stringResource(R.string.call_confirm_end), style = DesignTypography.Button, color = DesignColor.Surface, textAlign = TextAlign.Center)
                 }
                 Spacer(Modifier.height(12.dp))
-                CallSecondaryButton(dismissLabel, onContinueCall)
+                SecondaryButton(dismissLabel, onContinueCall)
             }
         }
     }

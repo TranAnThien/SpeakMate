@@ -1,8 +1,6 @@
 package com.project.speakmate.ui.history
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
@@ -24,16 +24,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.project.speakmate.ui.components.AssessmentCriterionType
-import com.project.speakmate.ui.history.state.HistoryResultPresentation
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AssessmentCriterionCard
+import com.project.speakmate.ui.components.AssessmentCriterionType
 import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.ContentErrorDialog
 import com.project.speakmate.ui.components.ContentSkeletonCards
 import com.project.speakmate.ui.components.ContentStatusPanel
 import com.project.speakmate.ui.history.components.SessionRequiredActions
 import com.project.speakmate.ui.history.components.SessionTranscriptMessage
+import com.project.speakmate.ui.history.state.HistoryResultPresentation
 import com.project.speakmate.ui.history.state.SessionDetailPresentation
 import com.project.speakmate.ui.history.state.SessionDetailUiState
 import com.project.speakmate.ui.history.state.SessionMessageUiState
@@ -111,7 +111,7 @@ fun SessionDetailScreen(
                                     modifier = Modifier.padding(bottom = 8.dp))
                             }
                             if (state.presentation == SessionDetailPresentation.COMPLETED) {
-                                itemsIndexed(state.messages, key = { index, message -> "message:$index:${message.id}" },
+                                itemsIndexed(state.messages.distinctBy { it.id }, key = { _, message -> "message:${message.id}" },
                                     contentType = { _, _ -> SessionMessageUiState::class }) { _, message ->
                                     SessionTranscriptMessage(message)
                                 }

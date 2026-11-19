@@ -1,11 +1,9 @@
 package com.project.speakmate.ui.placement.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 import com.project.speakmate.domain.model.ReassessmentStep
 import com.project.speakmate.domain.model.SpeakingLevel
 
-@Keep
 @Immutable
 data class PlacementStatusUiState(
     val status: PlacementStatus = PlacementStatus.PROCESSING,

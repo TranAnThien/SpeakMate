@@ -27,8 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.placement.components.PlacementAppBar
 import com.project.speakmate.ui.placement.components.PlacementBadge
 import com.project.speakmate.ui.placement.state.PlacementResultUiState
 import com.project.speakmate.ui.placement.state.PlacementSkillUiState
@@ -44,7 +44,7 @@ fun PlacementResultScreen(
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PlacementAppBar(stringResource(R.string.placement_result_title), onBack)
+        BackAppBar(stringResource(R.string.placement_result_title), onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 32.dp)) {
             PlacementLevelCard(state.level, state.levelLabel, state.isLowestLevelAssigned)
@@ -122,11 +122,11 @@ private fun PlacementResultA2ScreenPreview() {
             state = PlacementResultUiState(
                 level = "A2",
                 levelLabel = stringResource(R.string.placement_a2_label),
-                range = PlacementSkillUiState(stringResource(R.string.placement_preview_range_feedback), true),
-                accuracy = PlacementSkillUiState(stringResource(R.string.placement_preview_accuracy_feedback), false),
-                fluency = PlacementSkillUiState(stringResource(R.string.placement_preview_fluency_feedback), true),
-                interaction = PlacementSkillUiState(stringResource(R.string.placement_preview_interaction_feedback), true),
-                coherence = PlacementSkillUiState(stringResource(R.string.placement_preview_coherence_feedback), true)
+                range = PlacementSkillUiState("Sử dụng từ vựng cơ bản tốt", true),
+                accuracy = PlacementSkillUiState("Cần chú ý chia động từ", false),
+                fluency = PlacementSkillUiState("Duy trì lời nói tương đối trôi chảy", true),
+                interaction = PlacementSkillUiState("Phản hồi phù hợp và duy trì trao đổi", true),
+                coherence = PlacementSkillUiState("Ý tưởng được kết nối rõ", true)
             ),
             onBack = {},
             onStartTrainingPath = {}

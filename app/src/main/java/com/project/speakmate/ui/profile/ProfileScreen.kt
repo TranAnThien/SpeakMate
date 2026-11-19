@@ -20,8 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.components.UserProfileLoadError
 import com.project.speakmate.ui.profile.components.ProfileHeader
 import com.project.speakmate.ui.profile.components.ProfileIdentity
@@ -86,7 +86,7 @@ fun ProfileScreen(
             item(key = "skills-heading", contentType = String::class) {
                 Text(stringResource(R.string.profile_skills_heading), style = DesignTypography.Title, color = DesignColor.Text)
             }
-            itemsIndexed(state.skills, key = { index, skill -> "skill:$index:${skill.id}" },
+            itemsIndexed(state.skills.distinctBy { it.id }, key = { _, skill -> "skill:${skill.id}" },
                 contentType = { _, _ -> ProfileSkillUiState::class }) { _, skill ->
                 ProfileSkillCard(skill)
             }

@@ -5,8 +5,8 @@ import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.CallState
-import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementResult
+import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingProgress
@@ -27,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -176,7 +177,7 @@ class PlacementViewModelTest {
     fun resultSubmittedAsThePreviousJobPublishesCallingIsGraded() = runTest {
         val viewModel = createViewModel()
         advanceUntilIdle()
-        val observer = backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) {
+        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             viewModel.uiState.first { state ->
                 if (state.phase == PlacementPhase.CALLING) viewModel.submitCallResult(completedSession())
                 state.phase == PlacementPhase.RESULT

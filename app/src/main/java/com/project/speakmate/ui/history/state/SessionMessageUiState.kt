@@ -1,10 +1,8 @@
 package com.project.speakmate.ui.history.state
 
-import com.project.speakmate.domain.model.SenderType
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
+import com.project.speakmate.domain.model.SenderType
 
-@Keep
 @Immutable
 data class SessionMessageUiState(
     val id: String = "",

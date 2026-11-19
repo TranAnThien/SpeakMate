@@ -1,19 +1,21 @@
 package com.project.speakmate.ui.training
 
-import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.ProgressProblem
+import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.test.FakeAuthRepository
-import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.FakeTrainingRepository
+import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.training.state.TrainingActivityDestination.GoalAssessment
+import com.project.speakmate.ui.training.state.TrainingActivityDestination.Unit
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -87,7 +89,7 @@ class TrainingPathViewModelTest {
     fun currentAssessmentHasAnExplicitGoalDestination() = runTest {
         val state = createViewModel(user(TrainingProgress(0, 1, TrainingStage.GOAL_ASSESSMENT))).uiState.value
         val current = state.goals.flatMap { it.units }.single { it.status == TrainingProgressStatus.CURRENT }
-        assertEquals(com.project.speakmate.ui.training.state.TrainingActivityDestination.GoalAssessment("goal-1"), current.destination)
+        assertEquals(GoalAssessment("goal-1"), current.destination)
         assertEquals(true, current.canOpen)
     }
 
@@ -95,7 +97,7 @@ class TrainingPathViewModelTest {
     fun unitsKeepTheirExplicitUnitDestinations() = runTest {
         val state = createViewModel(user(TrainingProgress(0, 0, TrainingStage.UNIT))).uiState.value
         val current = state.goals.flatMap { it.units }.single { it.status == TrainingProgressStatus.CURRENT }
-        assertEquals(com.project.speakmate.ui.training.state.TrainingActivityDestination.Unit("unit-1"), current.destination)
+        assertEquals(Unit("unit-1"), current.destination)
     }
 
     private fun user(progress: TrainingProgress) = User(
@@ -107,4 +109,3 @@ class TrainingPathViewModelTest {
         trainingProgress = progress
     )
 }
-

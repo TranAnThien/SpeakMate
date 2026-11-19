@@ -30,6 +30,7 @@ import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
 import com.project.speakmate.ui.practice.state.ScenarioItemUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.AppConstant
 
 @Composable
 fun ScenarioCatalogScreen(
@@ -51,13 +52,15 @@ fun ScenarioCatalogScreen(
                         Text(stringResource(R.string.practice_learning_notice), style = DesignTypography.Detail, color = DesignColor.Primary,
                             modifier = Modifier.fillMaxWidth().background(DesignColor.SecondaryButton, RoundedCornerShape(16.dp)).padding(16.dp))
                         if (state.presentation != ScenarioCatalogPresentation.UNCONFIGURED) {
-                            ContentFilterRow(state.categories, state.selectedCategoryId, onSelectCategory)
+                            ContentFilterRow(state.categories.map { category ->
+                                if (category.id == AppConstant.PRACTICE_CATEGORY_ALL) category.copy(label = stringResource(R.string.practice_category_all)) else category
+                            }, state.selectedCategoryId, onSelectCategory)
                         }
                     }
                 }
                 when (state.presentation) {
-                    ScenarioCatalogPresentation.POPULATED -> itemsIndexed(state.scenarios,
-                        key = { index, scenario -> "scenario:$index:${scenario.id}" },
+                    ScenarioCatalogPresentation.POPULATED -> itemsIndexed(state.scenarios.distinctBy { it.id },
+                        key = { _, scenario -> "scenario:${scenario.id}" },
                         contentType = { _, _ -> ScenarioItemUiState::class }) { _, scenario ->
                         val onSelect = remember(scenario.id, onSelectScenario) { { onSelectScenario(scenario.id) } }
                         ScenarioCard(scenario, onSelect)

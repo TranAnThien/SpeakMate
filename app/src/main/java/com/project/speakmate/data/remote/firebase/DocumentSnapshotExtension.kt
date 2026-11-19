@@ -4,11 +4,12 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.RequiredAction
 import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.utils.extension.default
 
 fun DocumentSnapshot.required(label: String): DocumentSnapshot =
     takeIf { exists() } ?: error("$label is missing from Firestore.")
 
-fun DocumentSnapshot.stringOrId(field: String): String = getString(field)?.takeIf(String::isNotBlank) ?: id
+fun DocumentSnapshot.stringOrId(field: String): String = getString(field)?.takeIf(String::isNotBlank).default(id)
 
 fun DocumentSnapshot.requiredString(field: String): String =
     getString(field)?.takeIf(String::isNotBlank) ?: error("Document '$id' is missing '$field'.")

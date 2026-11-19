@@ -26,11 +26,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.call.components.CallPageHeader
-import com.project.speakmate.ui.call.components.CallSecondaryButton
 import com.project.speakmate.ui.call.state.MicrophonePermissionPresentation
 import com.project.speakmate.ui.call.state.MicrophonePermissionUiState
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -46,7 +46,7 @@ fun MicrophonePermissionScreen(
 ) {
     val isRevoked = state.presentation == MicrophonePermissionPresentation.REVOKED
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        CallPageHeader(stringResource(when (state.presentation) {
+        BackAppBar(stringResource(when (state.presentation) {
             MicrophonePermissionPresentation.RATIONALE -> R.string.call_permission_rationale_header
             MicrophonePermissionPresentation.DENIED -> R.string.call_permission_denied_header
             MicrophonePermissionPresentation.REVOKED -> R.string.call_permission_revoked_header
@@ -79,7 +79,7 @@ fun MicrophonePermissionScreen(
                         Text(stringResource(if (isRevoked) R.string.call_permission_revoked_description else R.string.call_permission_denied_description),
                             style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
                         PrimaryButton(stringResource(R.string.call_open_settings), onOpenSettings)
-                        CallSecondaryButton(stringResource(if (isRevoked) R.string.call_exit else R.string.call_recheck_permission),
+                        SecondaryButton(stringResource(if (isRevoked) R.string.call_exit else R.string.call_recheck_permission),
                             if (isRevoked) onExit else onRecheckPermission)
                     }
                 }
@@ -88,7 +88,7 @@ fun MicrophonePermissionScreen(
         if (state.presentation == MicrophonePermissionPresentation.RATIONALE) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 PrimaryButton(stringResource(R.string.call_allow_microphone), onRequestPermission)
-                CallSecondaryButton(stringResource(R.string.call_back), onBack)
+                SecondaryButton(stringResource(R.string.call_back), onBack)
             }
         }
     }

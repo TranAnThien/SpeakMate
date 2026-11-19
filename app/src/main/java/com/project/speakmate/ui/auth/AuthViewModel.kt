@@ -1,9 +1,6 @@
 package com.project.speakmate.ui.auth
 
 import android.util.Log
-import com.project.speakmate.ui.auth.state.AuthEffect
-import com.project.speakmate.utils.extension.defaultEmpty
-import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.InvalidUserProfileException
@@ -11,9 +8,13 @@ import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.UserRepository
+import com.project.speakmate.ui.auth.state.AuthEffect
 import com.project.speakmate.ui.auth.state.GoogleSignInStatus
 import com.project.speakmate.ui.auth.state.GoogleSignInUiState
+import com.project.speakmate.utils.extension.defaultEmpty
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +24,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -58,16 +58,16 @@ class AuthViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                onGoogleSignInError(error)
+                showSignInError(error)
             }
         }
     }
 
-    fun onGoogleSignInCancelled() {
+    fun cancelSignIn() {
         _uiState.update { it.copy(status = GoogleSignInStatus.NORMAL) }
     }
 
-    fun onGoogleSignInError(error: Throwable) {
+    fun showSignInError(error: Throwable) {
         Log.e("AuthViewModel", "Google Sign-In failed")
         _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }
     }

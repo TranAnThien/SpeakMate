@@ -1,9 +1,7 @@
 package com.project.speakmate.ui.profile
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import com.project.speakmate.R
 import com.project.speakmate.ui.profile.state.SettingsUiState
 import com.project.speakmate.ui.theme.SpeakMateTheme
 
@@ -13,7 +11,7 @@ private fun SettingsScreenPreview() {
     SpeakMateTheme {
         SettingsScreen(
             state = SettingsUiState(
-                languageLabel = stringResource(R.string.settings_preview_language),
+                languageLabel = "Tiếng Việt",
                 isSignOutConfirmationVisible = false
             ),
             onBack = {},
@@ -33,7 +31,7 @@ private fun SettingsSignOutConfirmationScreenPreview() {
     SpeakMateTheme {
         SettingsScreen(
             state = SettingsUiState(
-                languageLabel = stringResource(R.string.settings_preview_language),
+                languageLabel = "Tiếng Việt",
                 isSignOutConfirmationVisible = true
             ),
             onBack = {},

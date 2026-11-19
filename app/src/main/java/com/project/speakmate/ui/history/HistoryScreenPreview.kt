@@ -104,19 +104,19 @@ private fun rememberHistoryPreviewState(presentation: HistoryPresentation): Hist
     selectedFilterId = "all",
     groups = if (presentation == HistoryPresentation.POPULATED) listOf(
         HistoryGroupUiState("today", stringResource(R.string.history_today), listOf(
-            HistorySessionUiState("passed", stringResource(R.string.history_preview_passed_metadata),
-                stringResource(R.string.history_preview_passed_title), stringResource(R.string.history_preview_passed_result),
+            HistorySessionUiState("passed", "UNIT · 14:20",
+                "Điều chỉnh đơn gọi món", "05:16 · Đạt",
                 HistoryResultPresentation.PASSED),
-            HistorySessionUiState("partial", stringResource(R.string.history_preview_partial_metadata),
-                stringResource(R.string.history_preview_partial_title), stringResource(R.string.history_preview_partial_result),
+            HistorySessionUiState("partial", "GOAL · 13:05",
+                "Gọi món và trao đổi tại quán cà phê", "06:08 · Đạt một phần",
                 HistoryResultPresentation.PARTIAL),
-            HistorySessionUiState("failed", stringResource(R.string.history_preview_failed_metadata),
-                stringResource(R.string.history_preview_failed_title), stringResource(R.string.history_preview_failed_result),
+            HistorySessionUiState("failed", "UNIT · 11:15",
+                "Phàn nàn về chất lượng đồ uống", "02:10 · Chưa đạt",
                 HistoryResultPresentation.NOT_PASSED)
         )),
         HistoryGroupUiState("yesterday", stringResource(R.string.history_yesterday), listOf(
-            HistorySessionUiState("free", stringResource(R.string.history_preview_free_metadata),
-                stringResource(R.string.history_preview_free_title), stringResource(R.string.history_preview_free_result),
+            HistorySessionUiState("free", "TỰ DO · 10:40",
+                "Nhận phòng khách sạn", "04:32 · Đã hoàn tất",
                 HistoryResultPresentation.COMPLETED)
         ))
     ) else emptyList()

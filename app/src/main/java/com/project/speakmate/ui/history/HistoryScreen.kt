@@ -16,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.ContentErrorDialog
 import com.project.speakmate.ui.components.ContentFilterRow
@@ -31,6 +30,7 @@ import com.project.speakmate.ui.history.state.HistorySessionUiState
 import com.project.speakmate.ui.history.state.HistoryUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.AppConstant
 
 @Composable
 fun HistoryScreen(
@@ -58,12 +58,12 @@ fun HistoryScreen(
                     }, state.selectedFilterId, onSelectFilter, Modifier.padding(bottom = 8.dp))
                 }
                 when (state.presentation) {
-                    HistoryPresentation.POPULATED -> state.groups.forEachIndexed { groupIndex, group ->
-                        item(key = "group:$groupIndex:${group.id}", contentType = HistoryGroupUiState::class) {
+                    HistoryPresentation.POPULATED -> state.groups.distinctBy { it.id }.forEach { group ->
+                        item(key = "group:${group.id}", contentType = HistoryGroupUiState::class) {
                             Text(group.title, style = DesignTypography.Label, color = DesignColor.Muted, modifier = Modifier.padding(bottom = 8.dp))
                         }
-                        itemsIndexed(group.sessions,
-                            key = { index, session -> "session:$groupIndex:$index:${session.id}" },
+                        itemsIndexed(group.sessions.distinctBy { it.id },
+                            key = { _, session -> "session:${group.id}:${session.id}" },
                             contentType = { _, _ -> HistorySessionUiState::class }) { index, session ->
                             val onOpen = remember(session.id, onOpenSession) { { onOpenSession(session.id) } }
                             HistorySessionCard(session, onOpen, Modifier.padding(bottom = if (index == group.sessions.lastIndex) 8.dp else 0.dp))

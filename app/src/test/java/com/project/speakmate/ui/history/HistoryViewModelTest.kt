@@ -12,6 +12,7 @@ import com.project.speakmate.ui.history.state.HistoryResultPresentation
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import java.util.Date
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -24,7 +25,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import java.util.Date
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HistoryViewModelTest {
@@ -143,7 +143,7 @@ class HistoryViewModelTest {
         historyListFlow.value = attempts
         advanceUntilIdle()
 
-        viewModel.onSelectFilter("training_unit")
+        viewModel.selectFilter("training_unit")
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -167,7 +167,7 @@ class HistoryViewModelTest {
         assertEquals(HistoryResultPresentation.NOT_EVALUATED, sessions[2].result)
         assertEquals(java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(now), sessions[0].performedAt)
         assertEquals("01:05", sessions[0].duration)
-        viewModel.onSelectFilter("training_unit")
+        viewModel.selectFilter("training_unit")
         advanceUntilIdle()
         assertEquals(setOf("unit", "goal"), viewModel.uiState.value.groups.flatMap { it.sessions }.map { it.id }.toSet())
     }

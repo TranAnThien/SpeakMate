@@ -1,16 +1,17 @@
 package com.project.speakmate.ui.profile
 
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.profile.state.ProfileEffect
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import com.project.speakmate.ui.profile.state.ProfileEffect
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -111,7 +112,7 @@ class ProfileViewModelTest {
 
     @Test
     fun profileMapsEveryCriterionAsMeaningInsteadOfDisplayText() = runTest {
-        users.setUser(user().copy(level = SpeakingLevel.B1, latestAssessmentCriteria = com.project.speakmate.domain.model.SpeakingCriteriaResult(true, false, true, false, true)))
+        users.setUser(user().copy(level = SpeakingLevel.B1, latestAssessmentCriteria = SpeakingCriteriaResult(true, false, true, false, true)))
         val viewModel = ProfileViewModel(auth, users)
         advanceUntilIdle()
         assertEquals(SpeakingLevel.B1, viewModel.uiState.value.level)

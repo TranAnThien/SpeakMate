@@ -5,6 +5,7 @@ import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.TranscriptMessage
+import com.project.speakmate.utils.extension.default
 import java.util.Date
 
 data class PracticeAttemptDto(
@@ -39,7 +40,7 @@ fun PracticeAttemptDto.toDomain(transcripts: List<TranscriptMessage>): PracticeA
         AssessmentResult.entries.firstOrNull { it.name == storedResult } ?: return null
     }
     val started = this.startedAt?.toDate() ?: Date()
-    val ended = this.endedAt?.toDate() ?: started
+    val ended = this.endedAt?.toDate().default(started)
     return PracticeAttempt(
         attemptId = this.attemptId,
         scenarioId = this.scenarioId,

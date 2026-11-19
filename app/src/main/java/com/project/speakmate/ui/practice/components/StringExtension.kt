@@ -1,4 +1,4 @@
-package com.project.speakmate.utils.extension
+package com.project.speakmate.ui.practice.components
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle

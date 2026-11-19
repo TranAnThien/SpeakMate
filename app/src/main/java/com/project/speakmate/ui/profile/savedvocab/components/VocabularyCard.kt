@@ -20,9 +20,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.R
 import com.project.speakmate.domain.model.VocabularyItem
 
 @Composable
@@ -69,12 +71,12 @@ fun VocabularyCard(
 
                 Row {
                     IconButton(onClick = { onPlayClick(item) }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.accessibility_play_pronunciation))
                     }
                     IconButton(onClick = { onDeleteClick(item) }) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.accessibility_delete_vocabulary),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }

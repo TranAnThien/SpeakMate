@@ -1,29 +1,28 @@
 package com.project.speakmate.ui.history
 
-import com.project.speakmate.utils.AppConstant
-import androidx.navigation.toRoute
-import com.project.speakmate.app.AppRoute
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.project.speakmate.ui.components.AssessmentCriterionType
-import com.project.speakmate.utils.extension.default
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
+import androidx.navigation.toRoute
+import com.project.speakmate.app.AppRoute
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.SenderType
 import com.project.speakmate.domain.model.durationInSeconds
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeRepository
+import com.project.speakmate.ui.components.AssessmentCriterionType
 import com.project.speakmate.ui.history.state.SessionActionUiState
 import com.project.speakmate.ui.history.state.SessionCriterionUiState
 import com.project.speakmate.ui.history.state.SessionDetailPresentation
 import com.project.speakmate.ui.history.state.SessionDetailUiState
 import com.project.speakmate.ui.history.state.SessionMessageUiState
+import com.project.speakmate.utils.extension.default
+import com.project.speakmate.utils.extension.toDateTimeLabel
+import com.project.speakmate.utils.extension.toDurationLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.SimpleDateFormat
-import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,8 +40,6 @@ class SessionDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SessionDetailUiState(presentation = SessionDetailPresentation.LOADING))
     val uiState: StateFlow<SessionDetailUiState> = _uiState.asStateFlow()
-
-    private val dateFormatter = SimpleDateFormat(AppConstant.DISPLAY_DATE_TIME_PATTERN, Locale.getDefault())
 
     private var loadJob: Job? = null
 
@@ -69,8 +66,8 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     private fun toDetailUiState(attempt: PracticeAttempt, scenarioTitle: String): SessionDetailUiState {
-        val durationFormatted = String.format(Locale.ROOT, AppConstant.DURATION_FORMAT, attempt.durationInSeconds / AppConstant.SECONDS_PER_MINUTE, attempt.durationInSeconds % AppConstant.SECONDS_PER_MINUTE)
-        val dateFormatted = dateFormatter.format(attempt.startedAt)
+        val durationFormatted = attempt.durationInSeconds.toDurationLabel()
+        val dateFormatted = attempt.startedAt.toDateTimeLabel()
 
         val values = attempt.criteriaResult?.let { listOf(it.rangeMet, it.accuracyMet, it.fluencyMet, it.interactionMet, it.coherenceMet) }
         val criteriaList = if (values == null) emptyList() else AssessmentCriterionType.entries.mapIndexed { index, type ->

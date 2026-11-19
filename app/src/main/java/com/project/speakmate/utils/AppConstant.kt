@@ -1,6 +1,7 @@
 package com.project.speakmate.utils
 
 object AppConstant {
+    const val DICTIONARY_LOG_TAG = "DictionaryRepository"
     const val GEMINI_API_KEY = "GEMINI_API_KEY"
     const val CALL_INPUT_SAMPLE_RATE = 16_000
     const val CALL_OUTPUT_SAMPLE_RATE = 24_000
@@ -11,6 +12,7 @@ object AppConstant {
     const val STATE_SUBSCRIPTION_TIMEOUT_MILLIS = 5_000L
     const val TOO_MANY_REQUESTS = 429
     const val HISTORY_FILTER_ALL = "all"
+    const val PRACTICE_CATEGORY_ALL = "ALL"
     const val HISTORY_FILTER_LESSONS = "training_unit"
     const val HISTORY_FILTER_FREE_PRACTICE = "free_practice"
     const val DISPLAY_DATE_PATTERN = "dd/MM/yyyy"

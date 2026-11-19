@@ -23,11 +23,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.PreparationGrammarCard
-import com.project.speakmate.ui.training.components.PreparationHeader
 import com.project.speakmate.ui.training.components.PreparationNote
 import com.project.speakmate.ui.training.components.PreparationOverviewContent
 import com.project.speakmate.ui.training.components.PreparationPatternCard
@@ -52,7 +52,7 @@ fun UnitPreparationScreen(
     val onOpenPatterns = remember(onSelectSection) { { onSelectSection(PreparationSection.SENTENCE_PATTERNS) } }
 
     Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
-        PreparationHeader(stringResource(when (state.section) {
+        BackAppBar(stringResource(when (state.section) {
             PreparationSection.OVERVIEW -> R.string.preparation_title
             PreparationSection.VOCABULARY -> R.string.preparation_vocabulary
             PreparationSection.GRAMMAR -> R.string.preparation_grammar

@@ -1,8 +1,8 @@
 package com.project.speakmate.data.session
 
 import com.project.speakmate.data.remote.ai.GeminiLiveEvent
-import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallInterruption
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
@@ -60,6 +60,9 @@ class CallSessionManager(
     private val uplinkRevision = AtomicLong()
     private val commands = Channel<() -> Unit>(Channel.UNLIMITED)
     private val reconnectPolicy = ReconnectPolicy()
+    private val reconnectWindow = CallReconnectWindow()
+    private val pronunciationHold = CallPronunciationHold()
+    private val terminalStateMapper = CallTerminalStateMapper()
     private val mutableSessionState = MutableStateFlow(CallSessionState())
     val sessionState = mutableSessionState.asStateFlow()
     private val activeAudioLevel = MutableStateFlow<StateFlow<Float>?>(null)
@@ -306,8 +309,7 @@ class CallSessionManager(
             }
             mutableSessionState.update { it.copy(interruption = CallInterruption.NETWORK, isResuming = false) }
         }
-        val disconnectedAt = current.disconnectedAtMillis.default(now)
-        val remainingMillis = RECONNECT_WINDOW_MILLIS - (now - disconnectedAt)
+        val remainingMillis = reconnectWindow.getRemainingMillis(current.disconnectedAtMillis, now, RECONNECT_WINDOW_MILLIS)
         if (remainingMillis <= 0L) {
             finish(current, CallFailure.NETWORK)
             return
@@ -517,32 +519,7 @@ class CallSessionManager(
         val isMediaCurrent = { isMediaCurrent(revision) }
         val isResuming = mutableSessionState.value.state == CallState.PAUSED
         runMediaOperation(current) {
-            val audioLevel = current.media.openAudio(
-                onFailure = { failure ->
-                    commands.trySend {
-                        if (canOpenAudio(current) && audioGeneration == current.audioGeneration) {
-                            finish(current, if (current.media.hasMicrophonePermission()) failure else CallFailure.MICROPHONE_PERMISSION)
-                        }
-                    }
-                },
-                onInterrupted = {
-                    commands.trySend {
-                        if (canOpenAudio(current) && audioGeneration == current.audioGeneration &&
-                            mutableSessionState.value.state == CallState.ACTIVE && !current.isFinalizing
-                        ) {
-                            revokeMedia()
-                            pause(current)
-                        }
-                    }
-                },
-                onMicrophoneSilenced = { isSilenced ->
-                    commands.trySend {
-                        if (canOpenAudio(current) && audioGeneration == current.audioGeneration) {
-                            setMicrophoneSilenced(current, isSilenced)
-                        }
-                    }
-                }
-            )
+            val audioLevel = openMediaAudio(current, audioGeneration)
             if (!canOpenAudio(current)) {
                 closeAudio(current)
                 return
@@ -583,6 +560,35 @@ class CallSessionManager(
         }
     }
 
+    private fun openMediaAudio(current: CallSession, audioGeneration: Long): StateFlow<Float> {
+        return current.media.openAudio(
+            onFailure = { failure ->
+                commands.trySend {
+                    if (canOpenAudio(current) && audioGeneration == current.audioGeneration) {
+                        finish(current, if (current.media.hasMicrophonePermission()) failure else CallFailure.MICROPHONE_PERMISSION)
+                    }
+                }
+            },
+            onInterrupted = {
+                commands.trySend {
+                    if (canOpenAudio(current) && audioGeneration == current.audioGeneration &&
+                        mutableSessionState.value.state == CallState.ACTIVE && !current.isFinalizing
+                    ) {
+                        revokeMedia()
+                        pause(current)
+                    }
+                }
+            },
+            onMicrophoneSilenced = { isSilenced ->
+                commands.trySend {
+                    if (canOpenAudio(current) && audioGeneration == current.audioGeneration) {
+                        setMicrophoneSilenced(current, isSilenced)
+                    }
+                }
+            }
+        )
+    }
+
     private fun setMicrophoneSilenced(current: CallSession, isSilenced: Boolean) {
         val state = mutableSessionState.value
         if (state.state != CallState.ACTIVE || current.isFinalizing) return
@@ -612,7 +618,7 @@ class CallSessionManager(
 
     private fun holdCallAudio(current: CallSession) {
         if (mutableSessionState.value.state != CallState.ACTIVE || !canOpenAudio(current)) return
-        current.isCallAudioHeld = true
+        pronunciationHold.beginHold(current)
         runSupportOperation {
             current.media.blockUplink()
             current.media.finishAudioInput()
@@ -622,7 +628,7 @@ class CallSessionManager(
 
     private fun releaseCallAudio(current: CallSession) {
         if (!current.isCallAudioHeld) return
-        current.isCallAudioHeld = false
+        pronunciationHold.releaseHold(current)
         val state = mutableSessionState.value
         if (state.state != CallState.ACTIVE || current.isFinalizing || !canOpenAudio(current)) return
         runSupportOperation {
@@ -641,8 +647,7 @@ class CallSessionManager(
 
     private fun cancelPronunciation(current: CallSession) {
         if (!current.isPronouncing && !current.isCallAudioHeld) return
-        current.pronunciationRevision++
-        current.isPronouncing = false
+        pronunciationHold.cancelPronunciation(current)
         runSupportOperation { current.media.stopPronunciation() }
         mutableSessionState.update { it.copy(pronunciation = PronunciationState.IDLE) }
     }
@@ -795,11 +800,7 @@ class CallSessionManager(
         } catch (_: Exception) {
             failure.default(CallFailure.AUDIO)
         }
-        var outcome = when {
-            terminalFailure != null -> CallOutcome.FAILED
-            isUserEnd && mutableSessionState.value.startedAtMillis != null && current.speechEvidence.hasUserSpeech -> CallOutcome.COMPLETED
-            else -> CallOutcome.CANCELLED
-        }
+        var outcome = terminalStateMapper.getOutcome(terminalFailure, isUserEnd, mutableSessionState.value, current.speechEvidence)
         try {
             current.media.finishAssessmentRecording(outcome)
         } catch (cancellation: CancellationException) {
@@ -808,6 +809,10 @@ class CallSessionManager(
             terminalFailure = terminalFailure.default(CallFailure.AUDIO)
             outcome = CallOutcome.FAILED
         }
+        publishTerminalState(current, terminalFailure, outcome, endedAt)
+    }
+
+    private fun publishTerminalState(current: CallSession, terminalFailure: CallFailure?, outcome: CallOutcome, endedAt: Long) {
         mutableSessionState.update {
             it.copy(
                 state = if (terminalFailure == null) CallState.ENDED else CallState.FAILED,

@@ -22,7 +22,7 @@ class PracticeViewModelTest {
         assertEquals(ScenarioCatalogPresentation.POPULATED, viewModel.uiState.value.presentation)
         assertEquals(listOf("ALL", "Cafe", "Travel"), viewModel.uiState.value.categories.map { it.id })
 
-        viewModel.onCategorySelected("Travel")
+        viewModel.selectCategory("Travel")
 
         assertEquals("Travel", viewModel.uiState.value.selectedCategoryId)
         assertEquals(listOf("practice-2"), viewModel.uiState.value.scenarios.map { it.id })
