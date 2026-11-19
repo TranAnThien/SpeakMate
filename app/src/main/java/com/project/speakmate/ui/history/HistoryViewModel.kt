@@ -44,9 +44,10 @@ class HistoryViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository
 ) : ViewModel() {
 
-    private val selectedFilter = MutableStateFlow("all")
+    private val selectedFilter = MutableStateFlow(AppConstant.HISTORY_FILTER_ALL)
     private val loadRequest = MutableStateFlow(0)
-    private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    private val dateFormatter = SimpleDateFormat(AppConstant.DISPLAY_DATE_PATTERN, Locale.getDefault())
+    private val timeFormatter = SimpleDateFormat(AppConstant.DISPLAY_TIME_PATTERN, Locale.getDefault())
     private val scenarioTitleCache = ConcurrentHashMap<String, String>()
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -82,8 +83,8 @@ class HistoryViewModel @Inject constructor(
         selectedFilter
     ) { attempts, filterId ->
         val filtered = when (filterId) {
-            "free_practice" -> attempts.filter { it.practiceType == PracticeType.FREE_PRACTICE }
-            "training_unit" -> attempts.filter {
+            AppConstant.HISTORY_FILTER_FREE_PRACTICE -> attempts.filter { it.practiceType == PracticeType.FREE_PRACTICE }
+            AppConstant.HISTORY_FILTER_LESSONS -> attempts.filter {
                 it.practiceType == PracticeType.TRAINING_UNIT || it.practiceType == PracticeType.GOAL_ASSESSMENT
             }
             else -> attempts
@@ -113,7 +114,7 @@ class HistoryViewModel @Inject constructor(
                 }.awaitAll().toMap()
             }
 
-            val groups = filtered.groupBy { dateFormatter.format(it.endedAt) }
+            val groups = filtered.groupBy { dateFormatter.format(it.startedAt) }
                 .map { (date, items) ->
                     HistoryGroupUiState(
                         id = date,
@@ -135,34 +136,21 @@ class HistoryViewModel @Inject constructor(
     }
 
     private fun toSessionUiState(attempt: PracticeAttempt, scenarioTitle: String): HistorySessionUiState {
-        val durationMinutes = attempt.durationInSeconds / AppConstant.SECONDS_PER_MINUTE
-        val durationSecs = attempt.durationInSeconds % AppConstant.SECONDS_PER_MINUTE
-        val durationFormatted = String.format(Locale.ROOT, "%02d:%02d", durationMinutes, durationSecs)
-        val typeLabel = when (attempt.practiceType) {
-            PracticeType.FREE_PRACTICE -> "Luyện tập tự do"
-            PracticeType.TRAINING_UNIT -> "Bài học"
-            PracticeType.GOAL_ASSESSMENT -> "Đánh giá mục tiêu"
-        }
-
-        val (resultLabel, resultPresentation) = when (attempt.result) {
-            AssessmentResult.PASS -> "Đạt" to HistoryResultPresentation.PASSED
-            AssessmentResult.PARTIAL -> "Một phần" to HistoryResultPresentation.PARTIAL
-            AssessmentResult.FAIL -> "Chưa đạt" to HistoryResultPresentation.NOT_PASSED
-            null -> "Hoàn thành" to HistoryResultPresentation.COMPLETED
-        }
-
+        val duration = String.format(Locale.ROOT, AppConstant.DURATION_FORMAT,
+            attempt.durationInSeconds / AppConstant.SECONDS_PER_MINUTE, attempt.durationInSeconds % AppConstant.SECONDS_PER_MINUTE)
         return HistorySessionUiState(
             id = attempt.attemptId,
-            metadata = "$typeLabel • $durationFormatted",
-            title = scenarioTitle.ifBlank { typeLabel },
-            resultLabel = resultLabel,
-            result = resultPresentation
+            title = scenarioTitle,
+            result = HistoryResultMapper.toPresentation(attempt.result, attempt.practiceType),
+            practiceType = attempt.practiceType,
+            duration = duration,
+            performedAt = timeFormatter.format(attempt.startedAt)
         )
     }
 
     private fun defaultFilters() = listOf(
-        ContentFilterUiState("all", "Tất cả"),
-        ContentFilterUiState("training_unit", "Bài học"),
-        ContentFilterUiState("free_practice", "Luyện tự do")
+        ContentFilterUiState(AppConstant.HISTORY_FILTER_ALL, ""),
+        ContentFilterUiState(AppConstant.HISTORY_FILTER_LESSONS, ""),
+        ContentFilterUiState(AppConstant.HISTORY_FILTER_FREE_PRACTICE, "")
     )
 }

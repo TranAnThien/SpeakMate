@@ -525,4 +525,23 @@
     <string name="promotion_runtime_unavailable_description">Nội dung đánh giá chưa đủ để tiếp tục. Lần đánh giá này đã kết thúc, không thay đổi trình độ hoặc tiến trình.</string>
     <string name="promotion_runtime_not_eligible">Chưa đủ điều kiện đánh giá lên cấp</string>
     <string name="promotion_runtime_not_eligible_description">Chỉ trình độ A1, A2 hoặc B1 với lộ trình đã hoàn tất mới được đánh giá lên cấp. B2 là mức cao nhất hiện tại.</string>
+    <string name="history_filter_all">Tất cả</string>
+    <string name="history_filter_lessons">Bài học</string>
+    <string name="history_filter_free_practice">Luyện tự do</string>
+    <string name="history_type_free_practice">Luyện tập tự do</string>
+    <string name="history_type_unit">Bài học</string>
+    <string name="history_runtime_metadata">%1$s · %2$s · %3$s</string>
+    <string name="history_completed">Hoàn thành</string>
+    <string name="session_speaker_user">Bạn</string>
+    <string name="session_speaker_ai">AI</string>
+    <string name="session_speaker_ai_interrupted">AI · bị ngắt</string>
+    <string name="session_runtime_criteria_heading">Kết quả đánh giá</string>
+    <string name="profile_unassessed_label">Chưa đánh giá</string>
+    <string name="profile_unassessed_description">Bạn chưa thực hiện bài đánh giá trình độ.</string>
+    <string name="profile_assessed_description">Đây là trình độ nói ước lượng phục vụ luyện tập.</string>
+    <string name="call_recovery_title">Cuộc gọi trước đã kết thúc</string>
+    <string name="call_recovery_description">Cuộc gọi trước đã kết thúc do quyền micro bị thu hồi hoặc ứng dụng bị đóng. Phiên đó không được lưu vào Lịch sử.</string>
+    <string name="call_recovery_acknowledge">Đã hiểu</string>
+    <string name="saved_vocab_load_error">Không tải được từ vựng đã lưu. Hãy thử lại.</string>
+    <string name="saved_vocab_delete_error">Chưa xóa được từ vựng. Hãy thử lại.</string>
 </resources>

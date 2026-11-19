@@ -63,9 +63,9 @@ class SessionDetailViewModelTest {
         assertEquals(1, state.requiredActions.size)
         assertEquals(2, state.messages.size)
         assertEquals("m1", state.messages[0].id)
-        assertEquals("AI", state.messages[0].metadata)
+        assertEquals(SenderType.AI, state.messages[0].sender)
         assertEquals("m2", state.messages[1].id)
-        assertEquals("Bạn", state.messages[1].metadata)
+        assertEquals(SenderType.USER, state.messages[1].sender)
     }
 
     @Test
@@ -107,8 +107,8 @@ class SessionDetailViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(SessionDetailPresentation.COMPLETED, state.presentation)
         assertEquals(5, state.criteria.size)
-        assertTrue(state.criteria.first { it.id == "range" }.isPassed)
-        org.junit.Assert.assertFalse(state.criteria.first { it.id == "fluency" }.isPassed)
+        assertTrue(state.criteria.first { it.criterion == com.project.speakmate.ui.components.AssessmentCriterionType.RANGE }.isPassed)
+        org.junit.Assert.assertFalse(state.criteria.first { it.criterion == com.project.speakmate.ui.components.AssessmentCriterionType.FLUENCY }.isPassed)
     }
 
     @Test
@@ -125,4 +125,26 @@ class SessionDetailViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(SessionDetailPresentation.LOAD_ERROR, state.presentation)
     }
+    @Test
+    fun detailHasAResultAndMarksOnlyInterruptedAiMessages() = runTest {
+        val history = mockk<HistoryRepository>()
+        val practice = mockk<PracticeRepository>()
+        val attempt = sampleAttempt.copy(result = null, transcripts = sampleAttempt.transcripts.map { it.copy(isInterrupted = true) })
+        coEvery { history.getSessionDetail(any()) } returns Result.success(attempt)
+        coEvery { practice.getScenario(any()) } returns Result.failure(IllegalStateException())
+        val viewModel = SessionDetailViewModel(SavedStateHandle(mapOf("attemptId" to "attempt_123")), history, practice)
+        advanceUntilIdle()
+        assertEquals(com.project.speakmate.ui.history.state.HistoryResultPresentation.NOT_EVALUATED, viewModel.uiState.value.result)
+        assertTrue(viewModel.uiState.value.messages[0].isInterrupted)
+        assertEquals(false, viewModel.uiState.value.messages[1].isInterrupted)
+        assertEquals("Tốt", viewModel.uiState.value.feedbackSummary)
+    }
+
+    @Test
+    fun missingAttemptArgumentIsALoadErrorInsteadOfACrash() = runTest {
+        val viewModel = SessionDetailViewModel(SavedStateHandle(), mockk(), mockk())
+        advanceUntilIdle()
+        assertEquals(SessionDetailPresentation.LOAD_ERROR, viewModel.uiState.value.presentation)
+    }
+
 }

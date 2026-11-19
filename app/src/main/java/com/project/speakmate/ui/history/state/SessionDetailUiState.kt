@@ -12,5 +12,7 @@ data class SessionDetailUiState(
     val criteriaHeading: String = "",
     val requiredActions: List<SessionActionUiState> = emptyList(),
     val criteria: List<SessionCriterionUiState> = emptyList(),
-    val messages: List<SessionMessageUiState> = emptyList()
+    val messages: List<SessionMessageUiState> = emptyList(),
+    val result: HistoryResultPresentation? = null,
+    val feedbackSummary: String? = null
 )

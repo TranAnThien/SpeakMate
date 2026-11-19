@@ -97,11 +97,11 @@ class HistoryViewModelTest {
 
         val passSession = state.groups[0].sessions.first { it.id == "2" }
         assertEquals(HistoryResultPresentation.PASSED, passSession.result)
-        assertEquals("Đạt", passSession.resultLabel)
+        assertEquals(PracticeType.TRAINING_UNIT, passSession.practiceType)
 
         val completedSession = state.groups[0].sessions.first { it.id == "1" }
         assertEquals(HistoryResultPresentation.COMPLETED, completedSession.result)
-        assertEquals("Hoàn thành", completedSession.resultLabel)
+        assertEquals(PracticeType.FREE_PRACTICE, completedSession.practiceType)
     }
 
     @Test
@@ -152,4 +152,24 @@ class HistoryViewModelTest {
         assertEquals(2, state.groups[0].sessions.size)
         assertTrue(state.groups[0].sessions.all { it.id == "2" || it.id == "3" })
     }
+    @Test
+    fun nullResultDistinguishesAssessmentsFromFreePracticeAndKeepsCallStartTime() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        historyListFlow.value = listOf(
+            makeAttempt("free", PracticeType.FREE_PRACTICE),
+            makeAttempt("unit", PracticeType.TRAINING_UNIT),
+            makeAttempt("goal", PracticeType.GOAL_ASSESSMENT)
+        )
+        advanceUntilIdle()
+        val sessions = viewModel.uiState.value.groups.flatMap { it.sessions }
+        assertEquals(HistoryResultPresentation.COMPLETED, sessions[0].result)
+        assertEquals(HistoryResultPresentation.NOT_EVALUATED, sessions[1].result)
+        assertEquals(HistoryResultPresentation.NOT_EVALUATED, sessions[2].result)
+        assertEquals(java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(now), sessions[0].performedAt)
+        assertEquals("01:05", sessions[0].duration)
+        viewModel.onSelectFilter("training_unit")
+        advanceUntilIdle()
+        assertEquals(setOf("unit", "goal"), viewModel.uiState.value.groups.flatMap { it.sessions }.map { it.id }.toSet())
+    }
+
 }

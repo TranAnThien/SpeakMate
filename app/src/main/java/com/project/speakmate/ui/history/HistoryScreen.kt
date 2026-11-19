@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AppBottomBar
 import com.project.speakmate.ui.components.AppDestination
@@ -53,7 +54,13 @@ fun HistoryScreen(
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item(key = "history-filters", contentType = ContentFilterUiState::class) {
-                    ContentFilterRow(state.filters, state.selectedFilterId, onSelectFilter, Modifier.padding(bottom = 8.dp))
+                    ContentFilterRow(state.filters.map { filter ->
+                        filter.copy(label = stringResource(when (filter.id) {
+                            AppConstant.HISTORY_FILTER_LESSONS -> R.string.history_filter_lessons
+                            AppConstant.HISTORY_FILTER_FREE_PRACTICE -> R.string.history_filter_free_practice
+                            else -> R.string.history_filter_all
+                        }))
+                    }, state.selectedFilterId, onSelectFilter, Modifier.padding(bottom = 8.dp))
                 }
                 when (state.presentation) {
                     HistoryPresentation.POPULATED -> state.groups.forEachIndexed { groupIndex, group ->

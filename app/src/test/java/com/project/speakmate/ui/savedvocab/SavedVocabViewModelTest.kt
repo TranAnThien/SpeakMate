@@ -12,6 +12,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -55,8 +56,9 @@ class SavedVocabViewModelTest {
 
     @Test
     fun `initial uiState has isLoading true before first emission`() {
-        // initialValue của stateIn được set isLoading = true
-        assertTrue(viewModel.uiState.value.isLoading)
+        io.mockk.every { repository.observeSavedVocabularies() } returns kotlinx.coroutines.flow.emptyFlow()
+        val pending = SavedVocabViewModel(repository, pronunciationRepository)
+        assertTrue(pending.uiState.value.isLoading)
     }
 
     @Test
@@ -165,7 +167,7 @@ class SavedVocabViewModelTest {
         viewModel.removeVocabulary("test", "noun")
         advanceUntilIdle()
 
-        assertEquals("Firestore error", viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.hasDeleteError)
     }
 
     @Test
@@ -179,7 +181,7 @@ class SavedVocabViewModelTest {
         viewModel.clearError()
         advanceUntilIdle()
 
-        assertNull(viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.hasDeleteError)
     }
 
     @Test
@@ -188,5 +190,19 @@ class SavedVocabViewModelTest {
         viewModel.playWord("resilience")
         verify(exactly = 2) { pronunciationRepository.playText("resilience") }
     }
+    @Test
+    fun failedListenerShowsErrorAndRetryStartsANewCollection() = runTest {
+        io.mockk.every { repository.observeSavedVocabularies() } returns flow { throw IllegalStateException() }
+        viewModel.retry()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.hasLoadError)
+        assertFalse(viewModel.uiState.value.isEmpty)
+        io.mockk.every { repository.observeSavedVocabularies() } returns fakeVocabFlow
+        viewModel.retry()
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.hasLoadError)
+        assertTrue(viewModel.uiState.value.isEmpty)
+    }
+
 }
 

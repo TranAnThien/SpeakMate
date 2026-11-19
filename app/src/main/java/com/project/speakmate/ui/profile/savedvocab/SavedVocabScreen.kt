@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.ui.components.ContentStatusPanel
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.ui.profile.savedvocab.components.VocabularyCard
@@ -43,7 +44,8 @@ fun SavedVocabScreen(
     onClearSearch: () -> Unit,
     onPlayClick: (VocabularyItem) -> Unit,
     onDeleteClick: (VocabularyItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit = {}
 ) {
     Scaffold(
         modifier = modifier,
@@ -83,10 +85,20 @@ fun SavedVocabScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            if (uiState.hasDeleteError) {
+                Text(stringResource(R.string.saved_vocab_delete_error), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error)
+            }
             if (uiState.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (uiState.hasLoadError) {
+                ContentStatusPanel(
+                    R.drawable.ic_load_error, stringResource(R.string.saved_vocab_title),
+                    stringResource(R.string.saved_vocab_load_error), stringResource(R.string.content_retry),
+                    stringResource(R.string.navigation_profile), onRetry, onNavigateBack
+                )
             } else if (uiState.isEmpty) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
@@ -100,11 +112,11 @@ fun SavedVocabScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = uiState.filteredVocabularies,
-                        key = { "${it.word.length}:${it.word}${it.partOfSpeech}" },
-                        contentType = { VocabularyItem::class }
-                    ) { vocabItem ->
+                        key = { index, item -> "$index:${item.word.length}:${item.word}${item.partOfSpeech}" },
+                        contentType = { _, _ -> VocabularyItem::class }
+                    ) { _, vocabItem ->
                         VocabularyCard(
                             item = vocabItem,
                             onPlayClick = onPlayClick,

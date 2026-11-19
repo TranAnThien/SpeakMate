@@ -9,9 +9,11 @@ data class SavedVocabUiState(
     val searchQuery: String = "",
     val allVocabularies: List<VocabularyItem> = emptyList(),
     val filteredVocabularies: List<VocabularyItem> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    val hasLoadError: Boolean = false,
+    val hasDeleteError: Boolean = false
 ) {
     val isEmpty: Boolean
-        get() = !isLoading && filteredVocabularies.isEmpty()
+        get() = !isLoading && !hasLoadError && filteredVocabularies.isEmpty()
 }
 

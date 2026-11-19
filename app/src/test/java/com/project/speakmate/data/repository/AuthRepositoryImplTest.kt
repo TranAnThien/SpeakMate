@@ -1,6 +1,7 @@
 package com.project.speakmate.data.repository
 
 import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
+import com.project.speakmate.data.local.ActiveCallLocalDataSource
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.just
@@ -17,12 +18,15 @@ import org.junit.Test
 class AuthRepositoryImplTest {
 
     private lateinit var authDataSource: FirebaseAuthDataSource
+    private lateinit var callMarkers: ActiveCallLocalDataSource
     private lateinit var repository: AuthRepositoryImpl
 
     @Before
     fun setUp() {
         authDataSource = mockk()
-        repository = AuthRepositoryImpl(authDataSource)
+        callMarkers = mockk(relaxed = true)
+        every { authDataSource.requireCurrentUserId() } returns "uid-current"
+        repository = AuthRepositoryImpl(authDataSource, callMarkers)
     }
 
     @Test
@@ -52,6 +56,17 @@ class AuthRepositoryImplTest {
         val result = repository.signOut()
 
         assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun signOutRemovesOnlySignedInUserMarker() = runTest {
+        every { authDataSource.signOut() } just runs
+
+        val result = repository.signOut()
+
+        assertTrue(result.isSuccess)
+        verify(exactly = 1) { callMarkers.removeUserCall("uid-current") }
+        verify(exactly = 0) { callMarkers.removeUserCall(neq("uid-current")) }
     }
 
     @Test

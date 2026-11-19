@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AppBottomBar
 import com.project.speakmate.ui.components.AppDestination
@@ -45,6 +46,19 @@ fun ProfileScreen(
     listState: LazyListState = rememberLazyListState(),
     onRetryProfile: () -> Unit = {}
 ) {
+    val levelLabel = when (state.level) {
+        SpeakingLevel.NOT_ASSESSED -> stringResource(R.string.profile_unassessed_label)
+        SpeakingLevel.A1 -> stringResource(R.string.placement_a1_label)
+        SpeakingLevel.A2 -> stringResource(R.string.placement_a2_label)
+        SpeakingLevel.B1 -> stringResource(R.string.placement_b1_label)
+        SpeakingLevel.B2 -> stringResource(R.string.placement_b2_label)
+        null -> state.levelLabel
+    }
+    val description = when (state.level) {
+        null -> state.assessmentDescription
+        SpeakingLevel.NOT_ASSESSED -> stringResource(R.string.profile_unassessed_description)
+        else -> stringResource(R.string.profile_assessed_description)
+    }
     Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
         ProfileHeader(onOpenSettings)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState,
@@ -65,8 +79,8 @@ fun ProfileScreen(
                     )
                     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(stringResource(R.string.profile_estimated_level, state.levelLabel), style = DesignTypography.Title, color = DesignColor.Text)
-                        Text(state.assessmentDescription, style = DesignTypography.Detail, color = DesignColor.Muted)
+                        Text(stringResource(R.string.profile_estimated_level, levelLabel), style = DesignTypography.Title, color = DesignColor.Text)
+                        Text(description, style = DesignTypography.Detail, color = DesignColor.Muted)
                     }
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DesignColor.SecondaryButton)
                         .clickable(onClick = onOpenVocabulary).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

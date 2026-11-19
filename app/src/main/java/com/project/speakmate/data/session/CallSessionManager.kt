@@ -10,6 +10,7 @@ import com.project.speakmate.domain.model.CallState
 import com.project.speakmate.domain.model.PronunciationState
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.utils.extension.default
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
@@ -37,7 +38,9 @@ class CallSessionManager(
     private val createMedia: () -> CallSessionMedia,
     dispatcher: CoroutineDispatcher,
     private val nowMillis: () -> Long,
-    private val epochMillis: () -> Long = System::currentTimeMillis
+    private val epochMillis: () -> Long = System::currentTimeMillis,
+    private val saveActiveMarker: (String) -> Unit = {},
+    private val removeActiveMarker: (String) -> Unit = {}
 ) {
     companion object {
         private const val SETUP_TIMEOUT_MILLIS = 15_000L
@@ -50,6 +53,7 @@ class CallSessionManager(
         private const val MAX_SERVER_EVENTS = 256
     }
 
+    private val markerOwnerId = UUID.randomUUID().toString()
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val isClosed = AtomicBoolean(false)
     private val mediaRevision = AtomicLong()
@@ -228,6 +232,7 @@ class CallSessionManager(
 
     fun close() {
         if (!isClosed.compareAndSet(false, true)) return
+        updateMarker { removeActiveMarker(markerOwnerId) }
         revokeMedia()
         commands.trySend {
             try {
@@ -653,6 +658,7 @@ class CallSessionManager(
     }
 
     private fun activate(current: CallSession, audioLevel: StateFlow<Float>, activeAt: Long) {
+        if (mutableSessionState.value.startedAtMillis == null) updateMarker { saveActiveMarker(markerOwnerId) }
         current.timeoutJob?.cancel()
         activeAudioLevel.value = audioLevel
         val startedAtEpochMillis = mutableSessionState.value.startedAtEpochMillis ?: epochMillis()
@@ -758,6 +764,7 @@ class CallSessionManager(
 
     private fun finish(current: CallSession, failure: CallFailure? = null, isEndedByUser: Boolean = false) {
         if (session !== current) return
+        updateMarker { removeActiveMarker(markerOwnerId) }
         val now = nowMillis()
         val endedAt = current.endRequestedAtMillis.default(now)
         val isUserEnd = isEndedByUser || current.isFinalizing
@@ -824,6 +831,16 @@ class CallSessionManager(
                 isResuming = false,
                 isClosed = isClosed.get()
             )
+        }
+    }
+
+    private fun updateMarker(operation: () -> Unit) {
+        try {
+            operation()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            Unit
         }
     }
 

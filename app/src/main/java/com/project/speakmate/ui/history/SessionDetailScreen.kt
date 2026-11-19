@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.ui.components.AssessmentCriterionType
+import com.project.speakmate.ui.history.state.HistoryResultPresentation
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.AssessmentCriterionCard
 import com.project.speakmate.ui.components.BackAppBar
@@ -69,15 +71,34 @@ fun SessionDetailScreen(
                                 Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text(state.title, style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
+                                        Text(state.title.ifBlank { stringResource(R.string.session_detail_header) }, style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
                                         Text(state.metadata, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+                                        state.result?.let { result ->
+                                            Text(stringResource(when (result) {
+                                                HistoryResultPresentation.PASSED -> R.string.placement_passed
+                                                HistoryResultPresentation.PARTIAL -> R.string.unit_result_partial
+                                                HistoryResultPresentation.NOT_PASSED -> R.string.placement_not_passed
+                                                HistoryResultPresentation.NOT_EVALUATED -> R.string.unit_result_insufficient
+                                                HistoryResultPresentation.COMPLETED -> R.string.history_completed
+                                            }), style = DesignTypography.Title, color = DesignColor.Primary)
+                                        }
+                                        state.feedbackSummary?.takeIf(String::isNotBlank)?.let { feedback ->
+                                            Text(feedback, style = DesignTypography.Body, color = DesignColor.Muted)
+                                        }
                                     }
                                     SessionRequiredActions(state.requiredActions)
                                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text(state.criteriaHeading, style = DesignTypography.Title, color = DesignColor.Text)
+                                        Text(state.criteriaHeading.ifBlank { stringResource(R.string.session_runtime_criteria_heading) }, style = DesignTypography.Title, color = DesignColor.Text)
                                         state.criteria.forEachIndexed { index, criterion ->
                                             key(index, criterion.id) {
-                                                AssessmentCriterionCard(criterion.title, criterion.description,
+                                                val title = if (criterion.criterion == null) criterion.title else stringResource(when (criterion.criterion) {
+                                                AssessmentCriterionType.RANGE -> R.string.placement_range
+                                                AssessmentCriterionType.ACCURACY -> R.string.placement_accuracy
+                                                AssessmentCriterionType.FLUENCY -> R.string.placement_fluency
+                                                AssessmentCriterionType.INTERACTION -> R.string.placement_interaction
+                                                AssessmentCriterionType.COHERENCE, null -> R.string.placement_coherence
+                                            })
+                                            AssessmentCriterionCard(title, criterion.description,
                                                     stringResource(if (criterion.isPassed) R.string.placement_passed else R.string.placement_not_passed),
                                                     if (criterion.isPassed) DesignColor.Success else DesignColor.Error)
                                             }

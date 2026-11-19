@@ -1,6 +1,11 @@
 package com.project.speakmate
 
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.key
+import androidx.compose.ui.res.stringResource
+import com.project.speakmate.ui.components.ContentErrorDialog
+import com.project.speakmate.ui.call.CallRecoveryViewModel
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -26,6 +31,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val authViewModel: AuthViewModel by viewModels()
+    private val recoveryViewModel: CallRecoveryViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,17 +42,27 @@ class MainActivity : ComponentActivity() {
                 val currentUserId by authViewModel.signedInUserId
                     .collectAsStateWithLifecycle(initialValue = LOADING_USER_ID)
 
-                if (currentUserId == LOADING_USER_ID) {
+                val recovery by recoveryViewModel.uiState.collectAsStateWithLifecycle()
+                if (currentUserId == LOADING_USER_ID || recovery.isLoading || recovery.userId != currentUserId) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         SpeakMateLoadingIndicator(size = 40.dp)
                     }
+                } else if (recovery.isNoticeVisible) {
+                    BackHandler(onBack = recoveryViewModel::dismissNotice)
+                    ContentErrorDialog(
+                        stringResource(R.string.call_recovery_title), stringResource(R.string.call_recovery_description),
+                        recoveryViewModel::dismissNotice, recoveryViewModel::dismissNotice,
+                        primaryText = stringResource(R.string.call_recovery_acknowledge)
+                    )
                 } else {
                     val startDest = if (currentUserId != null) "home" else "auth"
-                    AppNavigation(
-                        authViewModel = authViewModel,
-                        profileViewModel = profileViewModel,
-                        startDestination = startDest
-                    )
+                    key(currentUserId, recovery.wasInterrupted) {
+                        AppNavigation(
+                            authViewModel = authViewModel,
+                            profileViewModel = profileViewModel,
+                            startDestination = startDest
+                        )
+                    }
                 }
             }
         }

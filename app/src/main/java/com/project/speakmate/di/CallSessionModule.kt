@@ -1,6 +1,8 @@
 package com.project.speakmate.di
 
 import android.os.SystemClock
+import com.project.speakmate.data.local.ActiveCallLocalDataSource
+import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.project.speakmate.data.session.CallSessionManager
 import com.project.speakmate.data.session.CallSessionMedia
 import dagger.Module
@@ -16,6 +18,20 @@ import kotlinx.coroutines.Dispatchers
 object CallSessionModule {
     @Provides
     @ViewModelScoped
-    fun provideCallSessionManager(media: Provider<CallSessionMedia>): CallSessionManager =
-        CallSessionManager(media::get, Dispatchers.IO.limitedParallelism(1), SystemClock::elapsedRealtime)
+    fun provideCallSessionManager(
+        media: Provider<CallSessionMedia>,
+        markers: ActiveCallLocalDataSource,
+        authDataSource: FirebaseAuthDataSource
+    ): CallSessionManager {
+        val userId = try {
+            authDataSource.requireCurrentUserId()
+        } catch (_: IllegalStateException) {
+            null
+        }
+        return CallSessionManager(
+            media::get, Dispatchers.IO.limitedParallelism(1), SystemClock::elapsedRealtime,
+            saveActiveMarker = { owner -> userId?.let { markers.saveActiveCall(it, owner) } },
+            removeActiveMarker = markers::removeActiveCall
+        )
+    }
 }

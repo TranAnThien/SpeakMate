@@ -1351,9 +1351,84 @@ class CallSessionManagerTest {
         runCurrent()
     }
 
+    @Test
+    fun activeMarkerIsWrittenOnceAcrossAReconnectionAndRemovedAfterEnd() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, attempts ->
+            val media = startActive(manager, attempts)
+            assertEquals(1, marker.saved.size)
+            media.emitResumptionHandle(RESUMPTION_HANDLE)
+            runCurrent()
+            media.disconnect(CallFailure.NETWORK)
+            runCurrent()
+            advanceTimeBy(TEST_INTERVAL_MILLIS)
+            media.acknowledgeSetup()
+            runCurrent()
+            assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+            assertEquals(1, marker.saved.size)
+            manager.endCall()
+            runCurrent()
+            advanceTimeBy(FINALIZE_WINDOW_MILLIS + 1)
+            runCurrent()
+            assertTrue(marker.saved.single() in marker.removed)
+        }
+    }
+
+    @Test
+    fun cancellingBeforeActiveNeverWritesAnActiveMarker() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, _ ->
+            manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+            runCurrent()
+            manager.endCall()
+            runCurrent()
+            assertTrue(marker.saved.isEmpty())
+            assertTrue(marker.removed.isNotEmpty())
+        }
+    }
+
+    @Test
+    fun failedCallsRemoveTheActiveMarker() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, attempts ->
+            val media = startActive(manager, attempts)
+            media.emitFailure(CallFailure.AUDIO)
+            runCurrent()
+            assertEquals(CallState.FAILED, manager.sessionState.value.state)
+            assertTrue(marker.saved.single() in marker.removed)
+        }
+    }
+
+    @Test
+    fun leavingTheCallClearsItsMarkerEvenWhenCloseIsRepeated() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, attempts ->
+            startActive(manager, attempts)
+            manager.close()
+            manager.close()
+            runCurrent()
+            assertTrue(marker.saved.single() in marker.removed)
+        }
+    }
+
+    @Test
+    fun markerIoFailureCannotFailOrDelayTheCallState() {
+        val marker = FakeActiveCallMarker().also { it.shouldFail = true }
+        withManager(marker = marker) { manager, attempts ->
+            startActive(manager, attempts)
+            assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+            manager.endCall()
+            runCurrent()
+            advanceTimeBy(FINALIZE_WINDOW_MILLIS + 1)
+            runCurrent()
+            assertEquals(CallState.ENDED, manager.sessionState.value.state)
+        }
+    }
+
     private fun withManager(
         hasPermission: Boolean = true,
         shouldFailConstruction: Boolean = false,
+        marker: FakeActiveCallMarker? = null,
         test: TestScope.(CallSessionManager, List<FakeCallSessionMedia>) -> Unit
     ) = runTest {
         val attempts = mutableListOf<FakeCallSessionMedia>()
@@ -1367,7 +1442,9 @@ class CallSessionManagerTest {
             },
             dispatcher = StandardTestDispatcher(testScheduler),
             nowMillis = { testScheduler.currentTime },
-            epochMillis = { EPOCH_START_MILLIS + testScheduler.currentTime }
+            epochMillis = { EPOCH_START_MILLIS + testScheduler.currentTime },
+            saveActiveMarker = { marker?.save(it) },
+            removeActiveMarker = { marker?.remove(it) }
         )
         manager.setForeground(true)
         try {

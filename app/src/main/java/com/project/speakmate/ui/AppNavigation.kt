@@ -51,8 +51,6 @@ import com.project.speakmate.ui.placement.PlacementViewModel
 import com.project.speakmate.ui.profile.ProfileScreen
 import com.project.speakmate.ui.profile.ProfileViewModel
 import com.project.speakmate.ui.profile.SettingsScreen
-import com.project.speakmate.ui.profile.state.ProfileSkillUiState
-import com.project.speakmate.ui.profile.state.ProfileUiState
 import com.project.speakmate.ui.profile.state.SettingsUiState
 import com.project.speakmate.ui.training.TrainingPathScreen
 import com.project.speakmate.ui.training.TrainingPathViewModel
@@ -83,8 +81,7 @@ fun AppNavigation(
     navController: NavHostController = rememberNavController()
 ) {
     val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
-    val userProfile by profileViewModel.userProfile.collectAsStateWithLifecycle()
-    val isProfileLoadFailed by profileViewModel.isProfileLoadFailed.collectAsStateWithLifecycle()
+    val profileUiState by profileViewModel.uiState.collectAsStateWithLifecycle()
 
     val openTrainingActivity: (TrainingActivityDestination) -> Unit = remember(navController) {
         { destination ->
@@ -664,30 +661,6 @@ fun AppNavigation(
         }
 
         composable("profile") {
-            val profileUiState = remember(userProfile, isProfileLoadFailed) {
-                val user = userProfile
-                val skillsList = if (user?.latestAssessmentCriteria != null) {
-                    val criteria = user.latestAssessmentCriteria
-                    listOf(
-                        ProfileSkillUiState(id = "range", title = "Range (Từ vựng)", isPassed = criteria.rangeMet, description = "Sử dụng từ vựng đa dạng"),
-                        ProfileSkillUiState(id = "accuracy", title = "Accuracy (Chính xác)", isPassed = criteria.accuracyMet, description = "Ngữ pháp và phát âm chuẩn"),
-                        ProfileSkillUiState(id = "fluency", title = "Fluency (Trôi chảy)", isPassed = criteria.fluencyMet, description = "Khả năng duy trì lời nói"),
-                        ProfileSkillUiState(id = "interaction", title = "Interaction (Tương tác)", isPassed = criteria.interactionMet, description = "Khả năng phản hồi"),
-                        ProfileSkillUiState(id = "coherence", title = "Coherence (Gắn kết)", isPassed = criteria.coherenceMet, description = "Tính liên kết giữa các câu")
-                    )
-                } else emptyList()
-
-                ProfileUiState(
-                    displayName = user?.displayName.orEmpty(),
-                    email = user?.email.orEmpty(),
-                    avatarUrl = user?.photoUrl,
-                    levelLabel = user?.level?.name ?: "CHƯA ĐÁNH GIÁ",
-                    assessmentDescription = if (user?.level == SpeakingLevel.NOT_ASSESSED) "Bạn chưa thực hiện bài đánh giá trình độ." else "Trình độ nói hiện tại của bạn.",
-                    skills = skillsList,
-                    isProfileLoadFailed = isProfileLoadFailed
-                )
-            }
-
             ProfileScreen(
                 state = profileUiState,
                 onOpenSettings = { navController.navigate("settings") },

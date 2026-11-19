@@ -1,6 +1,9 @@
 package com.project.speakmate.ui.call.state
 
 import androidx.compose.runtime.Immutable
+import com.project.speakmate.domain.model.VocabularyItem
+import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.rules.SavedVocabularyRules
 
 @Immutable
 data class CallDictionaryUiState(
@@ -19,5 +22,7 @@ data class CallDictionaryUiState(
     val hasPronunciationError: Boolean = false
 ) {
     val canSave: Boolean
-        get() = status == CallDictionaryStatus.SUCCESS && word.isNotBlank() && meaning.isNotBlank()
+        get() = status == CallDictionaryStatus.SUCCESS && SavedVocabularyRules.hasValidFields(
+            VocabularyItem(word, meaning, phonetic, partOfSpeech, LearningExample(exampleSentence, exampleTranslation))
+        )
 }

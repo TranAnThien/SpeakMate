@@ -26,28 +26,28 @@ class ProfileViewModelTest {
     @Test
     fun observesTheInitialProfileAndLaterLevelChanges() = runTest {
         val viewModel = ProfileViewModel(auth, users)
-        assertEquals(SpeakingLevel.NOT_ASSESSED, viewModel.userProfile.value?.level)
+        assertEquals(SpeakingLevel.NOT_ASSESSED, viewModel.uiState.value.level)
 
         users.setUser(user().copy(level = SpeakingLevel.A2))
         advanceUntilIdle()
 
-        assertEquals(SpeakingLevel.A2, viewModel.userProfile.value?.level)
-        assertFalse(viewModel.isProfileLoadFailed.value)
+        assertEquals(SpeakingLevel.A2, viewModel.uiState.value.level)
+        assertFalse(viewModel.uiState.value.isProfileLoadFailed)
     }
 
     @Test
     fun observationFailureKeepsTheSessionAndAllowsRetry() = runTest {
         users.shouldFailObservation = true
         val viewModel = ProfileViewModel(auth, users)
-        assertTrue(viewModel.isProfileLoadFailed.value)
+        assertTrue(viewModel.uiState.value.isProfileLoadFailed)
         assertEquals("user-1", auth.signedInUserId.value)
 
         users.shouldFailObservation = false
         viewModel.retryProfile()
         advanceUntilIdle()
 
-        assertFalse(viewModel.isProfileLoadFailed.value)
-        assertEquals("user-1", viewModel.userProfile.value?.userId)
+        assertFalse(viewModel.uiState.value.isProfileLoadFailed)
+        assertEquals("student@example.com", viewModel.uiState.value.email)
         assertEquals(2, users.observationStarts)
         assertEquals(1, users.activeObservers)
     }
@@ -55,15 +55,15 @@ class ProfileViewModelTest {
     @Test
     fun switchingAccountsCancelsThePreviousProfileListener() = runTest {
         val viewModel = ProfileViewModel(auth, users)
-        users.setUser(user().copy(userId = "user-2", level = SpeakingLevel.B1))
+        users.setUser(user().copy(userId = "user-2", displayName = "Second student", level = SpeakingLevel.B1))
 
         auth.signedInUserId.value = "user-2"
         advanceUntilIdle()
         users.setUser(user().copy(level = SpeakingLevel.B2))
         advanceUntilIdle()
 
-        assertEquals("user-2", viewModel.userProfile.value?.userId)
-        assertEquals(SpeakingLevel.B1, viewModel.userProfile.value?.level)
+        assertEquals("Second student", viewModel.uiState.value.displayName)
+        assertEquals(SpeakingLevel.B1, viewModel.uiState.value.level)
         assertEquals(1, users.activeObservers)
     }
 
@@ -75,7 +75,7 @@ class ProfileViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, users.activeObservers)
-        assertEquals("user-1", viewModel.userProfile.value?.userId)
+        assertEquals("student@example.com", viewModel.uiState.value.email)
     }
 
     @Test
@@ -84,8 +84,8 @@ class ProfileViewModelTest {
         val viewModel = ProfileViewModel(auth, users)
         advanceUntilIdle()
 
-        assertNull(viewModel.userProfile.value)
-        assertFalse(viewModel.isProfileLoadFailed.value)
+        assertTrue(viewModel.uiState.value.email.isEmpty())
+        assertFalse(viewModel.uiState.value.isProfileLoadFailed)
     }
 
     @Test
@@ -100,7 +100,18 @@ class ProfileViewModelTest {
         advanceUntilIdle()
 
         assertTrue(hasCalledBack)
-        assertNull(viewModel.userProfile.value)
+        assertTrue(viewModel.uiState.value.email.isEmpty())
+    }
+
+    @Test
+    fun profileMapsEveryCriterionAsMeaningInsteadOfDisplayText() = runTest {
+        users.setUser(user().copy(level = SpeakingLevel.B1, latestAssessmentCriteria = com.project.speakmate.domain.model.SpeakingCriteriaResult(true, false, true, false, true)))
+        val viewModel = ProfileViewModel(auth, users)
+        advanceUntilIdle()
+        assertEquals(SpeakingLevel.B1, viewModel.uiState.value.level)
+        assertEquals(5, viewModel.uiState.value.skills.size)
+        assertEquals(listOf(true, false, true, false, true), viewModel.uiState.value.skills.map { it.isPassed })
+        assertTrue(viewModel.uiState.value.skills.all { it.criterion != null && it.title.isEmpty() })
     }
 
     private fun user() = User("user-1", "Student", "student@example.com", "")

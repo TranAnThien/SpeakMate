@@ -23,6 +23,7 @@ fun SavedVocabRoute(
         onClearSearch = { viewModel.updateSearchQuery("") },
         onPlayClick = { viewModel.playWord(it.word) },
         onDeleteClick = { viewModel.removeVocabulary(it.word, it.partOfSpeech) },
-        modifier = modifier
+        modifier = modifier,
+        onRetry = viewModel::retry
     )
 }
