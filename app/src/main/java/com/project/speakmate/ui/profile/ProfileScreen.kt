@@ -22,8 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.UserProfileLoadError
 import com.project.speakmate.ui.profile.components.ProfileHeader
 import com.project.speakmate.ui.profile.components.ProfileIdentity
@@ -38,10 +36,6 @@ fun ProfileScreen(
     state: ProfileUiState,
     onOpenSettings: () -> Unit,
     onOpenVocabulary: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
     onRetryProfile: () -> Unit = {}
@@ -97,7 +91,6 @@ fun ProfileScreen(
                 ProfileSkillCard(skill)
             }
         }
-        AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile,
-            selectedDestination = AppDestination.PROFILE, bottomPadding = 4.dp)
+
     }
 }

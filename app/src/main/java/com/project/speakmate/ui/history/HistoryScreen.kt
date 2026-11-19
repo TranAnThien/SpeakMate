@@ -18,8 +18,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.ContentErrorDialog
 import com.project.speakmate.ui.components.ContentFilterRow
 import com.project.speakmate.ui.components.ContentFilterUiState
@@ -42,10 +40,7 @@ fun HistoryScreen(
     onStartPractice: () -> Unit,
     onRetry: () -> Unit,
     onDismissError: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
@@ -88,15 +83,14 @@ fun HistoryScreen(
                             primaryText = stringResource(if (state.presentation == HistoryPresentation.EMPTY) R.string.history_start_practice else R.string.content_reload),
                             secondaryText = if (state.presentation == HistoryPresentation.EMPTY) "" else stringResource(R.string.goal_assessment_return_to_path),
                             onPrimaryAction = if (state.presentation == HistoryPresentation.EMPTY) onStartPractice else onRetry,
-                            onSecondaryAction = onOpenTrainingPath,
+                            onSecondaryAction = onReturnToPath,
                             isMascot = state.presentation == HistoryPresentation.EMPTY
                         )
                     }
                     HistoryPresentation.ERROR_DIALOG -> Unit
                 }
             }
-            AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile,
-                selectedDestination = AppDestination.HISTORY, bottomPadding = 4.dp)
+
         }
         if (state.presentation == HistoryPresentation.ERROR_DIALOG) {
             ContentErrorDialog(stringResource(R.string.history_error_title), stringResource(R.string.history_error_dialog_description), onRetry, onDismissError)

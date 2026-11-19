@@ -51,7 +51,7 @@ class AuthRepositoryImplTest {
 
     @Test
     fun signOut_returnsSuccess() = runTest {
-        every { authDataSource.signOut() } just runs
+        coEvery { authDataSource.signOut() } just runs
 
         val result = repository.signOut()
 
@@ -60,7 +60,7 @@ class AuthRepositoryImplTest {
 
     @Test
     fun signOutRemovesOnlySignedInUserMarker() = runTest {
-        every { authDataSource.signOut() } just runs
+        coEvery { authDataSource.signOut() } just runs
 
         val result = repository.signOut()
 
@@ -71,7 +71,7 @@ class AuthRepositoryImplTest {
 
     @Test
     fun signOut_returnsFailure_whenThrows() = runTest {
-        every { authDataSource.signOut() } throws RuntimeException("Sign out error")
+        coEvery { authDataSource.signOut() } throws RuntimeException("Sign out error")
 
         val result = repository.signOut()
 

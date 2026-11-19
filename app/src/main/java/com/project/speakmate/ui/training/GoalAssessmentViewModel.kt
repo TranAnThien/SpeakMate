@@ -1,5 +1,7 @@
 package com.project.speakmate.ui.training
 
+import androidx.navigation.toRoute
+import com.project.speakmate.app.AppRoute
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,8 +18,6 @@ import com.project.speakmate.domain.rules.VariantRules
 import com.project.speakmate.ui.training.state.GoalAssessmentActionUiState
 import com.project.speakmate.ui.training.state.GoalAssessmentUiState
 import com.project.speakmate.ui.training.state.TrainingContentStatus
-import com.project.speakmate.utils.AppConstant
-import com.project.speakmate.utils.extension.defaultEmpty
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.random.Random
@@ -38,7 +38,7 @@ class GoalAssessmentViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
 ) : ViewModel() {
-    private val goalId = savedStateHandle.get<String>(AppConstant.GOAL_ID_ARGUMENT).defaultEmpty()
+    private val goalId = try { savedStateHandle.toRoute<AppRoute.GoalAssessment>().goalId } catch (_: IllegalArgumentException) { "" }
     private val _uiState = MutableStateFlow(GoalAssessmentUiState())
     val uiState: StateFlow<GoalAssessmentUiState> = _uiState.asStateFlow()
     private var observationJob: Job? = null
@@ -49,6 +49,10 @@ class GoalAssessmentViewModel @Inject constructor(
 
     fun retry() {
         observeAssessment()
+    }
+
+    fun stopObservingAssessment() {
+        observationJob?.cancel()
     }
 
     fun prepareRetry() {

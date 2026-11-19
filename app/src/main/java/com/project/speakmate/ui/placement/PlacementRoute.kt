@@ -3,8 +3,8 @@ package com.project.speakmate.ui.placement
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -33,28 +33,20 @@ import com.project.speakmate.utils.extension.default
 @Composable
 fun PlacementRoute(
     viewModel: PlacementViewModel,
-    currentDestination: String,
-    onNavigate: (String) -> Unit,
+    isCallDestination: Boolean,
+    onChangeCallDestination: (Boolean) -> Unit,
     onHome: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
-    val navigate by rememberUpdatedState(onNavigate)
     val goHome by rememberUpdatedState(onHome)
-    val destination = when (state.phase) {
-        PlacementPhase.LOADING -> currentDestination
-        PlacementPhase.INTRODUCTION, PlacementPhase.RESUME_PROMPT -> PlacementDestination.INTRODUCTION
-        PlacementPhase.CALLING -> PlacementDestination.CALL
-        PlacementPhase.GRADING, PlacementPhase.NEXT_TASK, PlacementPhase.INSUFFICIENT_EVIDENCE,
-        PlacementPhase.UNDETERMINED -> PlacementDestination.STATUS
-        PlacementPhase.RESULT -> PlacementDestination.RESULT
-    }
-
-    LaunchedEffect(destination, currentDestination, lifecycleOwner) {
-        if (destination != currentDestination) {
+    val changeCallDestination by rememberUpdatedState(onChangeCallDestination)
+    val shouldShowCall = state.phase == PlacementPhase.CALLING
+    LaunchedEffect(shouldShowCall, isCallDestination, lifecycleOwner) {
+        if (shouldShowCall != isCallDestination) {
             lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                navigate(destination)
+                changeCallDestination(shouldShowCall)
             }
         }
     }
@@ -67,15 +59,16 @@ fun PlacementRoute(
             }
         }
     }
-    BackHandler(enabled = state.phase != PlacementPhase.CALLING || destination != currentDestination) {
+    BackHandler(enabled = !shouldShowCall || !isCallDestination) {
         viewModel.exit()
     }
 
-    if (destination != currentDestination || state.phase == PlacementPhase.LOADING) {
+    if (shouldShowCall != isCallDestination) {
         PlacementStatusScreen(PlacementStatusUiState(), viewModel::exit, viewModel::continueAssessment,
             viewModel::retry, viewModel::exit, viewModel::exit, modifier)
         return
     }
+
     when (state.phase) {
         PlacementPhase.INTRODUCTION -> PlacementIntroductionScreen(viewModel::exit, viewModel::start, viewModel::skip, modifier, state.saveFailed)
         PlacementPhase.RESUME_PROMPT -> Box(modifier) {
@@ -118,7 +111,8 @@ fun PlacementRoute(
                 result, state.isSavingResult, state.saveFailed, viewModel::exit, viewModel::confirmResultSaved, modifier
             )
         }
-        PlacementPhase.LOADING -> Unit
+        PlacementPhase.LOADING -> PlacementStatusScreen(PlacementStatusUiState(), viewModel::exit, viewModel::continueAssessment,
+            viewModel::retry, viewModel::exit, viewModel::exit, modifier)
     }
 }
 

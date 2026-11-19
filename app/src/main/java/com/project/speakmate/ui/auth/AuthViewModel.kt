@@ -1,6 +1,9 @@
 package com.project.speakmate.ui.auth
 
 import android.util.Log
+import com.project.speakmate.ui.auth.state.AuthEffect
+import com.project.speakmate.utils.extension.defaultEmpty
+import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.InvalidUserProfileException
@@ -33,19 +36,29 @@ class AuthViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(GoogleSignInUiState())
     val uiState: StateFlow<GoogleSignInUiState> = _uiState.asStateFlow()
 
-    private val _signInSuccess = MutableSharedFlow<Unit>()
-    val signInSuccess: SharedFlow<Unit> = _signInSuccess.asSharedFlow()
+    private val _uiEffect = MutableSharedFlow<AuthEffect>(replay = 0)
+    val uiEffect: SharedFlow<AuthEffect> = _uiEffect.asSharedFlow()
+
+    fun startSignIn() {
+        _uiState.update { it.copy(status = GoogleSignInStatus.LOADING) }
+    }
 
     fun handleGoogleSignIn(idToken: String, displayName: String?, email: String?, photoUrl: String?) {
         viewModelScope.launch {
             _uiState.update { it.copy(status = GoogleSignInStatus.LOADING) }
 
-            val authResult = authRepository.signInWithGoogle(idToken)
-            authResult.onSuccess { userId ->
-                checkAndInitializeUser(userId, displayName, email, photoUrl)
-            }.onFailure { error ->
-                Log.e("AuthViewModel", "FirebaseAuth failed", error)
-                _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }
+            try {
+                val authResult = authRepository.signInWithGoogle(idToken)
+                authResult.onSuccess { userId ->
+                    checkAndInitializeUser(userId, displayName, email, photoUrl)
+                }.onFailure { error ->
+                    Log.e("AuthViewModel", "FirebaseAuth failed", error)
+                    _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                onGoogleSignInError(error)
             }
         }
     }
@@ -55,16 +68,16 @@ class AuthViewModel @Inject constructor(
     }
 
     fun onGoogleSignInError(error: Throwable) {
-        Log.e("AuthViewModel", "Google Sign-In failed", error)
+        Log.e("AuthViewModel", "Google Sign-In failed")
         _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }
     }
 
     private suspend fun checkAndInitializeUser(userId: String, displayName: String?, email: String?, photoUrl: String?) {
         val defaultUser = User(
             userId = userId,
-            displayName = displayName ?: "",
-            email = email ?: "",
-            photoUrl = photoUrl ?: "",
+            displayName = displayName.defaultEmpty(),
+            email = email.defaultEmpty(),
+            photoUrl = photoUrl.defaultEmpty(),
             level = SpeakingLevel.NOT_ASSESSED,
             savedVocabularies = emptyList()
         )
@@ -72,7 +85,7 @@ class AuthViewModel @Inject constructor(
         val error = userRepository.getOrCreateUser(defaultUser).exceptionOrNull()
         if (error == null || error is InvalidUserProfileException) {
             _uiState.update { it.copy(status = GoogleSignInStatus.NORMAL) }
-            _signInSuccess.emit(Unit)
+            _uiEffect.emit(AuthEffect.SignedIn)
         } else {
             Log.e("AuthViewModel", "Firestore getOrCreateUser failed", error)
             authRepository.signOut()

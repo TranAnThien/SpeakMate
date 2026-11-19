@@ -4,6 +4,7 @@ import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.UserRepository
+import com.project.speakmate.ui.auth.state.AuthEffect
 import com.project.speakmate.ui.auth.state.GoogleSignInStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -64,9 +65,9 @@ class AuthViewModelTest {
             User("uid-1", "Test", "test@mail.com", "", SpeakingLevel.NOT_ASSESSED)
         )
 
-        val events = mutableListOf<Unit>()
+        val events = mutableListOf<AuthEffect>()
         val job = launch(testDispatcher) {
-            viewModel.signInSuccess.collect { events.add(it) }
+            viewModel.uiEffect.collect { events.add(it) }
         }
 
         viewModel.handleGoogleSignIn("valid-token", "Test", "test@mail.com", null)

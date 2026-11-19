@@ -50,6 +50,9 @@ fun SettingsScreen(
                     SettingsMenuRow(R.drawable.ic_profile_terms, stringResource(R.string.auth_terms), "", false, onOpenTerms)
                 }
                 Text(stringResource(R.string.settings_account_heading), style = DesignTypography.Label, color = DesignColor.Muted)
+                if (state.isSignOutFailed) {
+                    Text(stringResource(R.string.settings_sign_out_failed), style = DesignTypography.Detail, color = DesignColor.Error)
+                }
                 Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
                     SettingsMenuRow(R.drawable.ic_profile_sign_out, stringResource(R.string.settings_sign_out),
                         stringResource(R.string.settings_sign_out_description), true, onRequestSignOut)

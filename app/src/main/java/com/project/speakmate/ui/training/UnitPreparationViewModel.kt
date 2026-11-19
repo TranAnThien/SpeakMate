@@ -136,6 +136,10 @@ class UnitPreparationViewModel @Inject constructor(
         currentUnitId?.let(::getPreparation)
     }
 
+    fun stopObservingPreparation() {
+        preparationJob?.cancel()
+    }
+
     fun selectSection(section: PreparationSection) {
         _uiState.update { it.copy(section = section) }
     }

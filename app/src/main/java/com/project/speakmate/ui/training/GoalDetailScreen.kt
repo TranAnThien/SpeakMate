@@ -25,7 +25,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.StateIllustration
 import com.project.speakmate.ui.training.components.GoalDetailHeader
@@ -42,10 +41,7 @@ fun GoalDetailScreen(
     onBack: () -> Unit,
     onOpenUnit: (TrainingActivityDestination) -> Unit,
     onPrepareCurrentUnit: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
@@ -75,7 +71,7 @@ fun GoalDetailScreen(
                         }
                     }
                 }
-            } else GoalEmptyContent(onOpenTrainingPath)
+            } else GoalEmptyContent(onReturnToPath)
         }
         if (state.canPrepareCurrentUnit && state.hasUnits) {
             Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp)
@@ -87,12 +83,12 @@ fun GoalDetailScreen(
                 )
             }
         }
-        AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile)
+
     }
 }
 
 @Composable
-private fun GoalEmptyContent(onOpenTrainingPath: () -> Unit) {
+private fun GoalEmptyContent(onReturnToPath: () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val contentHeight = maxHeight
         Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
@@ -106,7 +102,7 @@ private fun GoalEmptyContent(onOpenTrainingPath: () -> Unit) {
                 Text(stringResource(R.string.training_no_units_description), style = DesignTypography.Body,
                     color = DesignColor.Muted, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(16.dp))
-                PrimaryButton(stringResource(R.string.training_back_to_path), onOpenTrainingPath, Modifier.padding(horizontal = 16.dp))
+                PrimaryButton(stringResource(R.string.training_back_to_path), onReturnToPath, Modifier.padding(horizontal = 16.dp))
             }
         }
     }

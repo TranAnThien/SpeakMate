@@ -1,12 +1,13 @@
 package com.project.speakmate.ui.history
 
 import com.project.speakmate.utils.AppConstant
+import androidx.navigation.toRoute
+import com.project.speakmate.app.AppRoute
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.ui.components.AssessmentCriterionType
 import com.project.speakmate.utils.extension.default
-import com.project.speakmate.utils.extension.defaultEmpty
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import com.project.speakmate.domain.model.PracticeAttempt
@@ -36,7 +37,7 @@ class SessionDetailViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository
 ) : ViewModel() {
 
-    private val attemptId: String = savedStateHandle.get<String>(AppConstant.ATTEMPT_ID_ARGUMENT).defaultEmpty()
+    private val attemptId: String = try { savedStateHandle.toRoute<AppRoute.SessionDetail>().attemptId } catch (_: IllegalArgumentException) { "" }
 
     private val _uiState = MutableStateFlow(SessionDetailUiState(presentation = SessionDetailPresentation.LOADING))
     val uiState: StateFlow<SessionDetailUiState> = _uiState.asStateFlow()

@@ -1,6 +1,7 @@
 package com.project.speakmate.ui.profile
 
 import androidx.lifecycle.ViewModel
+import com.project.speakmate.ui.profile.state.ProfileEffect
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.ui.components.AssessmentCriterionType
 import com.project.speakmate.ui.profile.state.ProfileUiState
@@ -33,8 +34,8 @@ class ProfileViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
-    private val _forceSignOutEvent = MutableSharedFlow<Unit>()
-    val forceSignOutEvent: SharedFlow<Unit> = _forceSignOutEvent.asSharedFlow()
+    private val _uiEffect = MutableSharedFlow<ProfileEffect>(replay = 0)
+    val uiEffect: SharedFlow<ProfileEffect> = _uiEffect.asSharedFlow()
 
     private var hasAuthenticatedSession = false
     private var profileObservationJob: Job? = null
@@ -52,7 +53,7 @@ class ProfileViewModel @Inject constructor(
                     if (uid == null) {
                         val shouldNavigateToAuth = hasAuthenticatedSession
                         hasAuthenticatedSession = false
-                        if (shouldNavigateToAuth) _forceSignOutEvent.emit(Unit)
+                        if (shouldNavigateToAuth) _uiEffect.emit(ProfileEffect.SignedOut)
                     } else {
                         hasAuthenticatedSession = true
                         try {
@@ -76,11 +77,15 @@ class ProfileViewModel @Inject constructor(
 
     fun retryProfile() = observeCurrentUser()
 
-    fun signOut(onComplete: () -> Unit) {
+    fun signOut() {
         viewModelScope.launch {
-            hasAuthenticatedSession = false
-            authRepository.signOut()
-            onComplete()
+            try {
+                authRepository.signOut().getOrThrow()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isProfileLoadFailed = true) }
+            }
         }
     }
 

@@ -23,10 +23,7 @@ private fun HistoryPopulatedScreenPreview() {
             onStartPractice = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -42,10 +39,7 @@ private fun HistoryEmptyScreenPreview() {
             onStartPractice = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -61,10 +55,7 @@ private fun HistoryLoadingScreenPreview() {
             onStartPractice = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -80,10 +71,7 @@ private fun HistoryLoadErrorScreenPreview() {
             onStartPractice = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -99,10 +87,7 @@ private fun HistoryErrorDialogScreenPreview() {
             onStartPractice = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }

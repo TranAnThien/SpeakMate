@@ -1,5 +1,7 @@
 package com.project.speakmate.ui.training
 
+import androidx.navigation.toRoute
+import com.project.speakmate.app.AppRoute
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,7 +16,6 @@ import com.project.speakmate.ui.training.state.UnitResultCriterionUiState
 import com.project.speakmate.ui.training.state.UnitResultEvaluation
 import com.project.speakmate.ui.training.state.UnitResultPresentation
 import com.project.speakmate.ui.training.state.UnitResultUiState
-import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.utils.extension.defaultEmpty
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -30,7 +31,7 @@ class UnitResultViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val completionRepository: PracticeCompletionRepository
 ) : ViewModel() {
-    private val attemptId = savedStateHandle.get<String>(AppConstant.ATTEMPT_ID_ARGUMENT).defaultEmpty()
+    private val attemptId = try { savedStateHandle.toRoute<AppRoute.UnitResult>().attemptId } catch (_: IllegalArgumentException) { "" }
     private val _uiState = MutableStateFlow(UnitResultUiState())
     val uiState: StateFlow<UnitResultUiState> = _uiState.asStateFlow()
 

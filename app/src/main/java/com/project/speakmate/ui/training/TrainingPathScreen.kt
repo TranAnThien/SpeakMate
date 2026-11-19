@@ -31,8 +31,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.training.components.TrainingGoalCard
@@ -54,10 +52,6 @@ fun TrainingPathScreen(
     onContinuePath: () -> Unit,
     onShowLevelInformation: () -> Unit,
     onRetry: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
@@ -95,13 +89,7 @@ fun TrainingPathScreen(
                     PrimaryButton(stringResource(R.string.home_continue_path), onContinuePath)
                 }
             }
-            AppBottomBar(
-                onOpenTrainingPath = onOpenTrainingPath,
-                onOpenPractice = onOpenPractice,
-                onOpenHistory = onOpenHistory,
-                onOpenProfile = onOpenProfile,
-                selectedDestination = AppDestination.TRAINING
-            )
+
         }
         if (state.status == TrainingContentStatus.ERROR_DIALOG) {
             LoadErrorDialog(stringResource(R.string.training_error_dialog_title), stringResource(R.string.training_error_dialog_description), onRetry)

@@ -447,6 +447,8 @@
     <string name="settings_application_heading">ỨNG DỤNG</string>
     <string name="settings_account_heading">TÀI KHOẢN</string>
     <string name="settings_language">Ngôn ngữ / Language</string>
+    <string name="settings_language_vietnamese">Tiếng Việt</string>
+    <string name="settings_sign_out_failed">Không thể đăng xuất. Vui lòng thử lại.</string>
     <string name="settings_sign_out">Đăng xuất</string>
     <string name="settings_sign_out_description">Quay về màn hình đăng nhập</string>
     <string name="settings_sign_out_confirmation_title">Đăng xuất khỏi SpeakMate?</string>

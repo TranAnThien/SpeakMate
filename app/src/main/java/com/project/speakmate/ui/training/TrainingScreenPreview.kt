@@ -22,11 +22,7 @@ private fun TrainingPathCollapsedScreenPreview() {
             onOpenUnit = {},
             onContinuePath = {},
             onShowLevelInformation = {},
-            onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onRetry = {}
         )
     }
 }
@@ -42,11 +38,7 @@ private fun TrainingPathExpandedScreenPreview() {
             onOpenUnit = {},
             onContinuePath = {},
             onShowLevelInformation = {},
-            onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onRetry = {}
         )
     }
 }
@@ -63,10 +55,6 @@ private fun TrainingPathScrollScreenPreview() {
             onContinuePath = {},
             onShowLevelInformation = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {},
             listState = rememberLazyListState(initialFirstVisibleItemIndex = 1)
         )
     }
@@ -83,11 +71,7 @@ private fun TrainingPathLoadingScreenPreview() {
             onOpenUnit = {},
             onContinuePath = {},
             onShowLevelInformation = {},
-            onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onRetry = {}
         )
     }
 }
@@ -103,11 +87,7 @@ private fun TrainingPathErrorDialogScreenPreview() {
             onOpenUnit = {},
             onContinuePath = {},
             onShowLevelInformation = {},
-            onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onRetry = {}
         )
     }
 }
@@ -123,11 +103,7 @@ private fun TrainingPathLoadErrorScreenPreview() {
             onOpenUnit = {},
             onContinuePath = {},
             onShowLevelInformation = {},
-            onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onRetry = {}
         )
     }
 }
@@ -142,14 +118,11 @@ private fun GoalDetailScreenPreview() {
                 description = "Gọi đồ uống, yêu cầu điều chỉnh và thanh toán trong một cuộc hội thoại tự nhiên.",
                 units = getTrainingUnitsPreviewState(hasDescription = true),
                 canPrepareCurrentUnit = true
-            ),
+        ),
             onBack = {},
             onOpenUnit = {},
             onPrepareCurrentUnit = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -163,10 +136,7 @@ private fun GoalDetailNoUnitsScreenPreview() {
             onBack = {},
             onOpenUnit = {},
             onPrepareCurrentUnit = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }

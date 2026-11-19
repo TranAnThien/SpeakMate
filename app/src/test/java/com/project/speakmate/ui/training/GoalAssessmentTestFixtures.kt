@@ -40,7 +40,7 @@ object GoalAssessmentTestFixtures {
     fun arguments(goalIndex: Int = 0, isReplay: Boolean = false) = SavedStateHandle(mapOf(
         AppConstant.GOAL_ID_ARGUMENT to path.goals[goalIndex].goalId,
         AppConstant.ATTEMPT_ID_ARGUMENT to ATTEMPT_ID,
-        AppConstant.IS_REPLAY_ARGUMENT to isReplay.toString()
+        AppConstant.IS_REPLAY_ARGUMENT to isReplay
     ))
 
     fun practice(goalIndex: Int = 0) = PracticeCompletionTestFixtures.practice().let { practice ->

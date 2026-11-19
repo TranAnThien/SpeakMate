@@ -18,11 +18,7 @@ private fun ProfileDefaultScreenPreview() {
         ProfileScreen(
             state = rememberProfilePreviewState(isLongName = false),
             onOpenSettings = {},
-            onOpenVocabulary = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onOpenVocabulary = {}
         )
     }
 }
@@ -35,10 +31,6 @@ private fun ProfileBottomScreenPreview() {
             state = rememberProfilePreviewState(isLongName = false),
             onOpenSettings = {},
             onOpenVocabulary = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {},
             listState = rememberLazyListState(initialFirstVisibleItemScrollOffset = with(LocalDensity.current) { 341.dp.roundToPx() })
         )
     }
@@ -51,11 +43,7 @@ private fun ProfileLongNameScreenPreview() {
         ProfileScreen(
             state = rememberProfilePreviewState(isLongName = true),
             onOpenSettings = {},
-            onOpenVocabulary = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onOpenVocabulary = {}
         )
     }
 }
@@ -68,10 +56,6 @@ private fun ProfileLongNameBottomScreenPreview() {
             state = rememberProfilePreviewState(isLongName = true),
             onOpenSettings = {},
             onOpenVocabulary = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {},
             listState = rememberLazyListState(initialFirstVisibleItemScrollOffset = with(LocalDensity.current) { 373.dp.roundToPx() })
         )
     }

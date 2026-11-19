@@ -1,5 +1,7 @@
 package com.project.speakmate.ui.practice
 
+import androidx.navigation.toRoute
+import com.project.speakmate.app.AppRoute
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,7 +21,7 @@ class ScenarioPreparationViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository
 ) : ViewModel() {
 
-    private val practiceId: String = savedStateHandle.get<String>("practiceId") ?: ""
+    private val practiceId: String = try { savedStateHandle.toRoute<AppRoute.ScenarioPreparation>().practiceId } catch (_: IllegalArgumentException) { "" }
 
     private val _uiState = MutableStateFlow(ScenarioPreparationUiState())
     val uiState: StateFlow<ScenarioPreparationUiState> = _uiState.asStateFlow()

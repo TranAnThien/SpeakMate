@@ -18,8 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.ContentErrorDialog
 import com.project.speakmate.ui.components.ContentFilterRow
 import com.project.speakmate.ui.components.ContentFilterUiState
@@ -40,10 +38,7 @@ fun ScenarioCatalogScreen(
     onSelectScenario: (String) -> Unit,
     onRetry: () -> Unit,
     onDismissError: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
@@ -91,15 +86,14 @@ fun ScenarioCatalogScreen(
                                 R.string.goal_assessment_return_to_path else R.string.content_reload),
                             secondaryText = stringResource(if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED)
                                 R.string.content_reload else R.string.goal_assessment_return_to_path),
-                            onPrimaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onOpenTrainingPath else onRetry,
-                            onSecondaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onRetry else onOpenTrainingPath
+                            onPrimaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onReturnToPath else onRetry,
+                            onSecondaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onRetry else onReturnToPath
                         )
                     }
                     ScenarioCatalogPresentation.ERROR_DIALOG -> Unit
                 }
             }
-            AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile,
-                selectedDestination = AppDestination.PRACTICE, bottomPadding = 4.dp)
+
         }
         if (state.presentation == ScenarioCatalogPresentation.ERROR_DIALOG) {
             ContentErrorDialog(stringResource(R.string.practice_error_title), stringResource(R.string.practice_error_dialog_description),

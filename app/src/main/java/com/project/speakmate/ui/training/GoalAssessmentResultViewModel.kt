@@ -1,5 +1,7 @@
 package com.project.speakmate.ui.training
 
+import androidx.navigation.toRoute
+import com.project.speakmate.app.AppRoute
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,7 +17,7 @@ import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.domain.rules.TrainingProgressRules
 import com.project.speakmate.ui.training.state.GoalAssessmentPresentation
 import com.project.speakmate.ui.training.state.GoalAssessmentResultUiState
-import com.project.speakmate.utils.AppConstant
+import com.project.speakmate.utils.extension.defaultFalse
 import com.project.speakmate.utils.extension.defaultEmpty
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -37,9 +39,10 @@ class GoalAssessmentResultViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
 ) : ViewModel() {
-    private val attemptId = savedStateHandle.get<String>(AppConstant.ATTEMPT_ID_ARGUMENT).defaultEmpty()
-    private val goalId = savedStateHandle.get<String>(AppConstant.GOAL_ID_ARGUMENT).defaultEmpty()
-    private val isReplay = savedStateHandle.get<String>(AppConstant.IS_REPLAY_ARGUMENT) == true.toString()
+    private val route = try { savedStateHandle.toRoute<AppRoute.GoalAssessmentResult>() } catch (_: IllegalArgumentException) { null }
+    private val attemptId = route?.attemptId.defaultEmpty()
+    private val goalId = route?.goalId.defaultEmpty()
+    private val isReplay = route?.isReplay.defaultFalse()
     private val _uiState = MutableStateFlow(GoalAssessmentResultUiState())
     val uiState: StateFlow<GoalAssessmentResultUiState> = _uiState.asStateFlow()
     private var observationJob: Job? = null

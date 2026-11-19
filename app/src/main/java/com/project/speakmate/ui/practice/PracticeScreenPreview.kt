@@ -22,10 +22,7 @@ private fun ScenarioCatalogPopulatedScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -40,10 +37,7 @@ private fun ScenarioCatalogLoadingScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -58,10 +52,7 @@ private fun ScenarioCatalogEmptyScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -76,10 +67,7 @@ private fun ScenarioCatalogUnconfiguredScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -94,10 +82,7 @@ private fun ScenarioCatalogLoadErrorScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -112,10 +97,7 @@ private fun ScenarioCatalogErrorDialogScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -132,7 +114,7 @@ private fun ScenarioPreparationScreenPreview() {
                 aiRole = "Nhân viên quán",
                 preCallHint = "Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.",
                 isInitializing = false
-            ),
+        ),
             onBack = {},
             onStartCall = {}
         )
@@ -151,7 +133,7 @@ private fun ScenarioInitializingScreenPreview() {
                 aiRole = "Nhân viên quán",
                 preCallHint = "Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.",
                 isInitializing = true
-            ),
+        ),
             onBack = {},
             onStartCall = {}
         )
@@ -166,7 +148,7 @@ private fun PracticeSummaryScreenPreview() {
             state = PracticeSummaryUiState(
                 scenarioTitle = stringResource(R.string.practice_preview_cafe_title),
                 sessionDescription = stringResource(R.string.practice_preview_session_description)
-            ),
+        ),
             onBack = {},
             onViewTranscript = {},
             onGoHome = {}

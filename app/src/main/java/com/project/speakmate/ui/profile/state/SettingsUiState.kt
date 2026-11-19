@@ -7,5 +7,7 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class SettingsUiState(
     val languageLabel: String = "",
-    val isSignOutConfirmationVisible: Boolean = false
+    val isSignOutConfirmationVisible: Boolean = false,
+    val isSigningOut: Boolean = false,
+    val isSignOutFailed: Boolean = false
 )

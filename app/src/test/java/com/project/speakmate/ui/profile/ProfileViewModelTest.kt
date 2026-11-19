@@ -8,6 +8,9 @@ import com.project.speakmate.test.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import com.project.speakmate.ui.profile.state.ProfileEffect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -89,17 +92,20 @@ class ProfileViewModelTest {
     }
 
     @Test
-    fun signOutCallsTheRepositoryBeforeTheCallback() = runTest {
+    fun signOutEmitsTheEffectAfterTheRepositorySignsOut() = runTest {
         val viewModel = ProfileViewModel(auth, users)
-        var hasCalledBack = false
-
-        viewModel.signOut {
-            assertNull(auth.signedInUserId.value)
-            hasCalledBack = true
+        val effects = mutableListOf<ProfileEffect>()
+        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiEffect.collect {
+                assertNull(auth.signedInUserId.value)
+                effects.add(it)
+            }
         }
+        viewModel.signOut()
         advanceUntilIdle()
 
-        assertTrue(hasCalledBack)
+        assertEquals(listOf(ProfileEffect.SignedOut), effects)
+        observer.cancel()
         assertTrue(viewModel.uiState.value.email.isEmpty())
     }
 

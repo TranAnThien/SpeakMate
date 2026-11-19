@@ -33,8 +33,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.UserProfileLoadError
@@ -54,15 +52,12 @@ fun HomeScreen(
     onReviewPath: () -> Unit,
     onSelectScenario: () -> Unit,
     onRetry: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onViewProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            HomeHeader(state.presentation == HomePresentation.LOADING, state.avatarUrl, onOpenProfile)
+            HomeHeader(state.presentation == HomePresentation.LOADING, state.avatarUrl, onViewProfile)
             Box(Modifier.weight(1f)) {
                 when (state.presentation) {
                     HomePresentation.LOADING -> HomeLoadingContent()
@@ -73,7 +68,7 @@ fun HomeScreen(
                     else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                         .padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (state.hasProfileSummary) HomeProfileCard(state.displayName, state.email, state.avatarUrl, onOpenProfile)
+                        if (state.hasProfileSummary) HomeProfileCard(state.displayName, state.email, state.avatarUrl, onViewProfile)
                         HomeLevelCard(state.level, state.presentation == HomePresentation.UNASSESSED)
                         when (state.presentation) {
                             HomePresentation.UNASSESSED -> HomeAssessmentCard(onStartAssessment)
@@ -97,13 +92,7 @@ fun HomeScreen(
                     } else PrimaryButton(stringResource(R.string.home_continue_path), onContinuePath)
                 }
             }
-            AppBottomBar(
-                onOpenTrainingPath = onOpenTrainingPath,
-                onOpenPractice = onOpenPractice,
-                onOpenHistory = onOpenHistory,
-                onOpenProfile = onOpenProfile,
-                selectedDestination = AppDestination.TRAINING
-            )
+
         }
         if (state.presentation == HomePresentation.ERROR_DIALOG) {
             LoadErrorDialog(stringResource(R.string.home_error_dialog_title), stringResource(R.string.home_error_dialog_description),
@@ -114,13 +103,13 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(isLoading: Boolean, avatarUrl: String?, onOpenProfile: () -> Unit) {
+private fun HomeHeader(isLoading: Boolean, avatarUrl: String?, onViewProfile: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Text(stringResource(R.string.app_name), style = DesignTypography.Brand, color = DesignColor.Primary)
         Box(Modifier.size(40.dp).background(if (isLoading) DesignColor.Skeleton else if (!avatarUrl.isNullOrEmpty()) DesignColor.Surface else DesignColor.IconBlue, CircleShape)
             .clip(CircleShape)
-            .clickable(enabled = !isLoading, onClick = onOpenProfile), contentAlignment = Alignment.Center) {
+            .clickable(enabled = !isLoading, onClick = onViewProfile), contentAlignment = Alignment.Center) {
             if (!isLoading) {
                 if (!avatarUrl.isNullOrEmpty()) {
                     AsyncImage(
@@ -139,9 +128,9 @@ private fun HomeHeader(isLoading: Boolean, avatarUrl: String?, onOpenProfile: ()
 }
 
 @Composable
-private fun HomeProfileCard(displayName: String, email: String, avatarUrl: String?, onOpenProfile: () -> Unit) {
+private fun HomeProfileCard(displayName: String, email: String, avatarUrl: String?, onViewProfile: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp))
-        .clickable(onClick = onOpenProfile).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp),
+        .clickable(onClick = onViewProfile).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.Top) {
 
         if (!avatarUrl.isNullOrEmpty()) {

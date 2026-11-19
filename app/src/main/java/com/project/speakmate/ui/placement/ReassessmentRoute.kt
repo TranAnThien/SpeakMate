@@ -3,15 +3,14 @@ package com.project.speakmate.ui.placement
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.project.speakmate.utils.AppConstant
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.project.speakmate.R
 import com.project.speakmate.utils.extension.default
 import com.project.speakmate.domain.rules.PlacementRules
@@ -34,8 +33,8 @@ import com.project.speakmate.ui.placement.state.ReassessmentUiState
 @Composable
 fun ReassessmentRoute(
     viewModel: ReassessmentViewModel,
-    currentDestination: String,
-    onNavigate: (String) -> Unit,
+    isCallDestination: Boolean,
+    onChangeCallDestination: (Boolean) -> Unit,
     onReturnToPath: () -> Unit,
     onOpenPromotedPath: () -> Unit,
     onHome: () -> Unit,
@@ -43,13 +42,14 @@ fun ReassessmentRoute(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
-    val navigate by rememberUpdatedState(onNavigate)
-    val destination = when (state.phase) {
-        ReassessmentPhase.LOADING, ReassessmentPhase.CLOSED -> currentDestination
-        ReassessmentPhase.INTRODUCTION -> AppConstant.REASSESSMENT_INTRODUCTION_ROUTE
-        ReassessmentPhase.CALLING -> AppConstant.REASSESSMENT_CALL_ROUTE
-        ReassessmentPhase.GRADING, ReassessmentPhase.NEXT_TASK, ReassessmentPhase.ERROR -> AppConstant.REASSESSMENT_STATUS_ROUTE
-        ReassessmentPhase.RESULT -> AppConstant.REASSESSMENT_RESULT_ROUTE
+    val changeCallDestination by rememberUpdatedState(onChangeCallDestination)
+    val shouldShowCall = state.phase == ReassessmentPhase.CALLING
+    LaunchedEffect(shouldShowCall, isCallDestination, lifecycleOwner) {
+        if (shouldShowCall != isCallDestination) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                changeCallDestination(shouldShowCall)
+            }
+        }
     }
     val exitAssessment: () -> Unit = {
         viewModel.exit()
@@ -59,13 +59,8 @@ fun ReassessmentRoute(
             else -> onReturnToPath()
         }
     }
-    LaunchedEffect(destination, currentDestination, lifecycleOwner) {
-        if (destination != currentDestination) {
-            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { navigate(destination) }
-        }
-    }
-    BackHandler(enabled = state.phase != ReassessmentPhase.CALLING || destination != currentDestination, onBack = exitAssessment)
-    if (destination != currentDestination || state.phase in listOf(ReassessmentPhase.LOADING, ReassessmentPhase.CLOSED)) {
+    BackHandler(enabled = !shouldShowCall || !isCallDestination, onBack = exitAssessment)
+    if (shouldShowCall != isCallDestination || state.phase in listOf(ReassessmentPhase.LOADING, ReassessmentPhase.CLOSED)) {
         PlacementStatusScreen(
             PlacementStatusUiState(flow = PlacementStatusFlow.REASSESSMENT),
             exitAssessment, viewModel::continueAssessment, viewModel::retryTask, exitAssessment, exitAssessment, modifier
