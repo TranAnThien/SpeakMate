@@ -40,7 +40,8 @@ fun GoalAssessmentScreen(
     onViewCompletedPath: () -> Unit,
     onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier,
-    scrollState: ScrollState = rememberScrollState()
+    scrollState: ScrollState = rememberScrollState(),
+    onRetrySave: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
         PreparationHeader(stringResource(R.string.goal_assessment_header), onBack)
@@ -75,19 +76,23 @@ fun GoalAssessmentScreen(
                 GoalAssessmentTextCard(state.feedbackTitle, state.feedback, isHighlighted = true)
             }
             GoalAssessmentFooter(
-                primaryText = stringResource(when (state.presentation) {
-                    GoalAssessmentPresentation.INTRODUCTION -> R.string.placement_start
-                    GoalAssessmentPresentation.NEXT_GOAL -> R.string.goal_assessment_open_next_goal
-                    GoalAssessmentPresentation.PATH_COMPLETED -> R.string.goal_assessment_view_completed_path
-                    GoalAssessmentPresentation.REPLAY_COMPLETED -> R.string.goal_assessment_return_to_path
-                    else -> R.string.goal_assessment_retry
+                primaryText = stringResource(when {
+                    state.isSaving -> R.string.placement_saving
+                    state.isSaveFailed -> R.string.unit_result_retry_save
+                    else -> when (state.presentation) {
+                        GoalAssessmentPresentation.INTRODUCTION -> R.string.placement_start
+                        GoalAssessmentPresentation.NEXT_GOAL -> R.string.goal_assessment_open_next_goal
+                        GoalAssessmentPresentation.PATH_COMPLETED -> R.string.goal_assessment_view_completed_path
+                        GoalAssessmentPresentation.REPLAY_COMPLETED -> R.string.goal_assessment_return_to_path
+                        else -> R.string.goal_assessment_retry
+                    }
                 }),
                 secondaryText = stringResource(when (state.presentation) {
                     GoalAssessmentPresentation.INTRODUCTION -> R.string.goal_assessment_review_before_start
                     GoalAssessmentPresentation.INSUFFICIENT_EVIDENCE -> R.string.goal_assessment_return_to_path
                     else -> R.string.unit_result_review
                 }),
-                onPrimaryAction = when (state.presentation) {
+                onPrimaryAction = if (state.isSaveFailed) onRetrySave else when (state.presentation) {
                     GoalAssessmentPresentation.INTRODUCTION -> onStartAssessment
                     GoalAssessmentPresentation.NEXT_GOAL -> onOpenNextGoal
                     GoalAssessmentPresentation.PATH_COMPLETED -> onViewCompletedPath
@@ -95,7 +100,8 @@ fun GoalAssessmentScreen(
                     else -> onRetryAssessment
                 },
                 onSecondaryAction = if (state.presentation == GoalAssessmentPresentation.INSUFFICIENT_EVIDENCE)
-                    onReturnToPath else onReviewLessons
+                    onReturnToPath else onReviewLessons,
+                isPrimaryEnabled = state.isPrimaryEnabled && !state.isSaving
             )
         }
     }

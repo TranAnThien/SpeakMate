@@ -26,11 +26,12 @@ fun GoalAssessmentFooter(
     secondaryText: String,
     onPrimaryAction: () -> Unit,
     onSecondaryAction: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPrimaryEnabled: Boolean = true
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PrimaryButton(primaryText, onPrimaryAction)
+        PrimaryButton(primaryText, onPrimaryAction, enabled = isPrimaryEnabled)
         Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(16.dp))
             .background(DesignColor.SecondaryButton).clickable(onClick = onSecondaryAction)
             .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {

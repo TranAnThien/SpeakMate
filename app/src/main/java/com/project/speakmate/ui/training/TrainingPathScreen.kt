@@ -38,6 +38,7 @@ import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.training.components.TrainingGoalCard
 import com.project.speakmate.ui.training.components.TrainingHeader
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingGoalUiState
 import com.project.speakmate.ui.training.state.TrainingPathUiState
@@ -49,7 +50,7 @@ fun TrainingPathScreen(
     state: TrainingPathUiState,
     onToggleGoal: (String) -> Unit,
     onOpenGoal: (String) -> Unit,
-    onOpenUnit: (String) -> Unit,
+    onOpenUnit: (TrainingActivityDestination) -> Unit,
     onContinuePath: () -> Unit,
     onShowLevelInformation: () -> Unit,
     onRetry: () -> Unit,

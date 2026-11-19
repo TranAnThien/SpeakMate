@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingGoalUiState
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
 
@@ -37,7 +38,7 @@ fun TrainingGoalCard(
     goal: TrainingGoalUiState,
     onToggle: () -> Unit,
     onOpenGoal: () -> Unit,
-    onOpenUnit: (String) -> Unit,
+    onOpenUnit: (TrainingActivityDestination) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DesignColor.Surface)
@@ -69,8 +70,10 @@ fun TrainingGoalCard(
             Text(goal.unitsHeading.ifBlank { stringResource(R.string.training_units_heading) }, style = DesignTypography.SectionLabel, color = DesignColor.Muted)
             Spacer(Modifier.height(8.dp))
             goal.units.forEachIndexed { index, unit ->
-                key(unit.id) {
-                    val onOpen = remember(unit.id, onOpenUnit) { { onOpenUnit(unit.id) } }
+                key(unit.isAssessment, unit.id) {
+                    val onOpen = remember(unit.destination, unit.canOpen, onOpenUnit) {
+                        { if (unit.canOpen) unit.destination?.let(onOpenUnit) }
+                    }
                     if (index > 0) HorizontalDivider(color = DesignColor.Border)
                     TrainingUnitRow(unit, onOpen)
                 }

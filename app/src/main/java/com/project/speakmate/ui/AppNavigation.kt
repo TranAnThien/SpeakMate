@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +59,12 @@ import com.project.speakmate.ui.training.UnitPreparationRoute
 import com.project.speakmate.ui.training.UnitResultRoute
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.utils.AppConstant
+import com.project.speakmate.ui.training.GoalAssessmentRoute
+import com.project.speakmate.ui.training.GoalAssessmentResultRoute
+import com.project.speakmate.ui.training.GoalAssessmentViewModel
+import com.project.speakmate.ui.training.PathCompletionRoute
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
+import com.project.speakmate.domain.model.TrainingActivityScenario
 import com.project.speakmate.ui.training.GoalDetailScreen
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
 import com.project.speakmate.ui.training.state.GoalDetailUiState
@@ -76,6 +83,15 @@ fun AppNavigation(
     val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
     val userProfile by profileViewModel.userProfile.collectAsStateWithLifecycle()
     val isProfileLoadFailed by profileViewModel.isProfileLoadFailed.collectAsStateWithLifecycle()
+
+    val openTrainingActivity: (TrainingActivityDestination) -> Unit = remember(navController) {
+        { destination ->
+            when (destination) {
+                is TrainingActivityDestination.Unit -> navController.navigate(unitDestination(AppConstant.UNIT_PREPARATION_ROUTE, destination.unitId))
+                is TrainingActivityDestination.GoalAssessment -> navController.navigate(goalDestination(AppConstant.GOAL_ASSESSMENT_ROUTE, destination.goalId))
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         authViewModel.signInSuccess.collect {
@@ -205,16 +221,14 @@ fun AppNavigation(
             TrainingPathScreen(
                 state = trainingState,
                 onToggleGoal = { goalId -> trainingViewModel.toggleGoalExpansion(goalId) },
-                onOpenGoal = { goalId -> navController.navigate("training_goal/$goalId") },
-                onOpenUnit = { unitId ->
-                    if (!unitId.startsWith("assessment:")) navController.navigate("training_unit/$unitId")
-                },
+                onOpenGoal = { goalId -> navController.navigate(goalDestination(AppConstant.GOAL_DETAIL_ROUTE, goalId)) },
+                onOpenUnit = openTrainingActivity,
                 onContinuePath = {
                     trainingState.goals.asSequence()
                         .flatMap { it.units.asSequence() }
-                        .firstOrNull { it.status == TrainingProgressStatus.CURRENT && !it.isAssessment }
-                        ?.id
-                        ?.let { unitId -> navController.navigate("training_unit/$unitId") }
+                        .firstOrNull { it.status == TrainingProgressStatus.CURRENT && it.canOpen }
+                        ?.destination
+                        ?.let(openTrainingActivity)
                 },
                 onShowLevelInformation = {},
                 onRetry = trainingViewModel::retry,
@@ -239,6 +253,146 @@ fun AppNavigation(
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
                 onOpenHistory = { navController.navigate("history") { launchSingleTop = true } },
                 onOpenProfile = { navController.navigate("profile") { launchSingleTop = true } }
+            )
+        }
+
+        composable(AppConstant.GOAL_ASSESSMENT_ROUTE) { entry ->
+            val goalId = entry.arguments?.getString(AppConstant.GOAL_ID_ARGUMENT).orEmpty()
+            GoalAssessmentRoute(
+                onBack = navController::popBackStack,
+                onStartAssessment = {
+                    if (navController.currentBackStackEntry == entry) {
+                        navController.navigate(goalDestination(AppConstant.GOAL_ASSESSMENT_CALL_ROUTE, goalId))
+                    }
+                },
+                onReviewLessons = { navController.navigate(goalDestination(AppConstant.GOAL_DETAIL_ROUTE, goalId)) }
+            )
+        }
+
+        composable(AppConstant.GOAL_ASSESSMENT_CALL_ROUTE) { entry ->
+            val goalId = entry.arguments?.getString(AppConstant.GOAL_ID_ARGUMENT).orEmpty()
+            val introductionRoute = goalDestination(AppConstant.GOAL_ASSESSMENT_ROUTE, goalId)
+            val introductionEntry = remember(entry, goalId) {
+                try {
+                    navController.getBackStackEntry(introductionRoute)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+            }
+            if (introductionEntry == null) {
+                LaunchedEffect(entry) {
+                    navController.navigate(introductionRoute) {
+                        popUpTo(AppConstant.GOAL_ASSESSMENT_CALL_ROUTE) { inclusive = true }
+                    }
+                }
+            } else {
+                val assessmentViewModel: GoalAssessmentViewModel = hiltViewModel(introductionEntry)
+                val assessmentState by assessmentViewModel.uiState.collectAsStateWithLifecycle()
+                var activity by remember(entry) { mutableStateOf<TrainingActivityScenario?>(null) }
+                var isReplay by rememberSaveable { mutableStateOf<Boolean?>(null) }
+                LaunchedEffect(assessmentState.activity) {
+                    if (activity == null && assessmentState.status == TrainingContentStatus.CONTENT) {
+                        activity = assessmentState.activity
+                        if (isReplay == null) isReplay = assessmentState.isReplay
+                    }
+                }
+                val callActivity = activity
+                if (callActivity == null) {
+                    TrainingUnavailableContent(
+                        isLoading = assessmentState.status == TrainingContentStatus.LOADING,
+                        onRetry = navController::popBackStack
+                    )
+                } else {
+                    CallRoute(
+                        scenario = callActivity.scenario,
+                        activityType = CallActivityType.GOAL_ASSESSMENT,
+                        onExit = { navController.popBackStack() },
+                        activityContext = CallActivityContext.Training(callActivity),
+                        onPracticeCompleted = { attemptId ->
+                            if (navController.currentBackStackEntry == entry) {
+                                val resultRoute = goalDestination(AppConstant.GOAL_ASSESSMENT_RESULT_ROUTE, goalId)
+                                    .replace("{" + AppConstant.ATTEMPT_ID_ARGUMENT + "}", Uri.encode(attemptId))
+                                    .replace("{" + AppConstant.IS_REPLAY_ARGUMENT + "}", isReplay.toString())
+                                navController.navigate(resultRoute) {
+                                    popUpTo(AppConstant.GOAL_ASSESSMENT_CALL_ROUTE) { inclusive = true }
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        composable(AppConstant.GOAL_ASSESSMENT_RESULT_ROUTE) { entry ->
+            val goalId = entry.arguments?.getString(AppConstant.GOAL_ID_ARGUMENT).orEmpty()
+            val introductionRoute = goalDestination(AppConstant.GOAL_ASSESSMENT_ROUTE, goalId)
+            val introductionEntry = remember(entry, goalId) {
+                try {
+                    navController.getBackStackEntry(introductionRoute)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+            }
+            val assessmentViewModel: GoalAssessmentViewModel? = if (introductionEntry != null) hiltViewModel(introductionEntry) else null
+            val returnToPath: () -> Unit = {
+                if (!navController.popBackStack(AppConstant.TRAINING_PATH_ROUTE, false)) {
+                    navController.navigate(AppConstant.TRAINING_PATH_ROUTE) {
+                        popUpTo(AppConstant.GOAL_ASSESSMENT_ROUTE) { inclusive = true }
+                    }
+                }
+            }
+            GoalAssessmentResultRoute(
+                onBack = navController::popBackStack,
+                onRetryAssessment = {
+                    if (assessmentViewModel?.uiState?.value?.status == TrainingContentStatus.CONTENT) {
+                        assessmentViewModel.prepareRetry()
+                        navController.navigate(goalDestination(AppConstant.GOAL_ASSESSMENT_CALL_ROUTE, goalId)) {
+                            popUpTo(AppConstant.GOAL_ASSESSMENT_ROUTE) { inclusive = false }
+                        }
+                    } else if (introductionEntry != null) {
+                        navController.popBackStack(introductionRoute, false)
+                    } else {
+                        navController.navigate(introductionRoute) {
+                            popUpTo(AppConstant.GOAL_ASSESSMENT_RESULT_ROUTE) { inclusive = true }
+                        }
+                    }
+                },
+                onOpenNextGoal = { nextGoalId ->
+                    navController.navigate(goalDestination(AppConstant.GOAL_DETAIL_ROUTE, nextGoalId)) {
+                        popUpTo(AppConstant.GOAL_ASSESSMENT_ROUTE) { inclusive = true }
+                    }
+                },
+                onViewCompletedPath = {
+                    navController.navigate(AppConstant.PATH_COMPLETION_ROUTE) {
+                        popUpTo(AppConstant.GOAL_ASSESSMENT_ROUTE) { inclusive = true }
+                    }
+                },
+                onReturnToPath = returnToPath,
+                onReviewLessons = {
+                    navController.navigate(goalDestination(AppConstant.GOAL_DETAIL_ROUTE, goalId)) {
+                        popUpTo(AppConstant.GOAL_ASSESSMENT_ROUTE) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(AppConstant.PATH_COMPLETION_ROUTE) {
+            val returnToPath: () -> Unit = {
+                if (!navController.popBackStack(AppConstant.TRAINING_PATH_ROUTE, false)) {
+                    navController.navigate(AppConstant.TRAINING_PATH_ROUTE) {
+                        popUpTo(AppConstant.PATH_COMPLETION_ROUTE) { inclusive = true }
+                    }
+                }
+            }
+            PathCompletionRoute(
+                onBack = navController::popBackStack,
+                onReturnToPath = returnToPath,
+                onFreePractice = {
+                    navController.navigate("practice") {
+                        popUpTo(AppConstant.PATH_COMPLETION_ROUTE) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 
@@ -331,8 +485,8 @@ fun AppNavigation(
             )
         }
 
-        composable("training_goal/{goalId}") { entry ->
-            val goalId = entry.arguments?.getString("goalId").orEmpty()
+        composable(AppConstant.GOAL_DETAIL_ROUTE) { entry ->
+            val goalId = entry.arguments?.getString(AppConstant.GOAL_ID_ARGUMENT).orEmpty()
             val pathEntry = remember(entry) {
                 try {
                     navController.getBackStackEntry(AppConstant.TRAINING_PATH_ROUTE)
@@ -349,20 +503,18 @@ fun AppNavigation(
                     description = it.summary,
                     units = it.units,
                     canPrepareCurrentUnit = it.units.any { unit ->
-                        unit.status == TrainingProgressStatus.CURRENT && !unit.isAssessment
+                        unit.status == TrainingProgressStatus.CURRENT && unit.canOpen
                     }
                 )
             } ?: GoalDetailUiState()
             GoalDetailScreen(
                 state = detailState,
                 onBack = navController::popBackStack,
-                onOpenUnit = { unitId ->
-                    if (!unitId.startsWith("assessment:")) navController.navigate("training_unit/$unitId")
-                },
+                onOpenUnit = openTrainingActivity,
                 onPrepareCurrentUnit = {
                     goal?.units?.firstOrNull { unit ->
-                        unit.status == TrainingProgressStatus.CURRENT && !unit.isAssessment
-                    }?.id?.let { unitId -> navController.navigate("training_unit/$unitId") }
+                        unit.status == TrainingProgressStatus.CURRENT && unit.canOpen
+                    }?.destination?.let(openTrainingActivity)
                 },
                 onOpenTrainingPath = { navController.navigate("training_path") { launchSingleTop = true } },
                 onOpenPractice = { navController.navigate("practice") { launchSingleTop = true } },
@@ -531,3 +683,6 @@ fun AppNavigation(
 
 private fun unitDestination(route: String, unitId: String): String =
     route.replace("{"+AppConstant.UNIT_ID_ARGUMENT+"}", Uri.encode(unitId))
+
+private fun goalDestination(route: String, goalId: String): String =
+    route.replace("{" + AppConstant.GOAL_ID_ARGUMENT + "}", Uri.encode(goalId))

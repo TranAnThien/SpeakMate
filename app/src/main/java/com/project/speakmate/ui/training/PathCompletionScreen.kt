@@ -37,7 +37,8 @@ fun PathCompletionScreen(
     onReturnToPath: () -> Unit,
     onReviewPath: () -> Unit,
     onFreePractice: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPromotionEnabled: Boolean = true
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
         PreparationHeader(stringResource(R.string.path_completion_header), onBack)
@@ -65,7 +66,8 @@ fun PathCompletionScreen(
                 if (state.isHighestLevel) state.levelLabel else state.nextLevelLabel),
             stringResource(if (state.isHighestLevel) R.string.home_free_practice else R.string.goal_assessment_return_to_path),
             if (state.isHighestLevel) onReviewPath else onStartPromotion,
-            if (state.isHighestLevel) onFreePractice else onReturnToPath
+            if (state.isHighestLevel) onFreePractice else onReturnToPath,
+            isPrimaryEnabled = state.isHighestLevel || isPromotionEnabled
         )
     }
 }

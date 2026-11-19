@@ -4,6 +4,7 @@ import com.project.speakmate.domain.model.AssessmentOutcome
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
+import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.PracticeCompletionState
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.TrainingProgress
@@ -309,5 +310,102 @@ class PracticeCompletionManagerTest {
             assertEquals(expected[index], history.attempts[id]?.result)
             assertEquals(progress, history.progress)
         }
+    }
+    @Test
+    fun currentGoalPassSavesItsAttemptAndOpensTheNextGoal() = runTest {
+        val history = history(TrainingProgress(0, 0, TrainingStage.GOAL_ASSESSMENT))
+        val assessment = FakeSpeakingAssessmentRepository()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = checkNotNull(manager.completePractice(GoalPracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        assertEquals(TrainingProgress(1, 0, TrainingStage.UNIT), history.progress)
+        val attempt = history.attempts.getValue(id)
+        assertEquals(PracticeType.GOAL_ASSESSMENT, attempt.practiceType)
+        assertEquals(AssessmentResult.PASS, attempt.result)
+        assertEquals(PracticeCompletionTestFixtures.FEEDBACK, attempt.feedbackSummary)
+        assertEquals(GoalPracticeCompletionTestFixtures.path.targetLevel, assessment.evidence.single().targetLevel)
+        assertEquals(PracticeCompletionTestFixtures.training.requiredActions, assessment.evidence.single().requiredActions)
+    }
+
+    @Test
+    fun lastGoalPassCompletesThePath() = runTest {
+        val history = history(TrainingProgress(1, 0, TrainingStage.GOAL_ASSESSMENT))
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, FakeSpeakingAssessmentRepository())
+        checkNotNull(manager.completePractice(GoalPracticeCompletionTestFixtures.practice(1)))
+        runCurrent()
+        assertEquals(TrainingProgress(1, 0, TrainingStage.PATH_COMPLETED), history.progress)
+        assertEquals(1, history.attempts.size)
+    }
+
+    @Test
+    fun replayPassSavesHistoryWithoutAdvancingOrRollingBackProgress() = runTest {
+        val progress = TrainingProgress(1, 0, TrainingStage.UNIT)
+        val history = history(progress)
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, FakeSpeakingAssessmentRepository())
+        checkNotNull(manager.completePractice(GoalPracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        assertEquals(progress, history.progress)
+        assertEquals(1, history.attempts.size)
+    }
+
+    @Test
+    fun partialRequiredActionFailureAndNullAllSaveWithoutChangingProgress() = runTest {
+        val progress = TrainingProgress(0, 0, TrainingStage.GOAL_ASSESSMENT)
+        val outcomes = listOf(
+            PracticeCompletionTestFixtures.evaluated(SpeakingCriteriaResult(true, true, true, false, false)),
+            PracticeCompletionTestFixtures.evaluated(isActionCompleted = false),
+            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED)
+        )
+        val expected = listOf(AssessmentResult.PARTIAL, AssessmentResult.FAIL, null)
+        for ((index, outcome) in outcomes.withIndex()) {
+            val history = history(progress)
+            val assessment = FakeSpeakingAssessmentRepository().also { it.outcome = outcome }
+            val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+            val id = checkNotNull(manager.completePractice(GoalPracticeCompletionTestFixtures.practice()))
+            runCurrent()
+            assertEquals(progress, history.progress)
+            assertEquals(expected[index], history.attempts.getValue(id).result)
+            assertTrue(manager.observeCompletion(id).first() is PracticeCompletionState.Saved)
+        }
+    }
+
+    @Test
+    fun retryAfterAnAcknowledgementIsLostDoesNotAdvanceTwice() = runTest {
+        val history = history(TrainingProgress(0, 0, TrainingStage.GOAL_ASSESSMENT))
+        history.shouldFailAfterCommit = true
+        val assessment = FakeSpeakingAssessmentRepository()
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = checkNotNull(manager.completePractice(GoalPracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        assertTrue(manager.observeCompletion(id).first() is PracticeCompletionState.SaveFailed)
+        history.shouldFailAfterCommit = false
+        manager.retrySave(id)
+        runCurrent()
+        assertEquals(listOf(id, id), history.savedIds)
+        assertEquals(1, history.attempts.size)
+        assertEquals(1, assessment.evidence.size)
+        assertEquals(TrainingProgress(1, 0, TrainingStage.UNIT), history.progress)
+        assertTrue(manager.observeCompletion(id).first() is PracticeCompletionState.Saved)
+    }
+
+    @Test
+    fun leavingGoalGradingStillSavesAndReleasesTheResult() = runTest {
+        val history = history(TrainingProgress(0, 0, TrainingStage.GOAL_ASSESSMENT))
+        val assessment = FakeSpeakingAssessmentRepository().also { it.gate = CompletableDeferred() }
+        val manager = PracticeCompletionManager(backgroundScope, FakeAuthRepository(), history, assessment)
+        val id = checkNotNull(manager.completePractice(GoalPracticeCompletionTestFixtures.practice()))
+        runCurrent()
+        manager.releaseCompletion(id)
+        assessment.gate?.complete(Unit)
+        runCurrent()
+        assertTrue(id in history.attempts)
+        assertEquals(TrainingProgress(1, 0, TrainingStage.UNIT), history.progress)
+        assertEquals(PracticeCompletionState.Unavailable, manager.observeCompletion(id).first())
+        assertEquals(listOf(PracticeCompletionTestFixtures.AUDIO_ID), assessment.clearedAudioIds)
+    }
+
+    private fun history(progress: TrainingProgress) = FakeHistoryRepository().also {
+        it.path = GoalPracticeCompletionTestFixtures.path
+        it.progress = progress
     }
 }

@@ -11,6 +11,7 @@ import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.TrainingRepository
 import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.domain.rules.TrainingProgressRules
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingGoalUiState
 import com.project.speakmate.ui.training.state.TrainingPathUiState
@@ -34,10 +35,6 @@ class TrainingPathViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
 ) : ViewModel() {
-    companion object {
-        private const val ASSESSMENT_ID_PREFIX = "assessment:"
-    }
-
     private val _uiState = MutableStateFlow(TrainingPathUiState())
     val uiState: StateFlow<TrainingPathUiState> = _uiState.asStateFlow()
     private var userObservationJob: Job? = null
@@ -103,15 +100,19 @@ class TrainingPathViewModel @Inject constructor(
         val goalStatus = toUiStatus(TrainingProgressRules.getGoalStatus(path, progress, goalIndex))
         val units = goal.units.mapIndexed { index, unit ->
             val status = toUiStatus(TrainingProgressRules.getUnitStatus(path, progress, goalIndex, index))
-            TrainingUnitUiState(unit.unitId, unit.title, unit.communicativeFocus, status, false, status != TrainingProgressStatus.LOCKED)
+            TrainingUnitUiState(
+                unit.unitId, unit.title, unit.communicativeFocus, status, false,
+                status != TrainingProgressStatus.LOCKED, TrainingActivityDestination.Unit(unit.unitId)
+            )
         }
         val assessmentStatus = toUiStatus(TrainingProgressRules.getGoalAssessmentStatus(path, progress, goalIndex))
         val assessment = TrainingUnitUiState(
-            id = ASSESSMENT_ID_PREFIX + goal.goalId,
+            id = goal.goalId,
             title = goal.goalAssessment.title,
             status = assessmentStatus,
             isAssessment = true,
-            canOpen = assessmentStatus != TrainingProgressStatus.LOCKED
+            canOpen = assessmentStatus != TrainingProgressStatus.LOCKED,
+            destination = TrainingActivityDestination.GoalAssessment(goal.goalId)
         )
         return TrainingGoalUiState(
             id = goal.goalId,

@@ -498,4 +498,9 @@
     <string name="unit_result_runtime_criteria">Bạn đạt %1$d/5 tiêu chí. Hãy xem đánh giá chi tiết bên dưới.</string>
     <string name="unit_result_runtime_criteria_heading">Đánh giá chi tiết · %1$d/5 đạt</string>
     <string name="unit_result_criterion_unknown">Chưa đủ dữ liệu để đánh giá tiêu chí này.</string>
+    <string name="goal_assessment_locked">Bài đánh giá mục tiêu này chưa được mở.</string>
+    <string name="goal_assessment_runtime_introduction">%1$s\n\nCuộc gọi đánh giá không có Transcript hoặc từ điển.</string>
+    <string name="goal_assessment_runtime_feedback">Hãy xem lại mục tiêu giao tiếp và các yêu cầu trước khi luyện tập tiếp.</string>
+    <string name="path_completion_runtime_description">Bạn đã hoàn thành các mục tiêu của lộ trình %1$s. Trình độ nói hiện tại vẫn là %1$s.</string>
+    <string name="path_completion_runtime_notice">Bạn có thể đánh giá lên %1$s hoặc luyện lại nội dung đã hoàn tất. Hoàn thành lộ trình không tự tăng trình độ.</string>
 </resources>

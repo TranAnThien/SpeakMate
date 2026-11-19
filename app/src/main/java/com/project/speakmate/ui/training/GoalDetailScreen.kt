@@ -31,6 +31,8 @@ import com.project.speakmate.ui.components.StateIllustration
 import com.project.speakmate.ui.training.components.GoalDetailHeader
 import com.project.speakmate.ui.training.components.TrainingUnitRow
 import com.project.speakmate.ui.training.state.GoalDetailUiState
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
+import com.project.speakmate.ui.training.state.TrainingProgressStatus
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -38,7 +40,7 @@ import com.project.speakmate.ui.theme.DesignTypography
 fun GoalDetailScreen(
     state: GoalDetailUiState,
     onBack: () -> Unit,
-    onOpenUnit: (String) -> Unit,
+    onOpenUnit: (TrainingActivityDestination) -> Unit,
     onPrepareCurrentUnit: () -> Unit,
     onOpenTrainingPath: () -> Unit,
     onOpenPractice: () -> Unit,
@@ -63,8 +65,10 @@ fun GoalDetailScreen(
                     Text(stringResource(R.string.training_units_heading), style = DesignTypography.SectionLabel, color = DesignColor.Muted)
                     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
                         state.units.forEachIndexed { index, unit ->
-                            key(unit.id) {
-                                val onOpen = remember(unit.id, onOpenUnit) { { onOpenUnit(unit.id) } }
+                            key(unit.isAssessment, unit.id) {
+                                val onOpen = remember(unit.destination, unit.canOpen, onOpenUnit) {
+                                    { if (unit.canOpen) unit.destination?.let(onOpenUnit) }
+                                }
                                 if (index > 0) HorizontalDivider(color = DesignColor.Border)
                                 TrainingUnitRow(unit, onOpen)
                             }
@@ -76,7 +80,11 @@ fun GoalDetailScreen(
         if (state.canPrepareCurrentUnit && state.hasUnits) {
             Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp)
                 .padding(top = 16.dp, bottom = 12.dp)) {
-                PrimaryButton(stringResource(R.string.training_prepare_current), onPrepareCurrentUnit)
+                val isAssessment = state.units.any { it.isAssessment && it.status == TrainingProgressStatus.CURRENT }
+                PrimaryButton(
+                    stringResource(if (isAssessment) R.string.goal_assessment_header else R.string.training_prepare_current),
+                    onPrepareCurrentUnit
+                )
             }
         }
         AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile)

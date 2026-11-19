@@ -83,6 +83,21 @@ class TrainingPathViewModelTest {
         assertEquals(true, state.goals.flatMap { it.units }.all { it.status == TrainingProgressStatus.COMPLETED && it.canOpen })
     }
 
+    @Test
+    fun currentAssessmentHasAnExplicitGoalDestination() = runTest {
+        val state = createViewModel(user(TrainingProgress(0, 1, TrainingStage.GOAL_ASSESSMENT))).uiState.value
+        val current = state.goals.flatMap { it.units }.single { it.status == TrainingProgressStatus.CURRENT }
+        assertEquals(com.project.speakmate.ui.training.state.TrainingActivityDestination.GoalAssessment("goal-1"), current.destination)
+        assertEquals(true, current.canOpen)
+    }
+
+    @Test
+    fun unitsKeepTheirExplicitUnitDestinations() = runTest {
+        val state = createViewModel(user(TrainingProgress(0, 0, TrainingStage.UNIT))).uiState.value
+        val current = state.goals.flatMap { it.units }.single { it.status == TrainingProgressStatus.CURRENT }
+        assertEquals(com.project.speakmate.ui.training.state.TrainingActivityDestination.Unit("unit-1"), current.destination)
+    }
+
     private fun user(progress: TrainingProgress) = User(
         userId = "user-1",
         displayName = "Student",

@@ -11,5 +11,6 @@ data class TrainingUnitUiState(
     val description: String = "",
     val status: TrainingProgressStatus = TrainingProgressStatus.LOCKED,
     val isAssessment: Boolean = false,
-    val canOpen: Boolean = false
+    val canOpen: Boolean = false,
+    val destination: TrainingActivityDestination? = null
 )
