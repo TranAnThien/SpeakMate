@@ -60,6 +60,41 @@ class SavedVocabularyRulesTest {
         })
     }
 
+    @Test
+    fun exactArrayAndDocumentBudgetsDoNotEvictExistingData() {
+        val base = SavedVocabularyRules.MAX_DOCUMENT_BYTES - SavedVocabularyRules.MAX_ARRAY_BYTES
+        assertEquals(emptyList<Int>(), SavedVocabularyRules.getRemovalIndices(emptyList(), emptySet(), SavedVocabularyRules.MAX_ARRAY_BYTES, base))
+        assertEquals(InvalidVocabularyException.Reason.STORAGE_BUDGET, rejection {
+            SavedVocabularyRules.getRemovalIndices(emptyList(), emptySet(), SavedVocabularyRules.MAX_ARRAY_BYTES, base + 1)
+        })
+        assertEquals(InvalidVocabularyException.Reason.STORAGE_BUDGET, rejection {
+            SavedVocabularyRules.getRemovalIndices(emptyList(), emptySet(), SavedVocabularyRules.MAX_ARRAY_BYTES + 1, 0)
+        })
+    }
+
+    @Test
+    fun evictionSkipsAnOlderProtectedEntryAndRemovesTheOldestValidOne() {
+        val size = SavedVocabularyRules.MAX_ARRAY_BYTES / 2 + 1
+        assertEquals(listOf(0), SavedVocabularyRules.getRemovalIndices(listOf(size, size), setOf(0), 1, 0))
+    }
+
+    @Test
+    fun lowercaseExpansionMustStillFitTheWordLimit() {
+        val input = word.copy(word = "İ".repeat(SavedVocabularyRules.MAX_WORD_LENGTH))
+        assertFalse(SavedVocabularyRules.hasValidFields(input))
+        assertEquals(InvalidVocabularyException.Reason.FIELD_TOO_LONG, rejection { SavedVocabularyRules.normalize(input) })
+    }
+
+    @Test
+    fun normalizationTrimsOptionalFieldsAndClearsTranslationWithoutAnExample() {
+        val normalized = SavedVocabularyRules.normalize(word.copy(
+            word = " COFFEE ", mean = " Drink ", phonetic = " /coffee/ ", partOfSpeech = " noun ",
+            example = LearningExample(" ", "orphan translation")
+        ))
+        assertEquals(VocabularyItem("coffee", "Drink", "/coffee/", "noun", LearningExample("", "")), normalized)
+        assertEquals(InvalidVocabularyException.Reason.INVALID_CONTENT, rejection { SavedVocabularyRules.normalize(word.copy(word = " ")) })
+    }
+
     private fun rejection(operation: () -> Unit): InvalidVocabularyException.Reason {
         try { operation() } catch (failure: InvalidVocabularyException) { return failure.reason }
         throw AssertionError()

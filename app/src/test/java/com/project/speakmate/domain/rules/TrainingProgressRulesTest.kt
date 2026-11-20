@@ -81,6 +81,22 @@ class TrainingProgressRulesTest {
     }
 
     @Test
+    fun completedPathWithEmptyGoalsKeepsAssessmentsReplayableAndRejectsPhantomUnits() {
+        val completedPath = TrainingProgressTestFixtures.getPath(listOf(0, 0))
+        val progress = TrainingProgress(1, 0, PATH_COMPLETED)
+        completedPath.goals.indices.forEach { goalIndex ->
+            val assessment = GoalAssessmentActivity(goalIndex)
+            assertEquals(COMPLETED, rules.getGoalStatus(completedPath, progress, goalIndex))
+            assertEquals(COMPLETED, rules.getGoalAssessmentStatus(completedPath, progress, goalIndex))
+            assertTrue(rules.canOpen(completedPath, progress, assessment))
+            assertTrue(rules.isReplay(completedPath, progress, assessment))
+            assertEquals(TrainingProgressDecision.Unchanged(ProgressHoldReason.REPLAY), rules.applyOutcome(completedPath, progress, assessment, pass))
+            assertEquals(LOCKED, rules.getUnitStatus(completedPath, progress, goalIndex, 0))
+            assertFalse(rules.canOpen(completedPath, progress, UnitActivity(goalIndex, 0)))
+        }
+    }
+
+    @Test
     fun passingTheCurrentMiddleUnitOpensTheNextUnit() {
         assertEquals(
             TrainingProgressDecision.Advanced(TrainingProgress(0, 2, UNIT), AdvanceReason.NEXT_UNIT_OPENED),
