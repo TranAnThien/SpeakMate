@@ -471,6 +471,11 @@
     <string name="history_type_unit">Bài học</string>
     <string name="history_runtime_metadata">%1$s · %2$s · %3$s</string>
     <string name="history_completed">Hoàn thành</string>
+    <string name="history_pending_heading">Phiên chưa lưu</string>
+    <string name="history_pending_grading">Đang chấm kết quả…</string>
+    <string name="history_pending_saving">Đang lưu phiên luyện tập…</string>
+    <string name="history_pending_save_failed">Chưa lưu được phiên. Bạn có thể thử lưu lại.</string>
+    <string name="history_pending_metadata">%1$s · %2$s · %3$s</string>
     <string name="session_speaker_user">Bạn</string>
     <string name="session_speaker_ai">AI</string>
     <string name="session_speaker_ai_interrupted">AI · bị ngắt</string>

@@ -10,6 +10,7 @@ class PracticeCompletionRepositoryImpl @Inject constructor(
 ) : PracticeCompletionRepository {
     override fun completePractice(practice: CompletedPractice) = manager.completePractice(practice)
     override fun observeCompletion(attemptId: String) = manager.observeCompletion(attemptId)
+    override fun observePendingCompletions() = manager.observePendingCompletions()
     override fun retrySave(attemptId: String) = manager.retrySave(attemptId)
     override fun releaseCompletion(attemptId: String) = manager.releaseCompletion(attemptId)
 }

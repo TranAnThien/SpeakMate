@@ -10,11 +10,14 @@ import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
 import com.project.speakmate.ui.practice.state.ScenarioItemUiState
 import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.utils.extension.suspendRunCatching
+import com.project.speakmate.utils.extension.default
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.async
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,58 +32,71 @@ class PracticeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ScenarioCatalogUiState())
     val uiState: StateFlow<ScenarioCatalogUiState> = _uiState.asStateFlow()
 
-    private var allPractices = emptyList<FreePractice>()
+    private var catalogItems = emptyList<ScenarioItemUiState>()
+    private var catalogJob: Job? = null
 
     init {
         loadCatalog()
     }
 
     fun loadCatalog() {
-        viewModelScope.launch {
+        catalogJob?.cancel()
+        catalogJob = viewModelScope.launch {
             _uiState.update { it.copy(presentation = ScenarioCatalogPresentation.LOADING) }
-
-            allPractices = practiceRepository.getScenarioCatalog().getOrElse {
+            val result = suspendRunCatching { practiceRepository.getScenarioCatalog().getOrThrow() }
+            ensureActive()
+            val practices = result.getOrElse {
                 _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
                 return@launch
             }
 
-            val distinctCategories = allPractices.map { it.category }.distinct()
+            val distinctCategories = practices.map { it.category }.distinct()
             val filters = mutableListOf(ContentFilterUiState(id = AppConstant.PRACTICE_CATEGORY_ALL, label = ""))
             filters.addAll(distinctCategories.map { category ->
                 ContentFilterUiState(id = category, label = category)
             })
 
-            val scenarioItems = mapToUiState(allPractices).getOrElse {
+            val mapped = mapToUiState(practices)
+            ensureActive()
+            val scenarioItems = mapped.getOrElse {
                 _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
                 return@launch
             }
 
+            catalogItems = scenarioItems.toList()
             _uiState.update { state ->
+                val selectedId = state.selectedCategoryId.takeIf { id -> filters.any { it.id == id } }
+                    .default(AppConstant.PRACTICE_CATEGORY_ALL)
+                val filtered = filterItems(selectedId)
                 state.copy(
-                    presentation = if (scenarioItems.isEmpty()) ScenarioCatalogPresentation.UNCONFIGURED else ScenarioCatalogPresentation.POPULATED,
+                    presentation = getPresentation(filtered),
                     categories = filters,
-                    selectedCategoryId = AppConstant.PRACTICE_CATEGORY_ALL,
-                    scenarios = scenarioItems
+                    selectedCategoryId = selectedId,
+                    scenarios = filtered
                 )
             }
         }
     }
 
     fun selectCategory(categoryId: String) {
-        _uiState.update { it.copy(selectedCategoryId = categoryId) }
-        viewModelScope.launch {
-            val filteredPractices = if (categoryId == AppConstant.PRACTICE_CATEGORY_ALL) allPractices else allPractices.filter { it.category == categoryId }
-            val filteredItems = mapToUiState(filteredPractices).getOrElse {
-                _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
-                return@launch
-            }
-            _uiState.update { state ->
-                state.copy(
-                    scenarios = filteredItems,
-                    presentation = if (filteredItems.isEmpty()) ScenarioCatalogPresentation.EMPTY else ScenarioCatalogPresentation.POPULATED
-                )
-            }
+        if (_uiState.value.categories.none { it.id == categoryId }) return
+        val filtered = filterItems(categoryId)
+        _uiState.update { state ->
+            state.copy(
+                selectedCategoryId = categoryId,
+                scenarios = filtered,
+                presentation = if (state.presentation == ScenarioCatalogPresentation.LOADING) state.presentation else getPresentation(filtered)
+            )
         }
+    }
+
+    private fun filterItems(categoryId: String): List<ScenarioItemUiState> =
+        if (categoryId == AppConstant.PRACTICE_CATEGORY_ALL) catalogItems else catalogItems.filter { it.categoryLabel == categoryId }
+
+    private fun getPresentation(items: List<ScenarioItemUiState>): ScenarioCatalogPresentation = when {
+        catalogItems.isEmpty() -> ScenarioCatalogPresentation.UNCONFIGURED
+        items.isEmpty() -> ScenarioCatalogPresentation.EMPTY
+        else -> ScenarioCatalogPresentation.POPULATED
     }
 
     private suspend fun mapToUiState(practices: List<FreePractice>): Result<List<ScenarioItemUiState>> = suspendRunCatching {

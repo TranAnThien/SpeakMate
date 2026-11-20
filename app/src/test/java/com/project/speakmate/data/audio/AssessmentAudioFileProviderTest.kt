@@ -2,6 +2,9 @@ package com.project.speakmate.data.audio
 
 import java.util.UUID
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -66,7 +69,7 @@ class AssessmentAudioFileProviderTest {
     }
 
     @Test
-    fun openingNewRecorderRemovesCurrentProcessOrphanAndKeepsNewFile() {
+    fun openingNewRecorderKeepsEvidenceUntilItsOwnerDeletesIt() {
         val files = AssessmentAudioFileProvider(folder.root)
         val orphanId = files.createAudioId()
         files.openRecorder(orphanId).also { it.append(byteArrayOf(0, 0)); it.close() }
@@ -74,9 +77,39 @@ class AssessmentAudioFileProviderTest {
         val newId = files.createAudioId()
         val recorder = files.openRecorder(newId)
         try {
-            assertFalse(orphan.exists())
+            assertTrue(orphan.exists())
             assertTrue(files.getAudioFile(newId) != null)
             assertTrue(recorder.append(byteArrayOf(0, 0)))
+        } finally {
+            recorder.close()
+        }
+        files.deleteAudio(orphanId)
+        files.deleteAudio(orphanId)
+        assertFalse(orphan.exists())
+        assertTrue(files.getAudioFile(newId) != null)
+    }
+
+    @Test
+    fun gradingReadsTheOriginalWavWhenAnotherRecordingStartsBeforeTheRead() = runTest {
+        val files = AssessmentAudioFileProvider(folder.root)
+        val firstId = files.createAudioId()
+        files.openRecorder(firstId).also { it.append(byteArrayOf(1, 2, 3, 4)); it.close() }
+        val expected = checkNotNull(files.getAudioFile(firstId)).readBytes().toList()
+        val readyToRead = CompletableDeferred<Unit>()
+        val grading = launch {
+            readyToRead.await()
+            assertEquals(expected, checkNotNull(files.getAudioFile(firstId)).readBytes().toList())
+            files.deleteAudio(firstId)
+        }
+        val secondId = files.createAudioId()
+        val recorder = files.openRecorder(secondId)
+        try {
+            assertTrue(recorder.append(byteArrayOf(5, 6)))
+            readyToRead.complete(Unit)
+            grading.join()
+            assertNull(files.getAudioFile(firstId))
+            assertTrue(recorder.append(byteArrayOf(7, 8)))
+            assertTrue(files.getAudioFile(secondId) != null)
         } finally {
             recorder.close()
         }

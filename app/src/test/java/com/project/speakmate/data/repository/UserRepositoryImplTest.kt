@@ -174,4 +174,19 @@ class UserRepositoryImplTest {
             firestoreDataSource.saveAssessedLevel("A2", criteria.toDto(), Date(assessedAtMillis), progress.toDto())
         }
     }
+
+    @Test
+    fun saveAssessedLevelFailsWhenTheDataSourceRejectsAnUnauthenticatedUser() = runTest {
+        coEvery { firestoreDataSource.saveAssessedLevel(any(), any(), any(), any()) } throws IllegalStateException("User not logged in")
+
+        val result = repository.saveAssessedLevel(
+            SpeakingLevel.B1,
+            SpeakingCriteriaResult(true, true, true, true, true),
+            25_000L,
+            TrainingProgress(0, 0, TrainingStage.UNIT)
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals("User not logged in", result.exceptionOrNull()?.message)
+    }
 }

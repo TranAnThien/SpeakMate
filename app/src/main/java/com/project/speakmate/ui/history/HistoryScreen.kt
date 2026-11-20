@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +25,8 @@ import com.project.speakmate.ui.components.ContentPageHeader
 import com.project.speakmate.ui.components.ContentSkeletonCards
 import com.project.speakmate.ui.components.ContentStatusPanel
 import com.project.speakmate.ui.history.components.HistorySessionCard
+import com.project.speakmate.ui.history.components.HistoryPendingSessionCard
+import com.project.speakmate.ui.history.state.HistoryPendingSessionUiState
 import com.project.speakmate.ui.history.state.HistoryGroupUiState
 import com.project.speakmate.ui.history.state.HistoryPresentation
 import com.project.speakmate.ui.history.state.HistorySessionUiState
@@ -41,6 +44,7 @@ fun HistoryScreen(
     onRetry: () -> Unit,
     onDismissError: () -> Unit,
     onReturnToPath: () -> Unit,
+    onRetrySave: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
@@ -56,6 +60,15 @@ fun HistoryScreen(
                             else -> R.string.history_filter_all
                         }))
                     }, state.selectedFilterId, onSelectFilter, Modifier.padding(bottom = 8.dp))
+                }
+                if (state.pendingSessions.isNotEmpty()) {
+                    item(key = "history-pending-heading", contentType = HistoryPendingSessionUiState::class) {
+                        Text(stringResource(R.string.history_pending_heading), style = DesignTypography.Label, color = DesignColor.Muted)
+                    }
+                    items(state.pendingSessions.distinctBy { it.id }, key = { "pending:${it.id}" }, contentType = { HistoryPendingSessionUiState::class }) { session ->
+                        val onRetrySession = remember(session.id, onRetrySave) { { onRetrySave(session.id) } }
+                        HistoryPendingSessionCard(session, onRetrySession)
+                    }
                 }
                 when (state.presentation) {
                     HistoryPresentation.POPULATED -> state.groups.distinctBy { it.id }.forEach { group ->
@@ -75,7 +88,7 @@ fun HistoryScreen(
                             ContentSkeletonCards(4)
                         }
                     }
-                    HistoryPresentation.EMPTY, HistoryPresentation.LOAD_ERROR -> item(key = "history-status", contentType = state.presentation) {
+                    HistoryPresentation.EMPTY, HistoryPresentation.LOAD_ERROR -> if (state.presentation != HistoryPresentation.EMPTY || state.pendingSessions.isEmpty()) item(key = "history-status", contentType = state.presentation) {
                         ContentStatusPanel(
                             iconRes = if (state.presentation == HistoryPresentation.EMPTY) R.drawable.img_placement_mascot else R.drawable.ic_load_error,
                             title = stringResource(if (state.presentation == HistoryPresentation.EMPTY) R.string.history_empty_title else R.string.history_error_title),

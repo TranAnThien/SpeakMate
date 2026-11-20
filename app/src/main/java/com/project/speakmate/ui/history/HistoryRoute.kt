@@ -25,6 +25,7 @@ fun HistoryRoute(
             else onOpenTrainingPath()
         },
         onRetry = viewModel::retry,
+        onRetrySave = viewModel::retrySave,
         onDismissError = {},
         onReturnToPath = onOpenTrainingPath,
         modifier = modifier

@@ -1,9 +1,11 @@
 package com.project.speakmate.ui.training
 
 import com.project.speakmate.domain.model.CompletedPractice
+import com.project.speakmate.domain.model.PendingPracticeCompletion
 import com.project.speakmate.domain.model.PracticeCompletionState
 import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 
 class FakePracticeCompletionRepository : PracticeCompletionRepository {
     val state = MutableStateFlow<PracticeCompletionState>(PracticeCompletionState.Grading)
@@ -13,6 +15,8 @@ class FakePracticeCompletionRepository : PracticeCompletionRepository {
     override fun completePractice(practice: CompletedPractice): String? = null
 
     override fun observeCompletion(attemptId: String) = state
+
+    override fun observePendingCompletions() = flowOf(emptyList<PendingPracticeCompletion>())
 
     override fun retrySave(attemptId: String) {
         retriedIds += attemptId

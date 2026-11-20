@@ -17,18 +17,7 @@ class AssessmentAudioFileProvider(private val directory: File) {
     fun openRecorder(audioId: String): AssessmentAudioRecorder {
         require(isValidId(audioId))
         check(directory.isDirectory || directory.mkdirs())
-        val recorder = AssessmentAudioRecorder(getOwnedFile(audioId))
-        try {
-            clearOtherCurrentProcessFiles(audioId)
-            return recorder
-        } catch (failure: Exception) {
-            try {
-                recorder.delete()
-            } catch (cleanupFailure: Exception) {
-                failure.addSuppressed(cleanupFailure)
-            }
-            throw failure
-        }
+        return AssessmentAudioRecorder(getOwnedFile(audioId))
     }
 
     fun getAudioFile(audioId: String): File? {
@@ -60,17 +49,6 @@ class AssessmentAudioFileProvider(private val directory: File) {
         val file = File(directory, processId + SEPARATOR + audioId + EXTENSION)
         check(file.canonicalFile.parentFile == directory.canonicalFile)
         return file
-    }
-
-    private fun clearOtherCurrentProcessFiles(audioId: String) {
-        val files = directory.listFiles() ?: return
-        for (file in files) {
-            if (!file.isFile || file.canonicalFile.parentFile != directory.canonicalFile) continue
-            if (!file.name.endsWith(EXTENSION)) continue
-            val parts = file.name.removeSuffix(EXTENSION).split(SEPARATOR)
-            if (parts.size != FILE_NAME_PARTS || !parts.all(::isValidId) || parts[0] != processId || parts[1] == audioId) continue
-            check(!file.exists() || file.delete())
-        }
     }
 
     private fun isValidId(audioId: String): Boolean = try {
