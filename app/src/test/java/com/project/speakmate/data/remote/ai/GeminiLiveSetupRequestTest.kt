@@ -14,10 +14,11 @@ class GeminiLiveSetupRequestTest {
     @Test
     fun setupRequestsAudioTranscriptionAutomaticDetectionAndCompression() {
         val root = JSONObject(request.buildSetup(scenario, null))
-        assertEquals(setOf("setup"), root.keySet())
+        assertEquals(setOf("setup"), root.keys().asSequence().toSet())
         val setup = root.getJSONObject("setup")
         assertEquals("models/gemini-3.8-live", setup.getString("model"))
-        assertEquals(listOf("AUDIO"), setup.getJSONObject("generationConfig").getJSONArray("responseModalities").toList())
+        val responseModalities = setup.getJSONObject("generationConfig").getJSONArray("responseModalities")
+        assertEquals(listOf("AUDIO"), List(responseModalities.length()) { responseModalities.get(it) })
         assertFalse(setup.getJSONObject("realtimeInputConfig").getJSONObject("automaticActivityDetection").getBoolean("disabled"))
         assertEquals(0, setup.getJSONObject("inputAudioTranscription").length())
         assertEquals(0, setup.getJSONObject("outputAudioTranscription").length())
