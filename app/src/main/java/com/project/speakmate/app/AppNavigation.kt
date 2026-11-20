@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -140,7 +141,8 @@ fun AppNavigation(
                     val graphEntry = remember(backStackEntry) {
                         try { navController.getBackStackEntry<AppRoute.Placement>() } catch (_: IllegalArgumentException) { null }
                     }
-                    if (graphEntry == null || graphEntry.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                    val graphLifecycleState = graphEntry?.lifecycle?.currentStateAsState()?.value
+                    if (graphEntry == null || graphLifecycleState == Lifecycle.State.DESTROYED) {
                         LaunchedEffect(backStackEntry) {
                             if (navController.currentBackStackEntry == backStackEntry) returnHome()
                         }
@@ -166,7 +168,8 @@ fun AppNavigation(
                     val graphEntry = remember(backStackEntry) {
                         try { navController.getBackStackEntry<AppRoute.Reassessment>() } catch (_: IllegalArgumentException) { null }
                     }
-                    if (graphEntry == null || graphEntry.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                    val graphLifecycleState = graphEntry?.lifecycle?.currentStateAsState()?.value
+                    if (graphEntry == null || graphLifecycleState == Lifecycle.State.DESTROYED) {
                         LaunchedEffect(backStackEntry) {
                             if (navController.currentBackStackEntry == backStackEntry) returnToPath()
                         }
