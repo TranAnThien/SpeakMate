@@ -8,6 +8,7 @@ import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.test.SavedStateHandleRule
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.utils.AppConstant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,6 +27,9 @@ import org.junit.Test
 class GoalAssessmentViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
+
+    @get:Rule
+    val savedStateHandleRule = SavedStateHandleRule()
     private val store = ViewModelStore()
     private val training = FakeGoalTrainingRepository()
     private val auth = FakeAuthRepository()

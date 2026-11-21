@@ -1,6 +1,7 @@
 package com.project.speakmate.ui.practice
 
 import androidx.lifecycle.SavedStateHandle
+import com.project.speakmate.test.SavedStateHandleRule
 import com.project.speakmate.ui.practice.state.ScenarioPreparationPresentation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -12,10 +13,14 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScenarioPreparationViewModelTest {
+    @get:Rule
+    val savedStateHandleRule = SavedStateHandleRule()
+
     private val dispatcher = UnconfinedTestDispatcher()
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)

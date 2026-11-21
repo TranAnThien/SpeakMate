@@ -11,6 +11,7 @@ import com.project.speakmate.domain.model.TranscriptMessage
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.test.SavedStateHandleRule
 import com.project.speakmate.ui.components.AssessmentCriterionType.FLUENCY
 import com.project.speakmate.ui.components.AssessmentCriterionType.RANGE
 import com.project.speakmate.ui.history.state.HistoryResultPresentation.NOT_EVALUATED
@@ -31,6 +32,9 @@ class SessionDetailViewModelTest {
 
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
+
+    @get:Rule
+    val savedStateHandleRule = SavedStateHandleRule()
 
     private val sampleAttempt = PracticeAttempt(
         attemptId = "attempt_123",

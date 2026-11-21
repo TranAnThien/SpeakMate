@@ -6,6 +6,7 @@ import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.test.FakePracticeRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.test.SavedStateHandleRule
 import com.project.speakmate.ui.practice.state.ScenarioCatalogPresentation
 import com.project.speakmate.ui.practice.state.ScenarioPreparationPresentation
 import kotlinx.coroutines.test.runTest
@@ -27,6 +28,9 @@ import kotlinx.coroutines.withContext
 class PracticeViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
+
+    @get:Rule
+    val savedStateHandleRule = SavedStateHandleRule()
 
     @Test
     fun catalogLoadsCategoriesAndFiltersScenarios() = runTest {
