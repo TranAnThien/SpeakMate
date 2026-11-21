@@ -50,7 +50,7 @@ class GeminiAssessmentClientTest {
         assertEquals(1, fake.calls.get())
         assertEquals(0, shared.callTimeoutMillis)
         assertTrue(shared.retryOnConnectionFailure)
-        assertEquals(TimeUnit.SECONDS.toNanos(60), fake.callTimeoutNanos)
+        assertEquals(TimeUnit.SECONDS.toNanos(120), fake.callTimeoutNanos)
     }
 
     @Test

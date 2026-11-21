@@ -35,8 +35,10 @@ class GeminiAssessmentClient @Inject constructor(
 ) {
     companion object {
         private const val ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
-        private const val MODEL_ID = "gemini-3.8-flash"
-        private const val CALL_TIMEOUT_SECONDS = 60L
+        private val MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash-lite")
+        private const val CONNECT_TIMEOUT_SECONDS = 30L
+        private const val WRITE_TIMEOUT_SECONDS = 60L
+        private const val CALL_TIMEOUT_SECONDS = 120L
         private const val MAX_ATTEMPTS = 2
         private const val RETRY_DELAY_MILLIS = 1_000L
         private const val MAX_INLINE_REQUEST_BYTES = 20_000_000
@@ -46,7 +48,11 @@ class GeminiAssessmentClient @Inject constructor(
 
     private class HttpFailure(val statusCode: Int) : IOException()
 
-    private val client = httpClient.newBuilder().callTimeout(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+    private val client = httpClient.newBuilder()
+        .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .callTimeout(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).build()
 
     suspend fun evaluate(evidence: AssessmentEvidence, wav: ByteArray): SpeakingEvaluation = withContext(Dispatchers.IO) {
@@ -56,13 +62,14 @@ class GeminiAssessmentClient @Inject constructor(
             .put(JSONObject().put(GeminiWireField.TYPE, GeminiWireField.AUDIO).put(GeminiWireField.INTERACTIONS_MIME_TYPE, GeminiWireField.WAV_MIME_TYPE).put(GeminiWireField.DATA, Base64.getEncoder().encodeToString(wav)))
         val format = JSONObject().put(GeminiWireField.TYPE, GeminiWireField.TEXT).put(GeminiWireField.INTERACTIONS_MIME_TYPE, GeminiWireField.JSON_MIME_TYPE)
             .put(GeminiWireField.SCHEMA, SpeakingEvaluationResponse.createSchema(evidence.requiredActions.map { it.requiredActionId }))
-        val body = JSONObject().put(GeminiWireField.MODEL, MODEL_ID).put(GeminiWireField.STORE, false).put(GeminiWireField.INPUT, input).put(GeminiWireField.RESPONSE_FORMAT, format)
-            .toString().toByteArray(Charsets.UTF_8)
-        require(body.size <= MAX_INLINE_REQUEST_BYTES)
-        val request = Request.Builder().url(ENDPOINT).header(GeminiWireField.API_KEY_HEADER, apiKey)
-            .post(body.toRequestBody(GeminiWireField.JSON_MIME_TYPE.toMediaType())).build()
         for (attempt in 0 until MAX_ATTEMPTS) {
             currentCoroutineContext().ensureActive()
+            val modelId = MODELS.getOrElse(attempt) { MODELS.last() }
+            val body = JSONObject().put(GeminiWireField.MODEL, modelId).put(GeminiWireField.STORE, false).put(GeminiWireField.INPUT, input).put(GeminiWireField.RESPONSE_FORMAT, format)
+                .toString().toByteArray(Charsets.UTF_8)
+            require(body.size <= MAX_INLINE_REQUEST_BYTES)
+            val request = Request.Builder().url(ENDPOINT).header(GeminiWireField.API_KEY_HEADER, apiKey)
+                .post(body.toRequestBody(GeminiWireField.JSON_MIME_TYPE.toMediaType())).build()
             try {
                 val response = execute(request)
                 return@withContext SpeakingEvaluationResponse(readOutput(response)).toDomain()

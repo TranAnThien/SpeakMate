@@ -55,18 +55,26 @@ object AssessmentRules {
         if (transcriptCriteria.any { !hasUserQuote(it.userQuote, userTurns) }) {
             return InsufficientEvidenceReason.EVALUATION_INVALID
         }
+
         val startMillis = evaluation.fluency.audioStartMillis
         val endMillis = evaluation.fluency.audioEndMillis
         val durationMillis = evidence.audioDurationMillis
-        if (durationMillis == null || startMillis == null || endMillis == null ||
-            startMillis < 0L || startMillis >= endMillis || endMillis > durationMillis
-        ) return InsufficientEvidenceReason.EVALUATION_INVALID
+        if (startMillis != null && endMillis != null) {
+            if (startMillis < 0L || startMillis >= endMillis || (durationMillis != null && endMillis > durationMillis)) {
+                return InsufficientEvidenceReason.EVALUATION_INVALID
+            }
+        } else if (startMillis != null || endMillis != null) {
+            return InsufficientEvidenceReason.EVALUATION_INVALID
+        }
+
         if (evaluation.requiredActions.keys != evidence.requiredActions.map { it.requiredActionId }.toSet()) {
             return InsufficientEvidenceReason.EVALUATION_INVALID
         }
+
         if (evaluation.requiredActions.values.any { it.isCompleted && !hasUserQuote(it.userQuote, userTurns) }) {
             return InsufficientEvidenceReason.EVALUATION_INVALID
         }
+
         return null
     }
 
