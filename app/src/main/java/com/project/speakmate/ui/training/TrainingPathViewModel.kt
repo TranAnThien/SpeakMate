@@ -1,5 +1,6 @@
 package com.project.speakmate.ui.training
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.ContentStatus
@@ -64,8 +65,18 @@ class TrainingPathViewModel @Inject constructor(
                         userRepository.observeUser(uid).collectLatest { user ->
                             _uiState.update { TrainingPathUiState() }
                             val profile = checkNotNull(user)
-                            check(profile.level != SpeakingLevel.NOT_ASSESSED)
-                            val progress = checkNotNull(profile.trainingProgress)
+                            if (profile.level == SpeakingLevel.NOT_ASSESSED || profile.trainingProgress == null) {
+                                _uiState.update {
+                                    it.copy(
+                                        status = TrainingContentStatus.CONTENT,
+                                        level = profile.level.name,
+                                        goals = emptyList(),
+                                        canContinue = false
+                                    )
+                                }
+                                return@collectLatest
+                            }
+                            val progress = profile.trainingProgress
                             val path = trainingRepository.getTrainingPath(profile.level).getOrThrow()
                             val problem = TrainingProgressRules.validate(path, progress)
                             if (problem != null) {
@@ -83,13 +94,15 @@ class TrainingPathViewModel @Inject constructor(
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.e("TrainingPathViewModel", "Error loading training path", e)
                         _uiState.update { it.copy(status = TrainingContentStatus.ERROR) }
                     }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e("TrainingPathViewModel", "Error in auth observation", e)
                 _uiState.update { it.copy(status = TrainingContentStatus.ERROR) }
             }
         }
