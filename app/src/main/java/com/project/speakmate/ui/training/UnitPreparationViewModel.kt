@@ -76,7 +76,7 @@ class UnitPreparationViewModel @Inject constructor(
                             _uiState.update { UnitPreparationUiState(status = TrainingContentStatus.ERROR, isLocked = true) }
                             return@collectLatest
                         }
-                        val unit = path.goals[location.goalIndex].units[location.unitIndex]
+                        val unit = trainingRepository.getTrainingUnit(unitId).getOrThrow()
                         val scenario = trainingRepository.getScenario(unit.scenarioId).getOrThrow()
                         val imageUrl = trainingRepository.getScenarioImageUrl(unit.scenarioId).getOrThrow()
                         val vocabulary = unit.preparation.vocabulary.map { word ->
