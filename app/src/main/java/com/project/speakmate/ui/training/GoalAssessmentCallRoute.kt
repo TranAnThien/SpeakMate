@@ -12,7 +12,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
-import com.project.speakmate.domain.model.TrainingActivityScenario
 import com.project.speakmate.ui.call.CallRoute
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
 import com.project.speakmate.ui.training.state.TrainingContentStatus
