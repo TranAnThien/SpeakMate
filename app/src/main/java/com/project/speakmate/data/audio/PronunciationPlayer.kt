@@ -19,7 +19,7 @@ class PronunciationPlayer @Inject constructor(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val attributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+        .setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
         .build()
     private var engine: TextToSpeech? = null

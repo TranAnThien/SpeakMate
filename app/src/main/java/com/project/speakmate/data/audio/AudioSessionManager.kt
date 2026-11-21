@@ -2,6 +2,7 @@ package com.project.speakmate.data.audio
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.AudioRecordingConfiguration
@@ -59,9 +60,13 @@ class AudioSessionManager(
     private var isPlaying = false
     private var isMicrophoneSilenced = false
     private var isRecordingCallbackRegistered = false
+    private var originalAudioMode = AudioManager.MODE_NORMAL
 
     fun open() {
         val manager = checkNotNull(audioManager)
+        originalAudioMode = manager.mode
+        manager.mode = AudioManager.MODE_IN_COMMUNICATION
+        routeToSpeaker(manager)
         hasFocus = manager.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         check(hasFocus)
         manager.registerAudioRecordingCallback(recordingCallback, null)
@@ -130,6 +135,36 @@ class AudioSessionManager(
         if (hasFocus) {
             hasFocus = false
             runCatching { audioManager?.abandonAudioFocusRequest(focusRequest) }
+        }
+        audioManager?.let { manager ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                manager.clearCommunicationDevice()
+            } else {
+                @Suppress("DEPRECATION")
+                manager.isSpeakerphoneOn = false
+            }
+            manager.mode = originalAudioMode
+        }
+    }
+
+    private fun routeToSpeaker(manager: AudioManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val devices = manager.availableCommunicationDevices
+            val headset = devices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                    it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
+            val target = headset ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            if (target != null) {
+                manager.setCommunicationDevice(target)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            if (!manager.isWiredHeadsetOn && !manager.isBluetoothScoOn) {
+                manager.isSpeakerphoneOn = true
+            }
         }
     }
 
