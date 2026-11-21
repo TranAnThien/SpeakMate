@@ -30,8 +30,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.placement.components.PlacementAppBar
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.theme.SpeakMateTheme
@@ -43,7 +43,7 @@ fun PlacementAdditionalTaskScreen(
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.RoutingBackground)) {
-        PlacementAppBar(stringResource(R.string.placement_title), onBack)
+        BackAppBar(stringResource(R.string.placement_title), onBack)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val contentHeight = maxHeight
             Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = contentHeight)

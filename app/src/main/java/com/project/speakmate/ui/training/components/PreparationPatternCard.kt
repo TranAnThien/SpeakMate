@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -23,19 +24,23 @@ import com.project.speakmate.ui.training.state.PreparationPatternUiState
 fun PreparationPatternCard(
     pattern: PreparationPatternUiState,
     onPlayPattern: () -> Unit,
-    onPlayExample: () -> Unit,
+    onPlayExample: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(pattern.label, style = DesignTypography.Label, color = DesignColor.Muted, modifier = Modifier.weight(1f))
+            Text(pattern.label.ifBlank { stringResource(R.string.preparation_patterns) }, style = DesignTypography.Label, color = DesignColor.Muted, modifier = Modifier.weight(1f))
             PreparationAudioButton(onPlayPattern)
         }
         Text(pattern.pattern, style = DesignTypography.Title, color = DesignColor.Text)
         Text(stringResource(R.string.preparation_pattern_meaning, pattern.meaning), style = DesignTypography.Detail, color = DesignColor.Muted)
         Text(stringResource(R.string.preparation_usage), style = DesignTypography.Label, color = DesignColor.Muted)
         Text(pattern.usage, style = DesignTypography.Detail, color = DesignColor.Text)
-        PreparationExampleCard(pattern.example, onPlayExample)
+        val examples = pattern.examples.ifEmpty { listOf(pattern.example).filter { it.sentence.isNotBlank() } }
+        examples.forEach { example ->
+            val onPlay = remember(example.sentence, onPlayExample) { { onPlayExample(example.sentence) } }
+            PreparationExampleCard(example, onPlay)
+        }
     }
 }

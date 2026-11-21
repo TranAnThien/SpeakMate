@@ -43,9 +43,9 @@ private fun rememberPromotionIntroductionPreviewState(): PromotionIntroductionUi
     title = stringResource(R.string.promotion_introduction_title),
     description = stringResource(R.string.promotion_introduction_description),
     steps = listOf(
-        PromotionStepUiState("current_confirmation", 1, stringResource(R.string.promotion_preview_step_0)),
-        PromotionStepUiState("next_probe", 2, stringResource(R.string.promotion_preview_step_1)),
-        PromotionStepUiState("next_confirmation", 3, stringResource(R.string.promotion_preview_step_2))
+        PromotionStepUiState("current_confirmation", 1, "Xác nhận trình độ A2 hiện tại."),
+        PromotionStepUiState("next_probe", 2, "Thử sức với tình huống ở B1."),
+        PromotionStepUiState("next_confirmation", 3, "Xác nhận B1 trong bối cảnh khác.")
     ),
     conditionTitle = stringResource(R.string.promotion_introduction_condition_title),
     conditionDescription = stringResource(R.string.promotion_introduction_condition_description),

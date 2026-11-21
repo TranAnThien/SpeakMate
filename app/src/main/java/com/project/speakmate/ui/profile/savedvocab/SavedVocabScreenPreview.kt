@@ -46,7 +46,7 @@ fun SavedVocabScreenPreview_Success() {
 
     MaterialTheme {
         Surface {
-            SavedVocabScreenContent(
+            SavedVocabScreen(
                 uiState = SavedVocabUiState(
                     isLoading = false,
                     searchQuery = "",
@@ -68,7 +68,7 @@ fun SavedVocabScreenPreview_Success() {
 fun SavedVocabScreenPreview_Loading() {
     MaterialTheme {
         Surface {
-            SavedVocabScreenContent(
+            SavedVocabScreen(
                 uiState = SavedVocabUiState(isLoading = true),
                 onNavigateBack = {},
                 onSearchQueryChange = {},
@@ -85,7 +85,7 @@ fun SavedVocabScreenPreview_Loading() {
 fun SavedVocabScreenPreview_Empty() {
     MaterialTheme {
         Surface {
-            SavedVocabScreenContent(
+            SavedVocabScreen(
                 uiState = SavedVocabUiState(
                     isLoading = false,
                     filteredVocabularies = emptyList()

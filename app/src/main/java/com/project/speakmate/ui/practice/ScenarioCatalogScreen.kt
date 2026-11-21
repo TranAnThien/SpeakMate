@@ -18,8 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.ContentErrorDialog
 import com.project.speakmate.ui.components.ContentFilterRow
 import com.project.speakmate.ui.components.ContentFilterUiState
@@ -32,6 +30,7 @@ import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
 import com.project.speakmate.ui.practice.state.ScenarioItemUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.AppConstant
 
 @Composable
 fun ScenarioCatalogScreen(
@@ -40,10 +39,7 @@ fun ScenarioCatalogScreen(
     onSelectScenario: (String) -> Unit,
     onRetry: () -> Unit,
     onDismissError: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
@@ -56,13 +52,15 @@ fun ScenarioCatalogScreen(
                         Text(stringResource(R.string.practice_learning_notice), style = DesignTypography.Detail, color = DesignColor.Primary,
                             modifier = Modifier.fillMaxWidth().background(DesignColor.SecondaryButton, RoundedCornerShape(16.dp)).padding(16.dp))
                         if (state.presentation != ScenarioCatalogPresentation.UNCONFIGURED) {
-                            ContentFilterRow(state.categories, state.selectedCategoryId, onSelectCategory)
+                            ContentFilterRow(state.categories.map { category ->
+                                if (category.id == AppConstant.PRACTICE_CATEGORY_ALL) category.copy(label = stringResource(R.string.practice_category_all)) else category
+                            }, state.selectedCategoryId, onSelectCategory)
                         }
                     }
                 }
                 when (state.presentation) {
-                    ScenarioCatalogPresentation.POPULATED -> itemsIndexed(state.scenarios,
-                        key = { index, scenario -> "scenario:$index:${scenario.id}" },
+                    ScenarioCatalogPresentation.POPULATED -> itemsIndexed(state.scenarios.distinctBy { it.id },
+                        key = { _, scenario -> "scenario:${scenario.id}" },
                         contentType = { _, _ -> ScenarioItemUiState::class }) { _, scenario ->
                         val onSelect = remember(scenario.id, onSelectScenario) { { onSelectScenario(scenario.id) } }
                         ScenarioCard(scenario, onSelect)
@@ -91,15 +89,14 @@ fun ScenarioCatalogScreen(
                                 R.string.goal_assessment_return_to_path else R.string.content_reload),
                             secondaryText = stringResource(if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED)
                                 R.string.content_reload else R.string.goal_assessment_return_to_path),
-                            onPrimaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onOpenTrainingPath else onRetry,
-                            onSecondaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onRetry else onOpenTrainingPath
+                            onPrimaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onReturnToPath else onRetry,
+                            onSecondaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onRetry else onReturnToPath
                         )
                     }
                     ScenarioCatalogPresentation.ERROR_DIALOG -> Unit
                 }
             }
-            AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile,
-                selectedDestination = AppDestination.PRACTICE, bottomPadding = 4.dp)
+
         }
         if (state.presentation == ScenarioCatalogPresentation.ERROR_DIALOG) {
             ContentErrorDialog(stringResource(R.string.practice_error_title), stringResource(R.string.practice_error_dialog_description),

@@ -225,15 +225,15 @@ private fun rememberUnitResultPreviewState(presentation: UnitResultPresentation)
     }
     return UnitResultUiState(
         presentation = presentation,
-        title = stringResource(R.string.unit_result_preview_unit),
+        title = "Điều chỉnh đơn gọi món",
         explanation = explanation,
         criteriaHeading = criteriaHeading,
         feedback = feedback,
         requiredActions = listOf(
-            UnitResultActionUiState("resize", stringResource(R.string.unit_result_preview_action_0),
+            UnitResultActionUiState("resize", "Yêu cầu đổi kích cỡ đồ uống.",
                 if (presentation == UnitResultPresentation.INSUFFICIENT_EVIDENCE) UnitResultEvaluation.NOT_EVALUATED
                 else UnitResultEvaluation.PASSED),
-            UnitResultActionUiState("confirm", stringResource(R.string.unit_result_preview_action_1),
+            UnitResultActionUiState("confirm", "Xác nhận lại đơn sau khi điều chỉnh.",
                 when (presentation) {
                     UnitResultPresentation.FAIL_REQUIRED_ACTION -> UnitResultEvaluation.NOT_PASSED
                     UnitResultPresentation.INSUFFICIENT_EVIDENCE -> UnitResultEvaluation.NOT_EVALUATED

@@ -27,8 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.placement.components.PlacementAppBar
 import com.project.speakmate.ui.placement.components.PlacementBadge
 import com.project.speakmate.ui.placement.state.PlacementResultUiState
 import com.project.speakmate.ui.placement.state.PlacementSkillUiState
@@ -44,10 +44,10 @@ fun PlacementResultScreen(
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PlacementAppBar(stringResource(R.string.placement_result_title), onBack)
+        BackAppBar(stringResource(R.string.placement_result_title), onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 32.dp)) {
-            PlacementLevelCard(state.level, state.levelLabel)
+            PlacementLevelCard(state.level, state.levelLabel, state.isLowestLevelAssigned)
             Spacer(Modifier.height(16.dp))
             Text(stringResource(R.string.placement_skill_details), color = DesignColor.Primary, style = DesignTypography.Button)
             Spacer(Modifier.height(16.dp))
@@ -61,13 +61,21 @@ fun PlacementResultScreen(
         }
         Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp)
             .padding(top = 16.dp, bottom = 24.dp)) {
-            PrimaryButton(stringResource(R.string.placement_home), onStartTrainingPath)
+            PrimaryButton(
+                text = stringResource(when {
+                    state.isSavingResult -> R.string.placement_saving
+                    state.saveFailed -> R.string.placement_retry_save
+                    else -> R.string.placement_home
+                }),
+                onClick = onStartTrainingPath,
+                enabled = !state.isSavingResult
+            )
         }
     }
 }
 
 @Composable
-private fun PlacementLevelCard(level: String, levelLabel: String) {
+private fun PlacementLevelCard(level: String, levelLabel: String, isLowestLevelAssigned: Boolean) {
     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Text(stringResource(R.string.placement_estimated_level), color = DesignColor.Muted, style = DesignTypography.Label)
@@ -78,7 +86,7 @@ private fun PlacementLevelCard(level: String, levelLabel: String) {
         Spacer(Modifier.height(8.dp))
         PlacementBadge(levelLabel)
         Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.placement_result_disclaimer), style = DesignTypography.Caption,
+        Text(stringResource(if (isLowestLevelAssigned) R.string.placement_a1_assigned_disclaimer else R.string.placement_result_disclaimer), style = DesignTypography.Caption,
             color = DesignColor.Muted, textAlign = TextAlign.Center)
     }
 }
@@ -114,11 +122,11 @@ private fun PlacementResultA2ScreenPreview() {
             state = PlacementResultUiState(
                 level = "A2",
                 levelLabel = stringResource(R.string.placement_a2_label),
-                range = PlacementSkillUiState(stringResource(R.string.placement_preview_range_feedback), true),
-                accuracy = PlacementSkillUiState(stringResource(R.string.placement_preview_accuracy_feedback), false),
-                fluency = PlacementSkillUiState(stringResource(R.string.placement_preview_fluency_feedback), true),
-                interaction = PlacementSkillUiState(stringResource(R.string.placement_preview_interaction_feedback), true),
-                coherence = PlacementSkillUiState(stringResource(R.string.placement_preview_coherence_feedback), true)
+                range = PlacementSkillUiState("Sử dụng từ vựng cơ bản tốt", true),
+                accuracy = PlacementSkillUiState("Cần chú ý chia động từ", false),
+                fluency = PlacementSkillUiState("Duy trì lời nói tương đối trôi chảy", true),
+                interaction = PlacementSkillUiState("Phản hồi phù hợp và duy trì trao đổi", true),
+                coherence = PlacementSkillUiState("Ý tưởng được kết nối rõ", true)
             ),
             onBack = {},
             onStartTrainingPath = {}

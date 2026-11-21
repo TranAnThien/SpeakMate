@@ -64,8 +64,8 @@ fun TrainingUnitRow(
                 unit.isAssessment -> R.string.training_assessment_locked
                 else -> R.string.training_locked
             }), style = if (isCurrent) DesignTypography.Badge else DesignTypography.Small, color = statusColor)
-            if (unit.description.isNotBlank()) {
-                Text(unit.description, style = DesignTypography.Detail, color = DesignColor.Muted)
+            if (unit.description.isNotBlank() || unit.isAssessment) {
+                Text(unit.description.ifBlank { stringResource(R.string.training_assessment_description) }, style = DesignTypography.Detail, color = DesignColor.Muted)
             }
         }
     }

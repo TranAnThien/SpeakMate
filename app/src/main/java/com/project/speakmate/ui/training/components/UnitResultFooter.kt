@@ -29,12 +29,21 @@ fun UnitResultFooter(
     onReplayUnit: () -> Unit,
     onRetryUnit: () -> Unit,
     onReviewLesson: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hasSaveFailed: Boolean = false,
+    onRetrySave: () -> Unit = {}
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PrimaryButton(stringResource(if (isPassed) R.string.home_continue_path else R.string.unit_result_retry),
-            if (isPassed) onContinuePath else onRetryUnit)
+        PrimaryButton(stringResource(when {
+            hasSaveFailed -> R.string.unit_result_retry_save
+            isPassed -> R.string.home_continue_path
+            else -> R.string.unit_result_retry
+        }), when {
+            hasSaveFailed -> onRetrySave
+            isPassed -> onContinuePath
+            else -> onRetryUnit
+        })
         Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(16.dp))
             .background(DesignColor.SecondaryButton).clickable(onClick = if (isPassed) onReplayUnit else onReviewLesson)
             .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {

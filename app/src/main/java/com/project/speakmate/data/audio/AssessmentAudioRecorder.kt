@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets
 class AssessmentAudioRecorder(private val file: File) {
     companion object {
         const val MAX_ASSESSMENT_AUDIO_MILLIS = 5 * 60 * 1_000L
-        private const val MILLIS_PER_SECOND = 1_000L
         private const val HEADER_BYTES = 44
         private const val RIFF_CONTENT_BYTES = 36
         private const val FORMAT_BYTES = 16
@@ -22,7 +21,7 @@ class AssessmentAudioRecorder(private val file: File) {
         private const val DATA = "data"
         private const val READ_WRITE_MODE = "rw"
         private const val BYTES_PER_SECOND = AppConstant.CALL_INPUT_SAMPLE_RATE * AppConstant.PCM16_BYTES_PER_SAMPLE * CHANNELS
-        private const val MAX_AUDIO_BYTES = MAX_ASSESSMENT_AUDIO_MILLIS * BYTES_PER_SECOND / MILLIS_PER_SECOND
+        private const val MAX_AUDIO_BYTES = MAX_ASSESSMENT_AUDIO_MILLIS * BYTES_PER_SECOND / AppConstant.MILLIS_PER_SECOND
     }
 
     private var output: RandomAccessFile? = null
@@ -30,7 +29,7 @@ class AssessmentAudioRecorder(private val file: File) {
     private var isFinished = false
 
     val durationMillis: Long
-        @Synchronized get() = audioBytes * MILLIS_PER_SECOND / BYTES_PER_SECOND
+        @Synchronized get() = audioBytes * AppConstant.MILLIS_PER_SECOND / BYTES_PER_SECOND
 
     val isAtLimit: Boolean
         @Synchronized get() = audioBytes >= MAX_AUDIO_BYTES

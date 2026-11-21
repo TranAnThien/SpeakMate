@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
@@ -19,10 +20,11 @@ import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
-fun BackAppBar(title: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun BackAppBar(title: String, onBack: () -> Unit, modifier: Modifier = Modifier, isClose: Boolean = false) {
     Box(modifier.fillMaxWidth().height(48.dp).padding(horizontal = 16.dp)) {
         Box(Modifier.size(48.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-            Image(painterResource(R.drawable.ic_placement_back), null, Modifier.size(24.dp))
+            Image(painterResource(if (isClose) R.drawable.ic_call_close else R.drawable.ic_placement_back),
+                stringResource(if (isClose) R.string.accessibility_close else R.string.accessibility_back), Modifier.size(24.dp))
         }
         Text(title, style = DesignTypography.AppBar, color = DesignColor.Text, textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp))

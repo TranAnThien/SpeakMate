@@ -13,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -21,15 +20,14 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.PreparationGrammarCard
-import com.project.speakmate.ui.training.components.PreparationHeader
 import com.project.speakmate.ui.training.components.PreparationNote
 import com.project.speakmate.ui.training.components.PreparationOverviewContent
 import com.project.speakmate.ui.training.components.PreparationPatternCard
@@ -37,7 +35,6 @@ import com.project.speakmate.ui.training.components.PreparationTabs
 import com.project.speakmate.ui.training.components.PreparationVocabularyCard
 import com.project.speakmate.ui.training.state.PreparationSection
 import com.project.speakmate.ui.training.state.UnitPreparationUiState
-import com.project.speakmate.utils.extension.TtsManager
 
 @Composable
 fun UnitPreparationScreen(
@@ -51,21 +48,11 @@ fun UnitPreparationScreen(
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState()
 ) {
-    val context = LocalContext.current
-    val ttsManager = remember { TtsManager(context) }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            ttsManager.shutdown()
-        }
-    }
-
     val onOpenGrammar = remember(onSelectSection) { { onSelectSection(PreparationSection.GRAMMAR) } }
     val onOpenPatterns = remember(onSelectSection) { { onSelectSection(PreparationSection.SENTENCE_PATTERNS) } }
 
-    // The app is edge-to-edge; reserve the status-bar area before rendering the app bar.
     Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
-        PreparationHeader(stringResource(when (state.section) {
+        BackAppBar(stringResource(when (state.section) {
             PreparationSection.OVERVIEW -> R.string.preparation_title
             PreparationSection.VOCABULARY -> R.string.preparation_vocabulary
             PreparationSection.GRAMMAR -> R.string.preparation_grammar
@@ -105,19 +92,8 @@ fun UnitPreparationScreen(
                     PreparationNote(stringResource(R.string.preparation_audio_note))
                     state.vocabulary.forEach { word ->
                         key(word.id) {
-                            val onPlay = remember(word.id, onPlayWord) {
-                                {
-                                    onPlayWord(word.id)
-                                    ttsManager.speak(word.word)
-                                }
-                            }
-                            val onExample = remember(word.id, onPlayExample) {
-                                {
-                                    onPlayExample(word.id)
-                                    // Gọi trực tiếp example.sentence vì example không phải là dạng List và không nullable
-                                    ttsManager.speak(word.example.sentence)
-                                }
-                            }
+                            val onPlay = remember(word.word, onPlayWord) { { onPlayWord(word.word) } }
+                            val onExample = remember(word.example.sentence, onPlayExample) { { onPlayExample(word.example.sentence) } }
                             PreparationVocabularyCard(word, onPlay, onExample)
                         }
                     }
@@ -125,13 +101,7 @@ fun UnitPreparationScreen(
                 PreparationSection.GRAMMAR -> {
                     state.grammar.forEach { grammar ->
                         key(grammar.id) {
-                            val onExample = remember(grammar.id, onPlayExample) {
-                                {
-                                    onPlayExample(grammar.id)
-                                    ttsManager.speak(grammar.example.sentence)
-                                }
-                            }
-                            PreparationGrammarCard(grammar, onExample)
+                            PreparationGrammarCard(grammar, onPlayExample)
                         }
                     }
                     PreparationNote(stringResource(R.string.preparation_grammar_note))
@@ -139,19 +109,8 @@ fun UnitPreparationScreen(
                 PreparationSection.SENTENCE_PATTERNS -> {
                     state.sentencePatterns.forEach { pattern ->
                         key(pattern.id) {
-                            val onPlay = remember(pattern.id, onPlayPattern) {
-                                {
-                                    onPlayPattern(pattern.id)
-                                    ttsManager.speak(pattern.pattern)
-                                }
-                            }
-                            val onExample = remember(pattern.id, onPlayExample) {
-                                {
-                                    onPlayExample(pattern.id)
-                                    ttsManager.speak(pattern.example.sentence)
-                                }
-                            }
-                            PreparationPatternCard(pattern, onPlay, onExample)
+                            val onPlay = remember(pattern.pattern, onPlayPattern) { { onPlayPattern(pattern.pattern) } }
+                            PreparationPatternCard(pattern, onPlay, onPlayExample)
                         }
                     }
                     PreparationNote(stringResource(R.string.preparation_patterns_note))

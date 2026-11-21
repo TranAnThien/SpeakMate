@@ -1,9 +1,7 @@
 package com.project.speakmate.ui.training.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 
-@Keep
 @Immutable
 data class TrainingGoalUiState(
     val id: String = "",
@@ -13,5 +11,6 @@ data class TrainingGoalUiState(
     val unitsHeading: String = "",
     val status: TrainingProgressStatus = TrainingProgressStatus.LOCKED,
     val isExpanded: Boolean = false,
-    val units: List<TrainingUnitUiState> = emptyList()
+    val units: List<TrainingUnitUiState> = emptyList(),
+    val order: Int = 0
 )

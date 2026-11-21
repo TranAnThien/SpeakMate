@@ -6,7 +6,7 @@ import org.junit.Test
 class SpeakingCriteriaResultTest {
 
     @Test
-    fun calculateSpeakingResult_returnsPASS_when4Or5CriteriaMet() {
+    fun calculateSpeakingResultReturnsPASSWhen4Or5CriteriaMet() {
         val result5 = SpeakingCriteriaResult(
             rangeMet = true,
             accuracyMet = true,
@@ -27,7 +27,7 @@ class SpeakingCriteriaResultTest {
     }
 
     @Test
-    fun calculateSpeakingResult_returnsPARTIAL_when3CriteriaMet() {
+    fun calculateSpeakingResultReturnsPARTIALWhen3CriteriaMet() {
         val result3 = SpeakingCriteriaResult(
             rangeMet = true,
             accuracyMet = true,
@@ -39,7 +39,7 @@ class SpeakingCriteriaResultTest {
     }
 
     @Test
-    fun calculateSpeakingResult_returnsFAIL_when0To2CriteriaMet() {
+    fun calculateSpeakingResultReturnsFAILWhen0To2CriteriaMet() {
         val result2 = SpeakingCriteriaResult(
             rangeMet = true,
             accuracyMet = true,

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingGoalUiState
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
 
@@ -37,7 +38,7 @@ fun TrainingGoalCard(
     goal: TrainingGoalUiState,
     onToggle: () -> Unit,
     onOpenGoal: () -> Unit,
-    onOpenUnit: (String) -> Unit,
+    onOpenUnit: (TrainingActivityDestination) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DesignColor.Surface)
@@ -45,7 +46,7 @@ fun TrainingGoalCard(
             RoundedCornerShape(16.dp)).padding(17.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onToggle), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(goal.label, style = DesignTypography.SectionLabel, color = DesignColor.Muted, modifier = Modifier.weight(1f))
+                Text(goal.label.ifBlank { stringResource(R.string.training_goal_number, goal.order + 1) }, style = DesignTypography.SectionLabel, color = DesignColor.Muted, modifier = Modifier.weight(1f))
                 Text(stringResource(when (goal.status) {
                     TrainingProgressStatus.CURRENT -> R.string.training_current
                     TrainingProgressStatus.COMPLETED -> R.string.training_completed
@@ -60,17 +61,19 @@ fun TrainingGoalCard(
             Text(goal.summary, style = DesignTypography.Detail, color = DesignColor.Muted)
             Text(stringResource(when {
                 goal.isExpanded -> R.string.training_collapse_units
-                goal.status == TrainingProgressStatus.LOCKED -> R.string.training_preview_units
+                goal.status == TrainingProgressStatus.LOCKED -> R.string.training_view_locked_units
                 else -> R.string.training_view_units
             }), style = DesignTypography.Link, color = DesignColor.Primary)
         }
         if (goal.isExpanded) {
             Spacer(Modifier.height(8.dp))
-            Text(goal.unitsHeading, style = DesignTypography.SectionLabel, color = DesignColor.Muted)
+            Text(goal.unitsHeading.ifBlank { stringResource(R.string.training_units_heading) }, style = DesignTypography.SectionLabel, color = DesignColor.Muted)
             Spacer(Modifier.height(8.dp))
             goal.units.forEachIndexed { index, unit ->
-                key(unit.id) {
-                    val onOpen = remember(unit.id, onOpenUnit) { { onOpenUnit(unit.id) } }
+                key(unit.isAssessment, unit.id) {
+                    val onOpen = remember(unit.destination, unit.canOpen, onOpenUnit) {
+                        { if (unit.canOpen) unit.destination?.let(onOpenUnit) }
+                    }
                     if (index > 0) HorizontalDivider(color = DesignColor.Border)
                     TrainingUnitRow(unit, onOpen)
                 }

@@ -1,6 +1,13 @@
 package com.project.speakmate.data.dto
 
-import com.project.speakmate.domain.model.*
+import com.project.speakmate.data.remote.firebase.FirestoreField
+import com.project.speakmate.domain.model.InvalidUserProfileException
+import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingStage
+import com.project.speakmate.domain.model.User
+import com.project.speakmate.domain.model.VocabularyItem
 import java.util.Date
 
 data class UserDto(
@@ -15,47 +22,6 @@ data class UserDto(
     val savedVocabularies: List<VocabularyItemDto> = emptyList()
 )
 
-data class SpeakingCriteriaResultDto(
-    val rangeMet: Boolean = false,
-    val accuracyMet: Boolean = false,
-    val fluencyMet: Boolean = false,
-    val interactionMet: Boolean = false,
-    val coherenceMet: Boolean = false
-)
-
-data class TrainingProgressDto(
-    val currentGoalOrder: Int = 0,
-    val currentUnitOrder: Int = 0,
-    val stage: String = TrainingStage.UNIT.name
-)
-
-data class VocabularyItemDto(
-    val word: String = "",
-    val mean: String = "",
-    val phonetic: String = "",
-    val partOfSpeech: String = "",
-    val example: LearningExampleDto = LearningExampleDto()
-)
-
-data class LearningExampleDto(
-    val sentence: String = "",
-    val translate: String = ""
-)
-
-fun SpeakingCriteriaResult.toDto() = SpeakingCriteriaResultDto(
-    rangeMet = rangeMet,
-    accuracyMet = accuracyMet,
-    fluencyMet = fluencyMet,
-    interactionMet = interactionMet,
-    coherenceMet = coherenceMet
-)
-
-fun TrainingProgress.toDto() = TrainingProgressDto(
-    currentGoalOrder = currentGoalOrder,
-    currentUnitOrder = currentUnitOrder,
-    stage = stage.name
-)
-
 fun User.toDto() = UserDto(
     userId = userId,
     displayName = displayName,
@@ -65,10 +31,7 @@ fun User.toDto() = UserDto(
     latestAssessmentCriteria = latestAssessmentCriteria?.toDto(),
     lastAssessedAt = lastAssessedAt,
     trainingProgress = trainingProgress?.toDto(),
-    savedVocabularies = savedVocabularies.map {
-        VocabularyItemDto(it.word, it.mean, it.phonetic, it.partOfSpeech,
-            LearningExampleDto(it.example.sentence, it.example.translate))
-    }
+    savedVocabularies = savedVocabularies.map(VocabularyItem::toDto)
 )
 
 fun UserDto.toDomain() = User(
@@ -76,14 +39,14 @@ fun UserDto.toDomain() = User(
     displayName = displayName,
     email = email,
     photoUrl = photoUrl,
-    level = runCatching { SpeakingLevel.valueOf(level) }.getOrDefault(SpeakingLevel.NOT_ASSESSED),
-    latestAssessmentCriteria = latestAssessmentCriteria?.let {
-        SpeakingCriteriaResult(it.rangeMet, it.accuracyMet, it.fluencyMet, it.interactionMet, it.coherenceMet)
-    },
+    level = SpeakingLevel.entries.firstOrNull { it.name == level }
+        ?: throw InvalidUserProfileException(FirestoreField.LEVEL),
+    latestAssessmentCriteria = latestAssessmentCriteria?.toDomain(),
     lastAssessedAt = lastAssessedAt,
-    trainingProgress = trainingProgress?.let {
-        TrainingProgress(it.currentGoalOrder, it.currentUnitOrder,
-            runCatching { TrainingStage.valueOf(it.stage) }.getOrDefault(TrainingStage.UNIT))
+    trainingProgress = trainingProgress?.let { progress ->
+        val stage = TrainingStage.entries.firstOrNull { it.name == progress.stage }
+            ?: throw InvalidUserProfileException(FirestoreField.STAGE)
+        TrainingProgress(progress.currentGoalOrder, progress.currentUnitOrder, stage)
     },
     savedVocabularies = savedVocabularies.map {
         VocabularyItem(it.word, it.mean, it.phonetic, it.partOfSpeech,

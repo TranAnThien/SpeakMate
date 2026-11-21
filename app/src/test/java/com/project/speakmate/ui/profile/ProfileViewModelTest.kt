@@ -1,168 +1,125 @@
 package com.project.speakmate.ui.profile
 
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
-import com.project.speakmate.domain.repository.AuthRepository
-import com.project.speakmate.domain.repository.UserRepository
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.mockk
-import kotlinx.coroutines.Dispatchers
+import com.project.speakmate.test.FakeAuthRepository
+import com.project.speakmate.test.FakeUserRepository
+import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.profile.state.ProfileEffect
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
-import org.junit.Assert.*
-import org.junit.Before
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileViewModelTest {
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
-    private lateinit var authRepository: AuthRepository
-    private lateinit var userRepository: UserRepository
+    private val auth = FakeAuthRepository()
+    private val users = FakeUserRepository(user())
 
-    private val testDispatcher = UnconfinedTestDispatcher()
+    @Test
+    fun observesTheInitialProfileAndLaterLevelChanges() = runTest {
+        val viewModel = ProfileViewModel(auth, users)
+        assertEquals(SpeakingLevel.NOT_ASSESSED, viewModel.uiState.value.level)
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-        authRepository = mockk(relaxed = true)
-        userRepository = mockk(relaxed = true)
-    }
+        users.setUser(user().copy(level = SpeakingLevel.A2))
+        advanceUntilIdle()
 
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
-
-    private fun createViewModel(): ProfileViewModel {
-        return ProfileViewModel(authRepository, userRepository)
+        assertEquals(SpeakingLevel.A2, viewModel.uiState.value.level)
+        assertFalse(viewModel.uiState.value.isProfileLoadFailed)
     }
 
     @Test
-    fun initialState_userProfileIsNull() {
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
+    fun observationFailureKeepsTheSessionAndAllowsRetry() = runTest {
+        users.shouldFailObservation = true
+        val viewModel = ProfileViewModel(auth, users)
+        assertTrue(viewModel.uiState.value.isProfileLoadFailed)
+        assertEquals("user-1", auth.signedInUserId.value)
 
-        val viewModel = createViewModel()
+        users.shouldFailObservation = false
+        viewModel.retryProfile()
+        advanceUntilIdle()
 
-        assertNull(viewModel.userProfile.value)
+        assertFalse(viewModel.uiState.value.isProfileLoadFailed)
+        assertEquals("student@example.com", viewModel.uiState.value.email)
+        assertEquals(2, users.observationStarts)
+        assertEquals(1, users.activeObservers)
     }
 
     @Test
-    fun observeCurrentUser_setsUserProfile_whenUidAndDocumentExist() = runTest {
-        val user = User("uid-1", "Quân", "quan@test.com", "https://photo.url/q.jpg", SpeakingLevel.A1)
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-1")
-        coEvery { userRepository.getUser("uid-1") } returns Result.success(user)
+    fun switchingAccountsCancelsThePreviousProfileListener() = runTest {
+        val viewModel = ProfileViewModel(auth, users)
+        users.setUser(user().copy(userId = "user-2", displayName = "Second student", level = SpeakingLevel.B1))
 
-        val viewModel = createViewModel()
+        auth.signedInUserId.value = "user-2"
+        advanceUntilIdle()
+        users.setUser(user().copy(level = SpeakingLevel.B2))
         advanceUntilIdle()
 
-        assertNotNull(viewModel.userProfile.value)
-        assertEquals("uid-1", viewModel.userProfile.value!!.userId)
-        assertEquals("Quân", viewModel.userProfile.value!!.displayName)
-        assertEquals(SpeakingLevel.A1, viewModel.userProfile.value!!.level)
+        assertEquals("Second student", viewModel.uiState.value.displayName)
+        assertEquals(SpeakingLevel.B1, viewModel.uiState.value.level)
+        assertEquals(1, users.activeObservers)
     }
 
     @Test
-    fun observeCurrentUser_forceSignOut_whenUidExistsButNoDocument() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-orphan")
-        coEvery { userRepository.getUser("uid-orphan") } returns Result.success(null)
-
-        createViewModel()
-
+    fun repeatedRetryKeepsOneProfileListener() = runTest {
+        val viewModel = ProfileViewModel(auth, users)
+        viewModel.retryProfile()
+        viewModel.retryProfile()
         advanceUntilIdle()
 
-        coVerify { authRepository.signOut() }
+        assertEquals(1, users.activeObservers)
+        assertEquals("student@example.com", viewModel.uiState.value.email)
     }
 
     @Test
-    fun observeCurrentUser_forceSignOut_whenFirestoreFails() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-err")
-        coEvery { userRepository.getUser("uid-err") } returns
-                Result.failure(RuntimeException("Network error"))
-
-        createViewModel()
-
+    fun signedOutStateClearsTheProfile() = runTest {
+        auth.signedInUserId.value = null
+        val viewModel = ProfileViewModel(auth, users)
         advanceUntilIdle()
 
-        coVerify { authRepository.signOut() }
+        assertTrue(viewModel.uiState.value.email.isEmpty())
+        assertFalse(viewModel.uiState.value.isProfileLoadFailed)
     }
 
     @Test
-    fun observeCurrentUser_setsNull_whenUidIsNull() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
-
-        val viewModel = createViewModel()
-        advanceUntilIdle()
-
-        assertNull(viewModel.userProfile.value)
-    }
-
-    @Test
-    fun observeCurrentUser_updatesProfile_whenUidChanges() = runTest {
-        val uidFlow = MutableSharedFlow<String?>(replay = 1)
-        every { authRepository.getSignedInUserId() } returns uidFlow
-
-        val userA = User("uid-a", "User A", "a@test.com", "", SpeakingLevel.A1)
-        val userB = User("uid-b", "User B", "b@test.com", "", SpeakingLevel.B2)
-        coEvery { userRepository.getUser("uid-a") } returns Result.success(userA)
-        coEvery { userRepository.getUser("uid-b") } returns Result.success(userB)
-
-        val viewModel = createViewModel()
-
-        uidFlow.emit("uid-a")
-        advanceUntilIdle()
-        assertEquals("User A", viewModel.userProfile.value!!.displayName)
-
-        uidFlow.emit("uid-b")
-        advanceUntilIdle()
-        assertEquals("User B", viewModel.userProfile.value!!.displayName)
-        assertEquals(SpeakingLevel.B2, viewModel.userProfile.value!!.level)
-    }
-
-    @Test
-    fun signOut_callsAuthRepositorySignOut() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
-
-        val viewModel = createViewModel()
-        var callbackInvoked = false
-
-        viewModel.signOut { callbackInvoked = true }
-        advanceUntilIdle()
-
-        coVerify { authRepository.signOut() }
-        assertTrue(callbackInvoked)
-    }
-
-    @Test
-    fun signOut_invokesCallback_afterSignOut() = runTest {
-        every { authRepository.getSignedInUserId() } returns flowOf("uid-1")
-        coEvery { userRepository.getUser("uid-1") } returns Result.success(
-            User("uid-1", "Test", "t@t.com", "")
-        )
-
-        val viewModel = createViewModel()
-        advanceUntilIdle()
-
-        val callOrder = mutableListOf<String>()
-        coEvery { authRepository.signOut() } answers {
-            callOrder.add("signOut")
-            Result.success(Unit)
+    fun signOutEmitsTheEffectAfterTheRepositorySignsOut() = runTest {
+        val viewModel = ProfileViewModel(auth, users)
+        val effects = mutableListOf<ProfileEffect>()
+        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiEffect.collect {
+                assertNull(auth.signedInUserId.value)
+                effects.add(it)
+            }
         }
-
-        viewModel.signOut {
-            callOrder.add("callback")
-        }
+        viewModel.signOut()
         advanceUntilIdle()
 
-        assertEquals(listOf("signOut", "callback"), callOrder)
+        assertEquals(listOf(ProfileEffect.SignedOut), effects)
+        observer.cancel()
+        assertTrue(viewModel.uiState.value.email.isEmpty())
     }
+
+    @Test
+    fun profileMapsEveryCriterionAsMeaningInsteadOfDisplayText() = runTest {
+        users.setUser(user().copy(level = SpeakingLevel.B1, latestAssessmentCriteria = SpeakingCriteriaResult(true, false, true, false, true)))
+        val viewModel = ProfileViewModel(auth, users)
+        advanceUntilIdle()
+        assertEquals(SpeakingLevel.B1, viewModel.uiState.value.level)
+        assertEquals(5, viewModel.uiState.value.skills.size)
+        assertEquals(listOf(true, false, true, false, true), viewModel.uiState.value.skills.map { it.isPassed })
+        assertTrue(viewModel.uiState.value.skills.all { it.criterion != null && it.title.isEmpty() })
+    }
+
+    private fun user() = User("user-1", "Student", "student@example.com", "")
 }

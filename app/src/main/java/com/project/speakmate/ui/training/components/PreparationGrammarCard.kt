@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -19,7 +20,7 @@ import com.project.speakmate.ui.training.state.PreparationGrammarUiState
 @Composable
 fun PreparationGrammarCard(
     grammar: PreparationGrammarUiState,
-    onPlayExample: () -> Unit,
+    onPlayExample: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
@@ -31,7 +32,11 @@ fun PreparationGrammarCard(
             Text(stringResource(R.string.preparation_structure), style = DesignTypography.Label, color = DesignColor.Muted)
             Text(grammar.structure, style = DesignTypography.Detail, color = DesignColor.Text)
         }
-        PreparationExampleCard(grammar.example, onPlayExample)
+        val examples = grammar.examples.ifEmpty { listOf(grammar.example).filter { it.sentence.isNotBlank() } }
+        examples.forEach { example ->
+            val onPlay = remember(example.sentence, onPlayExample) { { onPlayExample(example.sentence) } }
+            PreparationExampleCard(example, onPlay)
+        }
         PreparationNote(grammar.usageNote)
     }
 }

@@ -3,6 +3,7 @@ package com.project.speakmate.data.repository
 import com.project.speakmate.data.session.CallSessionManager
 import com.project.speakmate.data.session.FakeCallSessionMedia
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.Scenario
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -19,10 +20,10 @@ class CallRepositoryImplTest {
     @Test
     fun placementPromptContainsGoalAndAssistanceRestriction() = runTest {
         val media = FakeCallSessionMedia()
-        val manager = CallSessionManager({ media }, StandardTestDispatcher(testScheduler)) { testScheduler.currentTime }
+        val manager = CallSessionManager({ media }, StandardTestDispatcher(testScheduler), nowMillis = { testScheduler.currentTime })
         try {
             manager.setForeground(true)
-            CallRepositoryImpl(manager).startCall(scenario, CallActivityType.INITIAL_PLACEMENT, "Ask for a medium latte")
+            CallRepositoryImpl(manager).startCall(CallActivityContext.Assessment(scenario, CallActivityType.INITIAL_PLACEMENT, "Ask for a medium latte"))
             runCurrent()
             val prompt = checkNotNull(media.connectedScenario).promptTemplate
             assertTrue(prompt.contains(scenario.promptTemplate))
@@ -38,10 +39,10 @@ class CallRepositoryImplTest {
     @Test
     fun freePracticeWithEmptyGoalKeepsItsPromptWithoutAssessmentRestriction() = runTest {
         val media = FakeCallSessionMedia()
-        val manager = CallSessionManager({ media }, StandardTestDispatcher(testScheduler)) { testScheduler.currentTime }
+        val manager = CallSessionManager({ media }, StandardTestDispatcher(testScheduler), nowMillis = { testScheduler.currentTime })
         try {
             manager.setForeground(true)
-            CallRepositoryImpl(manager).startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+            CallRepositoryImpl(manager).startCall(CallActivityContext.FreePractice(scenario))
             runCurrent()
             val prompt = checkNotNull(media.connectedScenario).promptTemplate
             assertTrue(prompt.contains(scenario.promptTemplate))

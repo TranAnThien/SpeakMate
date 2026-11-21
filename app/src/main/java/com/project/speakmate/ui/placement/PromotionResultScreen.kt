@@ -25,9 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.placement.components.PlacementAppBar
-import com.project.speakmate.ui.placement.components.PlacementSecondaryButton
+import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.placement.state.PromotionResultPresentation
 import com.project.speakmate.ui.placement.state.PromotionResultUiState
 import com.project.speakmate.ui.theme.DesignColor
@@ -40,10 +40,11 @@ fun PromotionResultScreen(
     onOpenPromotedPath: () -> Unit,
     onReturnToCurrentPath: () -> Unit,
     onRetryAssessment: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRetrySave: () -> Unit = {}
 ) {
     Box(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PlacementAppBar(stringResource(R.string.promotion_header), onBack)
+        BackAppBar(stringResource(R.string.promotion_header), onBack)
         Surface(Modifier.fillMaxSize(), color = DesignColor.Scrim) {
             Box(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
                 Surface(Modifier.widthIn(max = 364.dp).fillMaxWidth().offset(y = (-16).dp),
@@ -64,19 +65,24 @@ fun PromotionResultScreen(
                         Text(state.title, style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
                         Text(state.description, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
                         PrimaryButton(
-                            when (state.presentation) {
-                                PromotionResultPresentation.PROMOTED -> stringResource(R.string.promotion_open_path, state.nextLevelLabel)
-                                PromotionResultPresentation.MAINTAINED -> stringResource(R.string.promotion_return_to_path, state.currentLevelLabel)
-                                PromotionResultPresentation.INSUFFICIENT_EVIDENCE -> stringResource(R.string.placement_retry)
+                            when {
+                                state.isSaving || (state.presentation == PromotionResultPresentation.PROMOTED && !state.isResultSaved && !state.isSaveFailed) -> stringResource(R.string.placement_saving)
+                                state.isSaveFailed -> stringResource(R.string.unit_result_retry_save)
+                                else -> when (state.presentation) {
+                                    PromotionResultPresentation.PROMOTED -> stringResource(R.string.promotion_open_path, state.nextLevelLabel)
+                                    PromotionResultPresentation.MAINTAINED -> stringResource(R.string.promotion_return_to_path, state.currentLevelLabel)
+                                    PromotionResultPresentation.INSUFFICIENT_EVIDENCE -> stringResource(if (state.canRetryAssessment) R.string.placement_retry else R.string.goal_assessment_return_to_path)
+                                }
                             },
-                            when (state.presentation) {
+                            if (state.isSaveFailed) onRetrySave else when (state.presentation) {
                                 PromotionResultPresentation.PROMOTED -> onOpenPromotedPath
                                 PromotionResultPresentation.MAINTAINED -> onReturnToCurrentPath
-                                PromotionResultPresentation.INSUFFICIENT_EVIDENCE -> onRetryAssessment
-                            }
+                                PromotionResultPresentation.INSUFFICIENT_EVIDENCE -> if (state.canRetryAssessment) onRetryAssessment else onReturnToCurrentPath
+                            },
+                            enabled = !state.isSaving && (state.presentation != PromotionResultPresentation.PROMOTED || state.isResultSaved || state.isSaveFailed)
                         )
-                        if (state.presentation == PromotionResultPresentation.INSUFFICIENT_EVIDENCE) {
-                            PlacementSecondaryButton(stringResource(R.string.promotion_return_to_path, state.currentLevelLabel), onReturnToCurrentPath)
+                        if (state.presentation == PromotionResultPresentation.INSUFFICIENT_EVIDENCE && state.canRetryAssessment) {
+                            SecondaryButton(stringResource(R.string.promotion_return_to_path, state.currentLevelLabel), onReturnToCurrentPath)
                         }
                     }
                 }

@@ -7,17 +7,17 @@ import com.project.speakmate.domain.model.AssessmentTask
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.CallState
 import com.project.speakmate.domain.model.PlacementCheckpoint
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementStopReason
 import com.project.speakmate.domain.model.PlacementTransition
-import com.project.speakmate.domain.model.TrainingProgress
-import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.repository.AssessmentTaskRepository
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.PlacementCheckpointRepository
+import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.domain.repository.ScenarioRepository
 import com.project.speakmate.domain.repository.SpeakingAssessmentRepository
-import com.project.speakmate.domain.repository.UserRepository
 import com.project.speakmate.domain.rules.PlacementRules
 import com.project.speakmate.ui.placement.state.PlacementEffect
 import com.project.speakmate.ui.placement.state.PlacementPhase
@@ -27,8 +27,7 @@ import java.time.Clock
 import javax.inject.Inject
 import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
@@ -44,6 +43,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 @HiltViewModel
 class PlacementViewModel @Inject constructor(
@@ -52,19 +52,11 @@ class PlacementViewModel @Inject constructor(
     private val checkpointRepository: PlacementCheckpointRepository,
     private val assessmentRepository: SpeakingAssessmentRepository,
     private val scenarioRepository: ScenarioRepository,
-    private val userRepository: UserRepository,
-    private val clock: Clock
+    private val clock: Clock,
+    private val userRepository: UserRepository
 ) : ViewModel() {
     companion object {
-        private suspend fun clearAudio(repository: SpeakingAssessmentRepository, audioId: String) {
-            try {
-                repository.clearAudioEvidence(audioId)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                Unit
-            }
-        }
+        private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
     }
 
     private val _uiState = MutableStateFlow(PlacementUiState())
@@ -76,17 +68,15 @@ class PlacementViewModel @Inject constructor(
     private var checkpoint: PlacementCheckpoint? = null
     private var tasks: List<AssessmentTask> = emptyList()
     private var operationJob: Job? = null
-    private var retainedAudioId: String? = null
     private var isLeaving = false
 
     init {
         viewModelScope.launch {
-            authRepository.getSignedInUserId().distinctUntilChanged().catch { failure ->
+            authRepository.observeSignedInUserId().distinctUntilChanged().catch { failure ->
                 if (failure is CancellationException) throw failure
                 showUndetermined()
             }.collectLatest { uid ->
                 operationJob?.cancelAndJoin()
-                clearRetainedAudio()
                 userId = uid
                 checkpoint = null
                 tasks = emptyList()
@@ -103,6 +93,7 @@ class PlacementViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(phase = restored.phase, result = restored.checkpoint?.pendingResult)
                         }
+                        if (restored.phase == PlacementPhase.RESULT) saveResult()
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (exception: Exception) {
@@ -113,25 +104,30 @@ class PlacementViewModel @Inject constructor(
         }
     }
 
-    override fun onCleared() {
-        val audioId = retainedAudioId
-        retainedAudioId = null
-        if (audioId != null) {
-            val repository = assessmentRepository
-            CoroutineScope(Dispatchers.IO).launch {
-                clearAudio(repository, audioId)
-            }
-        }
-        super.onCleared()
-    }
-
     fun start() {
         if (_uiState.value.phase != PlacementPhase.INTRODUCTION) return
         launchOperation { startNewAssessment() }
     }
 
     fun skip() {
-        leave(shouldClearCheckpoint = true)
+        if (_uiState.value.phase !in listOf(PlacementPhase.INTRODUCTION, PlacementPhase.RESUME_PROMPT)) return
+        launchOperation(shouldShowLoading = false) {
+            _uiState.update { it.copy(isSavingResult = true, saveFailed = false) }
+            try {
+                val uid = userId ?: return@launchOperation
+                check(authRepository.requireCurrentUserId() == uid)
+                userRepository.markNotAssessed().getOrThrow()
+                checkpointRepository.clearCheckpoint(uid)
+                checkpoint = null
+                navigateHome()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { it.copy(saveFailed = true) }
+            } finally {
+                _uiState.update { it.copy(isSavingResult = false) }
+            }
+        }
     }
 
     fun exit() {
@@ -158,49 +154,63 @@ class PlacementViewModel @Inject constructor(
         val saved = checkpoint ?: return
         val outcome = session.outcome ?: return
         if (state.phase != PlacementPhase.CALLING || session.state !in listOf(CallState.ENDED, CallState.FAILED) || isLeaving) return
-        retainedAudioId = session.assessmentAudioId
+        val previousOperation = operationJob
         _uiState.update {
             it.copy(phase = PlacementPhase.GRADING, hasReachedAudioLimit = session.hasReachedAssessmentAudioLimit)
         }
-        launchOperation(shouldShowLoading = false) {
-            val evidence = AssessmentEvidence(
-                targetLevel = task.targetLevel,
-                communicativeGoal = task.communicativeGoal,
-                requiredActions = emptyList(),
-                callOutcome = outcome,
-                failure = session.failure,
-                hasUserSpeech = session.hasUserSpeech,
-                transcript = session.transcript.toList(),
-                audioDurationMillis = session.assessmentAudioDurationMillis,
-                assessmentAudioId = session.assessmentAudioId
-            )
-            val assessment = try {
-                assessmentRepository.evaluate(evidence)
+        operationJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                previousOperation?.join()
+                if (PlacementRules.isExpired(saved, clock.millis())) {
+                    startNewAssessment()
+                    return@launch
+                }
+                val evidence = AssessmentEvidence(
+                    targetLevel = task.targetLevel,
+                    communicativeGoal = task.communicativeGoal,
+                    requiredActions = emptyList(),
+                    callOutcome = outcome,
+                    failure = session.failure,
+                    hasUserSpeech = session.hasUserSpeech,
+                    transcript = session.transcript.toList(),
+                    audioDurationMillis = session.assessmentAudioDurationMillis,
+                    assessmentAudioId = session.assessmentAudioId
+                )
+                val assessment = assessmentRepository.evaluate(evidence)
+                if (PlacementRules.isExpired(saved, clock.millis())) {
+                    startNewAssessment()
+                    return@launch
+                }
+                when (val transition = PlacementRules.applyOutcome(saved, task, assessment, tasks, random, clock.millis())) {
+                    is PlacementTransition.NextTask -> {
+                        saveCheckpoint(transition.checkpoint)
+                        _uiState.update {
+                            it.copy(
+                                phase = PlacementPhase.NEXT_TASK,
+                                nextTask = PlacementNextTaskMapper.classify(saved.step, transition.checkpoint.step),
+                                scenario = null
+                            )
+                        }
+                    }
+                    is PlacementTransition.RetryTask -> {
+                        saveCheckpoint(transition.checkpoint)
+                        _uiState.update {
+                            it.copy(phase = PlacementPhase.INSUFFICIENT_EVIDENCE, canRetry = true, insufficientReason = transition.reason)
+                        }
+                    }
+                    is PlacementTransition.Confirmed -> {
+                        checkpoint = transition.checkpoint
+                        _uiState.update { it.copy(phase = PlacementPhase.RESULT, result = transition.result, scenario = null) }
+                        saveResult()
+                    }
+                    is PlacementTransition.Stopped -> stopAssessment(transition.reason)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                showUndetermined()
             } finally {
-                clearRetainedAudio()
-            }
-            when (val transition = PlacementRules.applyOutcome(saved, task, assessment, tasks, random, clock.millis())) {
-                is PlacementTransition.NextTask -> {
-                    saveCheckpoint(transition.checkpoint)
-                    _uiState.update {
-                        it.copy(
-                            phase = PlacementPhase.NEXT_TASK,
-                            nextTask = PlacementNextTaskMapper.classify(saved.step, transition.checkpoint.step),
-                            scenario = null
-                        )
-                    }
-                }
-                is PlacementTransition.RetryTask -> {
-                    saveCheckpoint(transition.checkpoint)
-                    _uiState.update {
-                        it.copy(phase = PlacementPhase.INSUFFICIENT_EVIDENCE, canRetry = true, insufficientReason = transition.reason)
-                    }
-                }
-                is PlacementTransition.Confirmed -> {
-                    saveCheckpoint(transition.checkpoint)
-                    _uiState.update { it.copy(phase = PlacementPhase.RESULT, result = transition.result, scenario = null) }
-                }
-                is PlacementTransition.Stopped -> stopAssessment(transition.reason)
+                session.assessmentAudioId?.let { clearAudio(it) }
             }
         }
     }
@@ -216,31 +226,37 @@ class PlacementViewModel @Inject constructor(
     }
 
     fun confirmResultSaved() {
-        val result = checkpoint?.pendingResult ?: return
-        if (_uiState.value.phase != PlacementPhase.RESULT) return
-        launchOperation(shouldShowLoading = false) {
-            _uiState.update { it.copy(isSavingResult = true, saveFailed = false) }
-            try {
-                val uid = userId ?: return@launchOperation
-                val newProgress = TrainingProgress(
-                    currentGoalOrder = 0,
-                    currentUnitOrder = 0,
-                    stage = TrainingStage.UNIT
-                )
-                userRepository.updateUserLevelAndProgress(
-                    result.level,
-                    result.speakingProfile,
-                    newProgress
-                ).getOrThrow()
-                checkpointRepository.clearCheckpoint(uid)
-                checkpoint = null
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (exception: Exception) {
-                _uiState.update { it.copy(saveFailed = true) }
-            } finally {
-                _uiState.update { it.copy(isSavingResult = false) }
-            }
+        if (_uiState.value.phase != PlacementPhase.RESULT || _uiState.value.isSavingResult) return
+        if (_uiState.value.isResultSaved) {
+            exit()
+        } else {
+            launchOperation(shouldShowLoading = false) { saveResult() }
+        }
+    }
+
+    private suspend fun saveResult() {
+        val saved = checkpoint ?: return
+        val result = saved.pendingResult ?: return
+        val uid = userId ?: return
+        _uiState.update { it.copy(isSavingResult = true, saveFailed = false) }
+        try {
+            check(authRepository.requireCurrentUserId() == uid && saved.userId == uid)
+            checkpointRepository.saveCheckpoint(saved)
+            userRepository.saveAssessedLevel(
+                result.level,
+                result.speakingProfile,
+                result.assessedAtMillis,
+                TrainingProgress(0, 0, TrainingStage.UNIT)
+            ).getOrThrow()
+            checkpointRepository.clearCheckpoint(uid)
+            checkpoint = null
+            _uiState.update { it.copy(isResultSaved = true) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            _uiState.update { it.copy(saveFailed = true) }
+        } finally {
+            _uiState.update { it.copy(isSavingResult = false) }
         }
     }
 
@@ -309,14 +325,12 @@ class PlacementViewModel @Inject constructor(
         val uid = userId
         viewModelScope.launch {
             operationJob?.cancelAndJoin()
-            clearRetainedAudio()
             try {
                 if (shouldClearCheckpoint && uid != null) {
                     checkpointRepository.clearCheckpoint(uid)
                     checkpoint = null
                 }
-                _uiEffect.subscriptionCount.first { it > 0 }
-                _uiEffect.emit(PlacementEffect.NavigateHome)
+                navigateHome()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (exception: Exception) {
@@ -326,11 +340,34 @@ class PlacementViewModel @Inject constructor(
         }
     }
 
-    private suspend fun clearRetainedAudio() {
-        val audioId = retainedAudioId ?: return
-        retainedAudioId = null
-        withContext(NonCancellable + Dispatchers.IO) {
-            clearAudio(assessmentRepository, audioId)
+    private suspend fun navigateHome() {
+        isLeaving = true
+        val delivered = withTimeoutOrNull(NAVIGATION_TIMEOUT_MILLIS) {
+            _uiEffect.subscriptionCount.first { it > 0 }
+            _uiEffect.emit(PlacementEffect.NavigateHome)
+            true
+        }
+        if (delivered != true) {
+            isLeaving = false
+            _uiState.update {
+                it.copy(phase = when {
+                    it.result != null -> PlacementPhase.RESULT
+                    checkpoint != null -> PlacementPhase.RESUME_PROMPT
+                    else -> PlacementPhase.INTRODUCTION
+                })
+            }
+        }
+    }
+
+    private suspend fun clearAudio(audioId: String) {
+        withContext(NonCancellable) {
+            try {
+                assessmentRepository.clearAudioEvidence(audioId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                Unit
+            }
         }
     }
 }

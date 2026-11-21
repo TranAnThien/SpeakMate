@@ -22,5 +22,14 @@ data class CallSessionState(
     val pronunciation: PronunciationState = PronunciationState.IDLE,
     val assessmentAudioId: String? = null,
     val assessmentAudioDurationMillis: Long? = null,
-    val hasReachedAssessmentAudioLimit: Boolean = false
-)
+    val hasReachedAssessmentAudioLimit: Boolean = false,
+    val startedAtEpochMillis: Long? = null
+) {
+    val endedAtEpochMillis: Long?
+        get() {
+            val startedAt = startedAtMillis ?: return null
+            val endedAt = endedAtMillis ?: return null
+            val startedAtEpoch = startedAtEpochMillis ?: return null
+            return startedAtEpoch + (endedAt - startedAt).coerceAtLeast(0L)
+        }
+}

@@ -4,6 +4,7 @@ import com.project.speakmate.data.dto.PlacementCheckpointDto
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PlacementCheckpoint
 import com.project.speakmate.domain.model.PlacementResult
+import com.project.speakmate.domain.model.PlacementFeedback
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementTaskRecord
 import com.project.speakmate.domain.model.SpeakingLevel
@@ -36,6 +37,32 @@ class PlacementCheckpointDtoTest {
         val criteria = PlacementTestFixtures.getOutcome(AssessmentResult.FAIL).criteria
         val original = checkpoint.copy(currentTaskId = null, pendingResult = PlacementResult(SpeakingLevel.A1, criteria, 2_000L))
         assertEquals(original, roundTrip(original))
+    }
+
+    @Test
+    fun pendingResultPreservesTheTaskOutcomeAndAllFeedback() {
+        val criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PARTIAL).criteria
+        val result = PlacementResult(
+            SpeakingLevel.A1, criteria, 2_000L, AssessmentResult.PARTIAL,
+            PlacementFeedback("range", "accuracy", "fluency", "interaction", "coherence")
+        )
+        val original = checkpoint.copy(currentTaskId = null, pendingResult = result)
+
+        assertEquals(original, roundTrip(original))
+    }
+
+    @Test
+    fun legacyPendingResultUsesTheLastConfirmationOutcome() {
+        val json = getCompletedJson()
+        val pending = json.getJSONObject("pendingResult")
+        pending.remove("result")
+        pending.remove("feedback")
+        val record = json.getJSONArray("records").getJSONObject(0)
+
+        val restored = requireNotNull(parse(json)).pendingResult
+
+        assertEquals(AssessmentResult.valueOf(record.getString("result")), restored?.taskResult)
+        assertEquals(PlacementFeedback(), restored?.feedback)
     }
 
     @Test
@@ -136,13 +163,13 @@ class PlacementCheckpointDtoTest {
     }
 
     @Test
-    fun checkpointContainsNoTranscriptAudioOrFeedback() {
+    fun checkpointContainsNoTranscriptAudioOrUserQuotes() {
         val json = getCompletedJson()
         val allowedKeys = setOf("version", "userId", "step", "currentTaskId", "records", "candidateLevel",
             "usedScenarioIds", "technicalRetryCount", "createdAtMillis", "expiresAtMillis", "pendingResult")
         assertEquals(allowedKeys, json.keys().asSequence().toSet())
         val serialized = json.toString()
-        listOf("transcript", "audio", "feedback", "evaluation", "userQuote").forEach { assertFalse(serialized.contains(it)) }
+        listOf("transcript", "audio", "evaluation", "userQuote").forEach { assertFalse(serialized.contains(it)) }
     }
 
     @Test

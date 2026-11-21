@@ -23,10 +23,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.GoalAssessmentFooter
-import com.project.speakmate.ui.training.components.PreparationHeader
 import com.project.speakmate.ui.training.state.PathCompletionUiState
 
 @Composable
@@ -37,10 +37,11 @@ fun PathCompletionScreen(
     onReturnToPath: () -> Unit,
     onReviewPath: () -> Unit,
     onFreePractice: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPromotionEnabled: Boolean = true
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PreparationHeader(stringResource(R.string.path_completion_header), onBack)
+        BackAppBar(stringResource(R.string.path_completion_header), onBack)
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
@@ -65,7 +66,8 @@ fun PathCompletionScreen(
                 if (state.isHighestLevel) state.levelLabel else state.nextLevelLabel),
             stringResource(if (state.isHighestLevel) R.string.home_free_practice else R.string.goal_assessment_return_to_path),
             if (state.isHighestLevel) onReviewPath else onStartPromotion,
-            if (state.isHighestLevel) onFreePractice else onReturnToPath
+            if (state.isHighestLevel) onFreePractice else onReturnToPath,
+            isPrimaryEnabled = state.isHighestLevel || isPromotionEnabled
         )
     }
 }

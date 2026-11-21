@@ -3,20 +3,26 @@ package com.project.speakmate.ui.history
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.toRoute
+import com.project.speakmate.app.AppRoute
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.SenderType
 import com.project.speakmate.domain.model.durationInSeconds
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeRepository
+import com.project.speakmate.ui.components.AssessmentCriterionType
 import com.project.speakmate.ui.history.state.SessionActionUiState
 import com.project.speakmate.ui.history.state.SessionCriterionUiState
 import com.project.speakmate.ui.history.state.SessionDetailPresentation
 import com.project.speakmate.ui.history.state.SessionDetailUiState
 import com.project.speakmate.ui.history.state.SessionMessageUiState
+import com.project.speakmate.utils.extension.default
+import com.project.speakmate.utils.extension.toDateTimeLabel
+import com.project.speakmate.utils.extension.toDurationLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.SimpleDateFormat
-import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,45 +36,43 @@ class SessionDetailViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository
 ) : ViewModel() {
 
-    private val attemptId: String = checkNotNull(savedStateHandle["attemptId"])
+    private val attemptId: String = try { savedStateHandle.toRoute<AppRoute.SessionDetail>().attemptId } catch (_: IllegalArgumentException) { "" }
 
     private val _uiState = MutableStateFlow(SessionDetailUiState(presentation = SessionDetailPresentation.LOADING))
     val uiState: StateFlow<SessionDetailUiState> = _uiState.asStateFlow()
 
-    private val dateFormatter = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    private var loadJob: Job? = null
 
     init {
         loadSessionDetail()
     }
 
     fun loadSessionDetail() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(presentation = SessionDetailPresentation.LOADING) }
-            historyRepository.getSessionDetail(attemptId)
-                .onSuccess { attempt ->
-                    val scenarioTitle = practiceRepository.getScenario(attempt.scenarioId).getOrNull()?.name?.takeIf { it.isNotBlank() }
-                        ?: attempt.scenarioId.ifBlank { "Chi tiết phiên luyện tập" }
-                    _uiState.value = toDetailUiState(attempt, scenarioTitle)
-                }
-                .onFailure {
-                    _uiState.update { it.copy(presentation = SessionDetailPresentation.LOAD_ERROR) }
-                }
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _uiState.update { SessionDetailUiState(presentation = SessionDetailPresentation.LOADING) }
+            try {
+                check(attemptId.isNotBlank())
+                val attempt = historyRepository.getSessionDetail(attemptId).getOrThrow()
+                val scenarioTitle = practiceRepository.getScenario(attempt.scenarioId).getOrNull()?.name
+                    ?.takeIf(String::isNotBlank).default(attempt.scenarioId)
+                _uiState.update { toDetailUiState(attempt, scenarioTitle) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { SessionDetailUiState(presentation = SessionDetailPresentation.LOAD_ERROR) }
+            }
         }
     }
 
     private fun toDetailUiState(attempt: PracticeAttempt, scenarioTitle: String): SessionDetailUiState {
-        val durationFormatted = String.format(Locale.ROOT, "%02d:%02d", attempt.durationInSeconds / 60, attempt.durationInSeconds % 60)
-        val dateFormatted = dateFormatter.format(attempt.endedAt)
+        val durationFormatted = attempt.durationInSeconds.toDurationLabel()
+        val dateFormatted = attempt.startedAt.toDateTimeLabel()
 
-        val criteriaList = attempt.criteriaResult?.let { criteria ->
-            listOf(
-                SessionCriterionUiState("range", "Phạm vi từ vựng", "Sử dụng từ vựng phù hợp ngữ cảnh", criteria.rangeMet),
-                SessionCriterionUiState("accuracy", "Độ chính xác", "Cấu trúc ngữ pháp chuẩn xác", criteria.accuracyMet),
-                SessionCriterionUiState("fluency", "Độ trôi chảy", "Tốc độ nói và phản xạ liên tục", criteria.fluencyMet),
-                SessionCriterionUiState("interaction", "Tương tác", "Phản hồi câu hỏi tự nhiên", criteria.interactionMet),
-                SessionCriterionUiState("coherence", "Mạch lạc", "Liên kết ý logic và rõ nghĩa", criteria.coherenceMet)
-            )
-        } ?: emptyList()
+        val values = attempt.criteriaResult?.let { listOf(it.rangeMet, it.accuracyMet, it.fluencyMet, it.interactionMet, it.coherenceMet) }
+        val criteriaList = if (values == null) emptyList() else AssessmentCriterionType.entries.mapIndexed { index, type ->
+            SessionCriterionUiState(id = type.name, isPassed = values[index], criterion = type)
+        }
 
         val actionList = attempt.requiredActionResults.map { (actionId, passed) ->
             SessionActionUiState(actionId, actionId, passed)
@@ -77,7 +81,8 @@ class SessionDetailViewModel @Inject constructor(
         val messageList = attempt.transcripts.sortedBy { it.orderIndex }.map { msg ->
             SessionMessageUiState(
                 id = msg.messageId,
-                metadata = if (msg.senderType == SenderType.USER) "Bạn" else "AI",
+                sender = msg.senderType,
+                isInterrupted = msg.senderType == SenderType.AI && msg.isInterrupted,
                 text = msg.content,
                 isUser = msg.senderType == SenderType.USER
             )
@@ -87,7 +92,8 @@ class SessionDetailViewModel @Inject constructor(
             presentation = SessionDetailPresentation.COMPLETED,
             title = scenarioTitle,
             metadata = "$dateFormatted • $durationFormatted",
-            criteriaHeading = attempt.feedbackSummary ?: "Kết quả đánh giá",
+            result = HistoryResultMapper.toPresentation(attempt.result, attempt.practiceType),
+            feedbackSummary = attempt.feedbackSummary,
             requiredActions = actionList,
             criteria = criteriaList,
             messages = messageList

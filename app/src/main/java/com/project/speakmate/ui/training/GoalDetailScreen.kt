@@ -25,12 +25,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.StateIllustration
 import com.project.speakmate.ui.training.components.GoalDetailHeader
 import com.project.speakmate.ui.training.components.TrainingUnitRow
 import com.project.speakmate.ui.training.state.GoalDetailUiState
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
+import com.project.speakmate.ui.training.state.TrainingProgressStatus
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -38,12 +39,9 @@ import com.project.speakmate.ui.theme.DesignTypography
 fun GoalDetailScreen(
     state: GoalDetailUiState,
     onBack: () -> Unit,
-    onOpenUnit: (String) -> Unit,
+    onOpenUnit: (TrainingActivityDestination) -> Unit,
     onPrepareCurrentUnit: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
@@ -63,28 +61,34 @@ fun GoalDetailScreen(
                     Text(stringResource(R.string.training_units_heading), style = DesignTypography.SectionLabel, color = DesignColor.Muted)
                     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
                         state.units.forEachIndexed { index, unit ->
-                            key(unit.id) {
-                                val onOpen = remember(unit.id, onOpenUnit) { { onOpenUnit(unit.id) } }
+                            key(unit.isAssessment, unit.id) {
+                                val onOpen = remember(unit.destination, unit.canOpen, onOpenUnit) {
+                                    { if (unit.canOpen) unit.destination?.let(onOpenUnit) }
+                                }
                                 if (index > 0) HorizontalDivider(color = DesignColor.Border)
                                 TrainingUnitRow(unit, onOpen)
                             }
                         }
                     }
                 }
-            } else GoalEmptyContent(onOpenTrainingPath)
+            } else GoalEmptyContent(onReturnToPath)
         }
         if (state.canPrepareCurrentUnit && state.hasUnits) {
             Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp)
                 .padding(top = 16.dp, bottom = 12.dp)) {
-                PrimaryButton(stringResource(R.string.training_prepare_current), onPrepareCurrentUnit)
+                val isAssessment = state.units.any { it.isAssessment && it.status == TrainingProgressStatus.CURRENT }
+                PrimaryButton(
+                    stringResource(if (isAssessment) R.string.goal_assessment_header else R.string.training_prepare_current),
+                    onPrepareCurrentUnit
+                )
             }
         }
-        AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile)
+
     }
 }
 
 @Composable
-private fun GoalEmptyContent(onOpenTrainingPath: () -> Unit) {
+private fun GoalEmptyContent(onReturnToPath: () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val contentHeight = maxHeight
         Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
@@ -98,7 +102,7 @@ private fun GoalEmptyContent(onOpenTrainingPath: () -> Unit) {
                 Text(stringResource(R.string.training_no_units_description), style = DesignTypography.Body,
                     color = DesignColor.Muted, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(16.dp))
-                PrimaryButton(stringResource(R.string.training_back_to_path), onOpenTrainingPath, Modifier.padding(horizontal = 16.dp))
+                PrimaryButton(stringResource(R.string.training_back_to_path), onReturnToPath, Modifier.padding(horizontal = 16.dp))
             }
         }
     }

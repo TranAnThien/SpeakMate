@@ -1,6 +1,11 @@
 package com.project.speakmate.data.repository
 
-import com.google.firebase.auth.FirebaseAuth
+import com.project.speakmate.data.remote.firebase.FirestoreCollection
+import com.project.speakmate.data.remote.firebase.FirestoreField
+import android.util.Log
+import com.project.speakmate.utils.extension.suspendRunCatching
+
+import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.snapshots
@@ -9,9 +14,14 @@ import com.project.speakmate.data.dto.TranscriptMessageDto
 import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.domain.model.PracticeAttempt
-import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.PracticeCompletion
+import com.project.speakmate.domain.model.TrainingProgressDecision
+import com.project.speakmate.data.dto.UserDto
 import com.project.speakmate.domain.repository.HistoryRepository
+import com.project.speakmate.domain.repository.TrainingRepository
+import com.project.speakmate.domain.rules.TrainingProgressRules
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,70 +32,99 @@ import javax.inject.Singleton
 @Singleton
 class HistoryRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val authDataSource: FirebaseAuthDataSource,
+    private val trainingRepository: TrainingRepository
 ) : HistoryRepository {
 
-    override suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit> {
-        return saveAttemptAndProgress(attempt, null)
+    companion object {
+        private const val TAG = "HistoryRepository"
     }
 
-    override suspend fun saveAttemptAndProgress(
-        attempt: PracticeAttempt,
-        newProgress: TrainingProgress?
-    ): Result<Unit> = runCatching {
-        val uid = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
-        val userRef = firestore.collection("users").document(uid)
-        val attemptRef = userRef.collection("practiceAttempts").document(attempt.attemptId)
+    override suspend fun savePracticeAttempt(attempt: PracticeAttempt): Result<Unit> =
+        suspendRunCatching {
+            saveCompletedPractice(authDataSource.requireCurrentUserId(), PracticeCompletion(attempt)).getOrThrow()
+        }
+
+    override suspend fun saveCompletedPractice(userId: String, completion: PracticeCompletion): Result<Unit> = suspendRunCatching {
+        check(authDataSource.requireCurrentUserId() == userId)
+        val attempt = completion.attempt
+        val training = completion.training
+        val path = training?.let { trainingRepository.getTrainingPath(it.targetLevel).getOrThrow() }
+        val uid = userId
+        val userRef = firestore.collection(FirestoreCollection.USERS).document(uid)
+        val attemptRef = userRef
+            .collection(FirestoreCollection.PRACTICE_ATTEMPTS).document(attempt.attemptId)
 
         firestore.runTransaction { transaction ->
-            val attemptSnapshot = transaction.get(attemptRef)
-            if (attemptSnapshot.exists()) {
+            check(authDataSource.requireCurrentUserId() == uid)
+            val snapshot = transaction.get(attemptRef)
+            if (snapshot.exists()) {
                 return@runTransaction
             }
 
-            val userSnapshot = if (newProgress != null) transaction.get(userRef) else null
-            if (newProgress != null && (userSnapshot == null || !userSnapshot.exists())) {
-                throw IllegalStateException("User document not found")
-            }
-
-            if (newProgress != null) {
-                transaction.update(userRef, "trainingProgress", newProgress.toDto())
+            val user = if (training != null) {
+                checkNotNull(transaction.get(userRef).toObject(UserDto::class.java)).toDomain()
+            } else null
+            val progress = user?.trainingProgress
+            val decision = if (user != null && training != null && path != null && user.level == training.targetLevel) {
+                TrainingProgressRules.applyOutcome(path, checkNotNull(progress), training.activity, checkNotNull(completion.outcome))
+            } else null
+            val updatedProgress = when (decision) {
+                is TrainingProgressDecision.Advanced -> decision.progress
+                is TrainingProgressDecision.PathCompleted -> decision.progress
+                else -> null
             }
 
             val attemptDto = attempt.toDto()
             transaction.set(attemptRef, attemptDto)
 
             attempt.transcripts.forEach { msg ->
-                val msgRef = attemptRef.collection("messages").document(msg.messageId)
+                val msgRef = attemptRef.collection(FirestoreCollection.MESSAGES).document(msg.messageId)
                 transaction.set(msgRef, msg.toDto())
             }
+            if (updatedProgress != null) {
+                transaction.update(userRef, FirestoreField.TRAINING_PROGRESS, updatedProgress.toDto())
+            }
+            Unit
         }.await()
     }
 
-    override fun getPracticeHistoryList(): Flow<List<PracticeAttempt>> {
-        val uid = auth.currentUser?.uid ?: return kotlinx.coroutines.flow.flowOf(emptyList())
+    override fun observePracticeHistory(): Flow<List<PracticeAttempt>> {
+        val uid = try {
+            authDataSource.requireCurrentUserId()
+        } catch (_: IllegalStateException) {
+            return kotlinx.coroutines.flow.flowOf(emptyList())
+        }
 
-        return firestore.collection("users").document(uid)
-            .collection("practiceAttempts")
-            .orderBy("startedAt", Query.Direction.DESCENDING)
+        return firestore.collection(FirestoreCollection.USERS).document(uid)
+            .collection(FirestoreCollection.PRACTICE_ATTEMPTS)
+            .orderBy(FirestoreField.STARTED_AT, Query.Direction.DESCENDING)
             .snapshots()
             .map { querySnapshot ->
                 querySnapshot.documents.mapNotNull { doc ->
-                    doc.toObject(PracticeAttemptDto::class.java)?.toDomain(emptyList())
+                    val attempt = try {
+                        doc.toObject(PracticeAttemptDto::class.java)?.toDomain(emptyList())
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: RuntimeException) {
+                        null
+                    }
+                    if (attempt == null) Log.w(TAG, "Skipping invalid practice attempt")
+                    attempt
                 }
             }
     }
 
-    override suspend fun getSessionDetail(attemptId: String): Result<PracticeAttempt> = runCatching {
-        val uid = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
-        val attemptRef = firestore.collection("users").document(uid)
-            .collection("practiceAttempts").document(attemptId)
+    override suspend fun getSessionDetail(attemptId: String): Result<PracticeAttempt> = suspendRunCatching {
+        val uid = authDataSource.requireCurrentUserId()
+        val attemptRef = firestore.collection(FirestoreCollection.USERS).document(uid)
+            .collection(FirestoreCollection.PRACTICE_ATTEMPTS).document(attemptId)
 
         coroutineScope {
             val attemptSnapshotDeferred = async { attemptRef.get().await() }
             val messagesSnapshotDeferred = async {
-                attemptRef.collection("messages")
-                    .orderBy("orderIndex")
+                attemptRef.collection(FirestoreCollection.MESSAGES)
+                    .orderBy(FirestoreField.ORDER_INDEX)
                     .get().await()
             }
 
@@ -96,12 +135,20 @@ class HistoryRepositoryImpl @Inject constructor(
                 throw IllegalArgumentException("Attempt not found")
             }
 
-            val attemptDto = attemptSnapshot.toObject(PracticeAttemptDto::class.java)!!
-            val messages = messagesSnapshot.documents.mapNotNull {
-                it.toObject(TranscriptMessageDto::class.java)?.toDomain()
+            val attemptDto = attemptSnapshot.toObject(PracticeAttemptDto::class.java)
+                ?: throw IllegalArgumentException("Invalid practice attempt")
+            val messages = messagesSnapshot.documents.mapNotNull { document ->
+                val message = document.toObject(TranscriptMessageDto::class.java)?.let { dto ->
+                    dto.toDomain(
+                        legacyFinal = document.get(FirestoreField.FINAL) as? Boolean,
+                        legacyInterrupted = document.get(FirestoreField.INTERRUPTED) as? Boolean
+                    )
+                }
+                if (message == null) Log.w(TAG, "Skipping invalid transcript message")
+                message
             }
 
-            attemptDto.toDomain(messages)
+            attemptDto.toDomain(messages) ?: throw IllegalArgumentException("Invalid practice attempt")
         }
     }
 }

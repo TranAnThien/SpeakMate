@@ -7,7 +7,7 @@ import org.junit.Test
 class UserTest {
 
     @Test
-    fun canStartReassessment_returnsFalse_whenLevelNotAssessed() {
+    fun canStartReassessmentReturnsFalseWhenLevelNotAssessed() {
         val user = User(
             userId = "123",
             displayName = "Test",
@@ -19,7 +19,7 @@ class UserTest {
     }
 
     @Test
-    fun canStartReassessment_returnsFalse_whenLevelIsB2() {
+    fun canStartReassessmentReturnsFalseWhenLevelIsB2() {
         val user = User(
             userId = "123",
             displayName = "Test",
@@ -32,7 +32,7 @@ class UserTest {
     }
 
     @Test
-    fun canStartReassessment_returnsTrue_whenPathCompletedAndLevelIsA1OrA2OrB1() {
+    fun canStartReassessmentReturnsTrueWhenPathCompletedAndLevelIsA1OrA2OrB1() {
         val user = User(
             userId = "123",
             displayName = "Test",

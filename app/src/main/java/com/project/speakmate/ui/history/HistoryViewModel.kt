@@ -2,59 +2,129 @@ package com.project.speakmate.ui.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeType
+import com.project.speakmate.domain.model.PracticeCompletionStatus
 import com.project.speakmate.domain.model.durationInSeconds
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeRepository
+import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import com.project.speakmate.ui.components.ContentFilterUiState
 import com.project.speakmate.ui.history.state.HistoryGroupUiState
 import com.project.speakmate.ui.history.state.HistoryPresentation
-import com.project.speakmate.ui.history.state.HistoryResultPresentation
 import com.project.speakmate.ui.history.state.HistorySessionUiState
 import com.project.speakmate.ui.history.state.HistoryUiState
+import com.project.speakmate.ui.history.state.HistoryPendingSessionUiState
+import com.project.speakmate.utils.AppConstant
+import com.project.speakmate.utils.extension.default
+import com.project.speakmate.utils.extension.toDateLabel
+import com.project.speakmate.utils.extension.toDurationLabel
+import com.project.speakmate.utils.extension.toTimeLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.SimpleDateFormat
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Date
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     private val historyRepository: HistoryRepository,
-    private val practiceRepository: PracticeRepository
+    private val practiceRepository: PracticeRepository,
+    private val completionRepository: PracticeCompletionRepository
 ) : ViewModel() {
 
-    private val selectedFilter = MutableStateFlow("all")
-    private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    private val selectedFilter = MutableStateFlow(AppConstant.HISTORY_FILTER_ALL)
+    private val loadRequest = MutableStateFlow(0)
     private val scenarioTitleCache = ConcurrentHashMap<String, String>()
 
-    val uiState: StateFlow<HistoryUiState> = combine(
-        historyRepository.getPracticeHistoryList(),
-        selectedFilter
-    ) { attempts, filterId ->
-        val filtered = when (filterId) {
-            "free_practice" -> attempts.filter { it.practiceType == PracticeType.FREE_PRACTICE }
-            "training_unit" -> attempts.filter {
-                it.practiceType == PracticeType.TRAINING_UNIT || it.practiceType == PracticeType.GOAL_ASSESSMENT
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<HistoryUiState> = combine(loadRequest.flatMapLatest {
+        observeHistory()
+            .onStart { emit(loadState(HistoryPresentation.LOADING)) }
+            .catch { failure ->
+                if (failure is CancellationException) throw failure
+                emit(loadState(HistoryPresentation.LOAD_ERROR))
             }
-            else -> attempts
+    }, completionRepository.observePendingCompletions(), selectedFilter) { history, pending, filterId ->
+        val visiblePending = pending.distinctBy { it.attemptId }.filter { matchesFilter(it.practiceType, filterId) }
+        val pendingIds = visiblePending.map { it.attemptId }.toSet()
+        val groups = history.groups.mapNotNull { group ->
+            val sessions = group.sessions.filter { it.id !in pendingIds && matchesFilter(it.practiceType, filterId) }
+            group.copy(sessions = sessions).takeIf { sessions.isNotEmpty() }
         }
+        history.copy(
+            presentation = if (history.presentation == HistoryPresentation.POPULATED && groups.isEmpty()) HistoryPresentation.EMPTY else history.presentation,
+            selectedFilterId = filterId,
+            groups = groups,
+            pendingSessions = visiblePending.map {
+                val startedAt = Date(it.startedAtEpochMillis)
+                HistoryPendingSessionUiState(
+                    id = it.attemptId,
+                    title = it.scenarioTitle,
+                    practiceType = it.practiceType,
+                    performedAt = startedAt.toTimeLabel(),
+                    performedDate = startedAt.toDateLabel(),
+                    status = it.status
+                )
+            }
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(AppConstant.STATE_SUBSCRIPTION_TIMEOUT_MILLIS),
+        initialValue = loadState(HistoryPresentation.LOADING)
+    )
+
+    fun selectFilter(filterId: String) {
+        selectedFilter.value = filterId
+    }
+
+    fun retry() {
+        loadRequest.update { it + 1 }
+    }
+
+    fun retrySave(attemptId: String) {
+        if (uiState.value.pendingSessions.none { it.id == attemptId && it.status == PracticeCompletionStatus.SAVE_FAILED }) return
+        completionRepository.retrySave(attemptId)
+    }
+
+    private fun matchesFilter(type: PracticeType?, filterId: String): Boolean = when (filterId) {
+        AppConstant.HISTORY_FILTER_FREE_PRACTICE -> type == PracticeType.FREE_PRACTICE
+        AppConstant.HISTORY_FILTER_LESSONS -> type == PracticeType.TRAINING_UNIT || type == PracticeType.GOAL_ASSESSMENT
+        else -> true
+    }
+
+    private fun loadState(presentation: HistoryPresentation) = HistoryUiState(
+        presentation = presentation,
+        filters = defaultFilters(),
+        selectedFilterId = selectedFilter.value
+    )
+
+    private fun observeHistory(): Flow<HistoryUiState> = flow {
+        emitAll(historyRepository.observePracticeHistory())
+    }.map { attempts ->
+        val filtered = attempts.distinctBy { it.attemptId }
 
         if (filtered.isEmpty()) {
             HistoryUiState(
                 presentation = HistoryPresentation.EMPTY,
                 filters = defaultFilters(),
-                selectedFilterId = filterId,
                 groups = emptyList()
             )
         } else {
@@ -66,7 +136,7 @@ class HistoryViewModel @Inject constructor(
                         if (cached != null) {
                             id to cached
                         } else {
-                            val title = practiceRepository.getScenario(id).getOrNull()?.name?.takeIf { it.isNotBlank() } ?: id
+                            val title = practiceRepository.getScenario(id).getOrNull()?.name?.takeIf { it.isNotBlank() }.default(id)
                             scenarioTitleCache[id] = title
                             id to title
                         }
@@ -74,14 +144,13 @@ class HistoryViewModel @Inject constructor(
                 }.awaitAll().toMap()
             }
 
-            val groups = filtered.groupBy { dateFormatter.format(it.endedAt) }
+            val groups = filtered.groupBy { it.startedAt.toDateLabel() }
                 .map { (date, items) ->
                     HistoryGroupUiState(
                         id = date,
                         title = date,
                         sessions = items.map { attempt ->
-                            val resolvedTitle = titles[attempt.scenarioId]?.takeIf { it.isNotBlank() }
-                                ?: attempt.scenarioId
+                            val resolvedTitle = titles[attempt.scenarioId]?.takeIf { it.isNotBlank() }.default(attempt.scenarioId)
                             toSessionUiState(attempt, resolvedTitle)
                         }
                     )
@@ -89,49 +158,26 @@ class HistoryViewModel @Inject constructor(
             HistoryUiState(
                 presentation = HistoryPresentation.POPULATED,
                 filters = defaultFilters(),
-                selectedFilterId = filterId,
                 groups = groups
             )
         }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = HistoryUiState(presentation = HistoryPresentation.LOADING)
-    )
-
-    fun onSelectFilter(filterId: String) {
-        selectedFilter.value = filterId
     }
 
     private fun toSessionUiState(attempt: PracticeAttempt, scenarioTitle: String): HistorySessionUiState {
-        val durationMinutes = attempt.durationInSeconds / 60
-        val durationSecs = attempt.durationInSeconds % 60
-        val durationFormatted = String.format(Locale.ROOT, "%02d:%02d", durationMinutes, durationSecs)
-        val typeLabel = when (attempt.practiceType) {
-            PracticeType.FREE_PRACTICE -> "Luyện tập tự do"
-            PracticeType.TRAINING_UNIT -> "Bài học"
-            PracticeType.GOAL_ASSESSMENT -> "Đánh giá mục tiêu"
-        }
-
-        val (resultLabel, resultPresentation) = when (attempt.result) {
-            AssessmentResult.PASS -> "Đạt" to HistoryResultPresentation.PASSED
-            AssessmentResult.PARTIAL -> "Một phần" to HistoryResultPresentation.PARTIAL
-            AssessmentResult.FAIL -> "Chưa đạt" to HistoryResultPresentation.NOT_PASSED
-            null -> "Hoàn thành" to HistoryResultPresentation.COMPLETED
-        }
-
+        val duration = attempt.durationInSeconds.toDurationLabel()
         return HistorySessionUiState(
             id = attempt.attemptId,
-            metadata = "$typeLabel • $durationFormatted",
-            title = scenarioTitle.ifBlank { typeLabel },
-            resultLabel = resultLabel,
-            result = resultPresentation
+            title = scenarioTitle,
+            result = HistoryResultMapper.toPresentation(attempt.result, attempt.practiceType),
+            practiceType = attempt.practiceType,
+            duration = duration,
+            performedAt = attempt.startedAt.toTimeLabel()
         )
     }
 
     private fun defaultFilters() = listOf(
-        ContentFilterUiState("all", "Tất cả"),
-        ContentFilterUiState("training_unit", "Bài học"),
-        ContentFilterUiState("free_practice", "Luyện tự do")
+        ContentFilterUiState(AppConstant.HISTORY_FILTER_ALL, ""),
+        ContentFilterUiState(AppConstant.HISTORY_FILTER_LESSONS, ""),
+        ContentFilterUiState(AppConstant.HISTORY_FILTER_FREE_PRACTICE, "")
     )
 }

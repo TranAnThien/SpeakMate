@@ -239,9 +239,9 @@ private fun rememberGoalAssessmentPreviewState(presentation: GoalAssessmentPrese
         feedbackTitle = feedbackTitle,
         feedback = feedback,
         requiredActions = if (presentation == GoalAssessmentPresentation.INTRODUCTION) listOf(
-            GoalAssessmentActionUiState("order", stringResource(R.string.goal_assessment_preview_action_0)),
-            GoalAssessmentActionUiState("clarify", stringResource(R.string.goal_assessment_preview_action_1)),
-            GoalAssessmentActionUiState("confirm", stringResource(R.string.goal_assessment_preview_action_2))
+            GoalAssessmentActionUiState("order", "Gọi một loại đồ uống phù hợp."),
+            GoalAssessmentActionUiState("clarify", "Yêu cầu thay đổi hoặc làm rõ một lựa chọn."),
+            GoalAssessmentActionUiState("confirm", "Xác nhận thông tin và hỏi cách thanh toán.")
         ) else emptyList()
     )
 }

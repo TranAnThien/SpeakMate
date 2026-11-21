@@ -18,10 +18,7 @@ private fun HomeUnassessedScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }
@@ -38,10 +35,7 @@ private fun HomeActiveA2ScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }
@@ -58,10 +52,7 @@ private fun HomePathCompleteA2ScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }
@@ -78,10 +69,7 @@ private fun HomeB2CompleteScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }
@@ -98,10 +86,7 @@ private fun HomeLongNameScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }
@@ -118,10 +103,7 @@ private fun HomeLoadingScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }
@@ -138,10 +120,7 @@ private fun HomeErrorDialogScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }
@@ -158,10 +137,7 @@ private fun HomeLoadErrorScreenPreview() {
             onReviewPath = {},
             onSelectScenario = {},
             onRetry = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onViewProfile = {}
         )
     }
 }

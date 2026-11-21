@@ -1,9 +1,7 @@
 package com.project.speakmate.ui.history.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 
-@Keep
 @Immutable
 data class SessionDetailUiState(
     val presentation: SessionDetailPresentation = SessionDetailPresentation.LOADING,
@@ -12,5 +10,7 @@ data class SessionDetailUiState(
     val criteriaHeading: String = "",
     val requiredActions: List<SessionActionUiState> = emptyList(),
     val criteria: List<SessionCriterionUiState> = emptyList(),
-    val messages: List<SessionMessageUiState> = emptyList()
+    val messages: List<SessionMessageUiState> = emptyList(),
+    val result: HistoryResultPresentation? = null,
+    val feedbackSummary: String? = null
 )

@@ -3,6 +3,7 @@ import com.android.build.api.variant.BuildConfigField
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     id("com.google.gms.google-services")
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
@@ -112,7 +113,10 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
-    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+    implementation(libs.kotlinx.serialization.core)
 
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation(libs.androidx.compose.material.icons.extended)

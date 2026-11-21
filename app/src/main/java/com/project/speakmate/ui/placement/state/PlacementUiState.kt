@@ -15,6 +15,7 @@ data class PlacementUiState(
     val canRetry: Boolean = false,
     val isSavingResult: Boolean = false,
     val saveFailed: Boolean = false,
+    val isResultSaved: Boolean = false,
     val insufficientReason: InsufficientEvidenceReason? = null,
     val stopReason: PlacementStopReason? = null,
     val hasReachedAudioLimit: Boolean = false

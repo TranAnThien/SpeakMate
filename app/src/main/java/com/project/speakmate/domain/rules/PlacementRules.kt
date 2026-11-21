@@ -6,6 +6,7 @@ import com.project.speakmate.domain.model.AssessmentTask
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.model.PlacementCheckpoint
 import com.project.speakmate.domain.model.PlacementResult
+import com.project.speakmate.domain.model.PlacementFeedback
 import com.project.speakmate.domain.model.PlacementRole
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementStopReason
@@ -39,7 +40,11 @@ object PlacementRules {
     fun getNextStep(step: PlacementStep, result: AssessmentResult): PlacementStep? {
         val hasPassed = result == AssessmentResult.PASS
         return when (step) {
-            PlacementStep.INITIAL_A2 -> if (hasPassed) PlacementStep.B1_PROBE else PlacementStep.A2_CONFIRMATION
+            PlacementStep.INITIAL_A2 -> when (result) {
+                AssessmentResult.PASS -> PlacementStep.B1_PROBE
+                AssessmentResult.PARTIAL -> PlacementStep.A2_CONFIRMATION
+                AssessmentResult.FAIL -> PlacementStep.A1_CONFIRMATION
+            }
             PlacementStep.B1_PROBE -> if (hasPassed) PlacementStep.B2_PROBE else PlacementStep.A2_CONFIRMATION
             PlacementStep.B2_PROBE -> if (hasPassed) PlacementStep.B2_CONFIRMATION else PlacementStep.B1_CONFIRMATION
             PlacementStep.B2_CONFIRMATION -> if (hasPassed) null else PlacementStep.B1_CONFIRMATION
@@ -92,7 +97,6 @@ object PlacementRules {
         checkpoint: PlacementCheckpoint,
         reason: InsufficientEvidenceReason
     ): PlacementTransition {
-        if (reason == InsufficientEvidenceReason.NO_USER_SPEECH) return PlacementTransition.RetryTask(checkpoint, reason)
         if (checkpoint.technicalRetryCount >= MAX_TECHNICAL_RETRIES) {
             return PlacementTransition.Stopped(PlacementStopReason.TECHNICAL_RETRY_LIMIT)
         }
@@ -117,7 +121,19 @@ object PlacementRules {
             technicalRetryCount = 0
         )
         if (nextStep == null) {
-            val result = PlacementResult(checkpoint.step.level, outcome.criteria, nowMillis)
+            val result = PlacementResult(
+                level = checkpoint.step.level,
+                speakingProfile = outcome.criteria,
+                assessedAtMillis = nowMillis,
+                taskResult = outcome.result,
+                feedback = PlacementFeedback(
+                    range = outcome.evaluation.range.feedback,
+                    accuracy = outcome.evaluation.accuracy.feedback,
+                    fluency = outcome.evaluation.fluency.feedback,
+                    interaction = outcome.evaluation.interaction.feedback,
+                    coherence = outcome.evaluation.coherence.feedback
+                )
+            )
             return PlacementTransition.Confirmed(updated.copy(candidateLevel = result.level, pendingResult = result), result)
         }
         if (updated.records.size >= MAX_VALID_TASKS) return PlacementTransition.Stopped(PlacementStopReason.TASK_LIMIT_REACHED)

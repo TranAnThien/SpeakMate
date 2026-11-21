@@ -4,5 +4,6 @@ enum class HistoryResultPresentation {
     PASSED,
     PARTIAL,
     NOT_PASSED,
+    NOT_EVALUATED,
     COMPLETED
 }

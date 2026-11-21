@@ -24,7 +24,7 @@ fun ProfileHeader(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
         Text(stringResource(R.string.navigation_profile), style = DesignTypography.PageTitle, color = DesignColor.Primary,
             modifier = Modifier.padding(start = 8.dp, top = 7.dp))
         Box(Modifier.align(Alignment.TopEnd).size(48.dp).clickable(onClick = onOpenSettings), contentAlignment = Alignment.Center) {
-            Icon(painterResource(R.drawable.ic_profile_settings), null, Modifier.size(24.dp), tint = DesignColor.Text)
+            Icon(painterResource(R.drawable.ic_profile_settings), stringResource(R.string.settings_header), Modifier.size(24.dp), tint = DesignColor.Text)
         }
     }
 }

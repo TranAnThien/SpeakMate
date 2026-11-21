@@ -1,0 +1,83 @@
+package com.project.speakmate.data.repository
+
+import com.google.android.gms.tasks.Task
+import com.google.firebase.firestore.CollectionReference
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.QuerySnapshot
+import com.project.speakmate.domain.model.FreePractice
+import com.project.speakmate.domain.repository.ScenarioRepository
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PracticeRepositoryImplTest {
+    private val firestore = mockk<FirebaseFirestore>()
+    private val collection = mockk<CollectionReference>()
+    private val task = mockk<Task<QuerySnapshot>>()
+    private val snapshot = mockk<QuerySnapshot>()
+    private val scenarioRepository = mockk<ScenarioRepository>()
+    private val repository = PracticeRepositoryImpl(firestore, scenarioRepository)
+
+    init {
+        every { firestore.collection("freePractices") } returns collection
+        every { collection.get() } returns task
+        every { task.isComplete } returns true
+        every { task.isCanceled } returns false
+        every { task.exception } returns null
+        every { task.result } returns snapshot
+    }
+
+    @Test
+    fun catalogUsesConfiguredIdsAndSortsByCategoryWithoutDroppingEntries() = runTest {
+        every { snapshot.documents } returns listOf(document("second", "stored", "s2", "Travel"), document("first", "entry", "s1", "Cafe"))
+        assertEquals(listOf(FreePractice("entry", "s1", "Cafe"), FreePractice("stored", "s2", "Travel")), repository.getScenarioCatalog().getOrThrow())
+    }
+
+    @Test
+    fun missingAndBlankPracticeIdsUseTheDocumentId() = runTest {
+        every { snapshot.documents } returns listOf(document("missing", null, "s1", "Cafe"), document("blank", " ", "s2", "Cafe"))
+        assertEquals(listOf("missing", "blank"), repository.getScenarioCatalog().getOrThrow().map { it.practiceId })
+    }
+
+    @Test
+    fun missingScenarioOrCategoryFailsTheCatalogInsteadOfPublishingPartialContent() = runTest {
+        listOf(null to "Cafe", " " to "Cafe", "scenario" to null, "scenario" to " ").forEach { (scenario, category) ->
+            every { snapshot.documents } returns listOf(document("valid", "valid", "scenario", "Cafe"), document("bad", null, scenario, category))
+            assertTrue(repository.getScenarioCatalog().exceptionOrNull() is IllegalStateException)
+        }
+    }
+
+    @Test
+    fun emptyConfiguredCatalogIsAnEmptySuccess() = runTest {
+        every { snapshot.documents } returns emptyList()
+        assertEquals(emptyList<FreePractice>(), repository.getScenarioCatalog().getOrThrow())
+    }
+
+    @Test
+    fun firestoreFailureIsReturnedWithoutDefaultCatalogData() = runTest {
+        val failure = IllegalStateException("read failed")
+        every { task.exception } returns failure
+        assertSame(failure, repository.getScenarioCatalog().exceptionOrNull())
+    }
+
+    @Test
+    fun cancelledCatalogTaskPropagatesCancellation() {
+        every { task.isCanceled } returns true
+        assertThrows(CancellationException::class.java) { runTest { repository.getScenarioCatalog() } }
+    }
+
+    private fun document(id: String, practiceId: String?, scenario: String?, category: String?): DocumentSnapshot =
+        mockk<DocumentSnapshot>().also { document ->
+            every { document.id } returns id
+            every { document.getString("practiceId") } returns practiceId
+            every { document.getString("scenarioId") } returns scenario
+            every { document.getString("category") } returns category
+        }
+}

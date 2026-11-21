@@ -1,8 +1,12 @@
 package com.project.speakmate.data.dto
 
+import com.project.speakmate.utils.extension.requireBoolean
+import com.project.speakmate.utils.extension.requireLong
+import com.project.speakmate.utils.extension.requireString
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PlacementCheckpoint
 import com.project.speakmate.domain.model.PlacementResult
+import com.project.speakmate.domain.model.PlacementFeedback
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementTaskRecord
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
@@ -38,6 +42,12 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
         private const val FLUENCY_MET = "fluencyMet"
         private const val INTERACTION_MET = "interactionMet"
         private const val COHERENCE_MET = "coherenceMet"
+        private const val FEEDBACK = "feedback"
+        private const val RANGE = "range"
+        private const val ACCURACY = "accuracy"
+        private const val FLUENCY = "fluency"
+        private const val INTERACTION = "interaction"
+        private const val COHERENCE = "coherence"
 
         fun fromCheckpoint(checkpoint: PlacementCheckpoint): PlacementCheckpointDto {
             val json = JSONObject()
@@ -66,6 +76,13 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
             .put(LEVEL, result.level.name)
             .put(SPEAKING_PROFILE, toCriteriaJson(result.speakingProfile))
             .put(ASSESSED_AT_MILLIS, result.assessedAtMillis)
+            .put(RESULT, result.taskResult?.name.default<Any>(JSONObject.NULL))
+            .put(FEEDBACK, JSONObject()
+                .put(RANGE, result.feedback.range)
+                .put(ACCURACY, result.feedback.accuracy)
+                .put(FLUENCY, result.feedback.fluency)
+                .put(INTERACTION, result.feedback.interaction)
+                .put(COHERENCE, result.feedback.coherence))
 
         private fun toCriteriaJson(criteria: SpeakingCriteriaResult): JSONObject = JSONObject()
             .put(RANGE_MET, criteria.rangeMet)
@@ -79,22 +96,27 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
 
     fun toPlacementCheckpoint(): PlacementCheckpoint? = try {
         val json = JSONObject(checkpointJson)
-        require(readLong(json, VERSION_KEY) == VERSION.toLong())
+        require(json.requireLong(VERSION_KEY) == VERSION.toLong())
         val records = json.getJSONArray(RECORDS)
         val scenarioIds = json.getJSONArray(USED_SCENARIO_IDS)
-        val retryCount = readLong(json, TECHNICAL_RETRY_COUNT)
+        val retryCount = json.requireLong(TECHNICAL_RETRY_COUNT)
         require(retryCount in 0..Int.MAX_VALUE.toLong())
         PlacementCheckpoint(
-            userId = readString(json, USER_ID),
-            step = PlacementStep.valueOf(readString(json, STEP)),
+            userId = json.requireString(USER_ID),
+            step = PlacementStep.valueOf(json.requireString(STEP)),
             currentTaskId = readNullableString(json, CURRENT_TASK_ID),
             records = List(records.length()) { readRecord(records.getJSONObject(it)) },
-            candidateLevel = SpeakingLevel.valueOf(readString(json, CANDIDATE_LEVEL)),
+            candidateLevel = SpeakingLevel.valueOf(json.requireString(CANDIDATE_LEVEL)),
             usedScenarioIds = List(scenarioIds.length()) { scenarioIds.get(it) as? String ?: throw JSONException(USED_SCENARIO_IDS) },
             technicalRetryCount = retryCount.toInt(),
-            createdAtMillis = readLong(json, CREATED_AT_MILLIS),
-            expiresAtMillis = readLong(json, EXPIRES_AT_MILLIS),
-            pendingResult = if (json.get(PENDING_RESULT) == JSONObject.NULL) null else readResult(json.getJSONObject(PENDING_RESULT))
+            createdAtMillis = json.requireLong(CREATED_AT_MILLIS),
+            expiresAtMillis = json.requireLong(EXPIRES_AT_MILLIS),
+            pendingResult = if (json.get(PENDING_RESULT) == JSONObject.NULL) null else {
+                val result = readResult(json.getJSONObject(PENDING_RESULT))
+                val record = if (records.length() > 0) readRecord(records.getJSONObject(records.length() - 1)) else null
+                if (json.getJSONObject(PENDING_RESULT).has(RESULT)) result
+                else result.copy(taskResult = record?.result)
+            }
         )
     } catch (_: JSONException) {
         null
@@ -103,37 +125,42 @@ class PlacementCheckpointDto(private val checkpointJson: String) {
     }
 
     private fun readRecord(json: JSONObject): PlacementTaskRecord = PlacementTaskRecord(
-        step = PlacementStep.valueOf(readString(json, STEP)),
-        taskId = readString(json, TASK_ID),
-        scenarioId = readString(json, SCENARIO_ID),
-        result = AssessmentResult.valueOf(readString(json, RESULT)),
+        step = PlacementStep.valueOf(json.requireString(STEP)),
+        taskId = json.requireString(TASK_ID),
+        scenarioId = json.requireString(SCENARIO_ID),
+        result = AssessmentResult.valueOf(json.requireString(RESULT)),
         criteria = readCriteria(json.getJSONObject(CRITERIA))
     )
 
     private fun readResult(json: JSONObject): PlacementResult {
-        val level = SpeakingLevel.valueOf(readString(json, LEVEL))
+        val level = SpeakingLevel.valueOf(json.requireString(LEVEL))
         require(level != SpeakingLevel.NOT_ASSESSED)
-        return PlacementResult(level, readCriteria(json.getJSONObject(SPEAKING_PROFILE)), readLong(json, ASSESSED_AT_MILLIS))
+        val taskResult = if (!json.has(RESULT) || json.isNull(RESULT)) null
+            else AssessmentResult.valueOf(json.requireString(RESULT))
+        val feedback = if (json.has(FEEDBACK)) {
+            val fields = json.getJSONObject(FEEDBACK)
+            PlacementFeedback(
+                range = fields.requireString(RANGE),
+                accuracy = fields.requireString(ACCURACY),
+                fluency = fields.requireString(FLUENCY),
+                interaction = fields.requireString(INTERACTION),
+                coherence = fields.requireString(COHERENCE)
+            )
+        } else PlacementFeedback()
+        return PlacementResult(
+            level, readCriteria(json.getJSONObject(SPEAKING_PROFILE)), json.requireLong(ASSESSED_AT_MILLIS),
+            taskResult, feedback
+        )
     }
 
     private fun readCriteria(json: JSONObject): SpeakingCriteriaResult = SpeakingCriteriaResult(
-        rangeMet = readBoolean(json, RANGE_MET),
-        accuracyMet = readBoolean(json, ACCURACY_MET),
-        fluencyMet = readBoolean(json, FLUENCY_MET),
-        interactionMet = readBoolean(json, INTERACTION_MET),
-        coherenceMet = readBoolean(json, COHERENCE_MET)
+        rangeMet = json.requireBoolean(RANGE_MET),
+        accuracyMet = json.requireBoolean(ACCURACY_MET),
+        fluencyMet = json.requireBoolean(FLUENCY_MET),
+        interactionMet = json.requireBoolean(INTERACTION_MET),
+        coherenceMet = json.requireBoolean(COHERENCE_MET)
     )
 
-    private fun readString(json: JSONObject, key: String): String = json.get(key) as? String ?: throw JSONException(key)
-
     private fun readNullableString(json: JSONObject, key: String): String? =
-        if (json.get(key) == JSONObject.NULL) null else readString(json, key)
-
-    private fun readBoolean(json: JSONObject, key: String): Boolean = json.get(key) as? Boolean ?: throw JSONException(key)
-
-    private fun readLong(json: JSONObject, key: String): Long = when (val value = json.get(key)) {
-        is Long -> value
-        is Int -> value.toLong()
-        else -> throw JSONException(key)
-    }
+        if (json.get(key) == JSONObject.NULL) null else json.requireString(key)
 }

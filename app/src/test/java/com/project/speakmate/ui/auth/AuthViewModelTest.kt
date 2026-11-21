@@ -4,6 +4,7 @@ import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.UserRepository
+import com.project.speakmate.ui.auth.state.AuthEffect
 import com.project.speakmate.ui.auth.state.GoogleSignInStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -18,7 +19,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
@@ -36,7 +37,7 @@ class AuthViewModelTest {
         Dispatchers.setMain(testDispatcher)
         authRepository = mockk(relaxed = true)
         userRepository = mockk(relaxed = true)
-        every { authRepository.getSignedInUserId() } returns flowOf(null)
+        every { authRepository.observeSignedInUserId() } returns flowOf(null)
         viewModel = AuthViewModel(authRepository, userRepository)
     }
 
@@ -46,27 +47,27 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun initialState_isNormal() {
+    fun initialStateIsNormal() {
         assertEquals(GoogleSignInStatus.NORMAL, viewModel.uiState.value.status)
     }
 
     @Test
-    fun onGoogleSignInCancelled_setsStatusNormal() {
-        viewModel.onGoogleSignInCancelled()
+    fun onGoogleSignInCancelledSetsStatusNormal() {
+        viewModel.cancelSignIn()
 
         assertEquals(GoogleSignInStatus.NORMAL, viewModel.uiState.value.status)
     }
 
     @Test
-    fun handleGoogleSignIn_success_emitsSignInSuccess() = runTest {
+    fun handleGoogleSignInSuccessEmitsSignInSuccess() = runTest {
         coEvery { authRepository.signInWithGoogle("valid-token") } returns Result.success("uid-1")
         coEvery { userRepository.getOrCreateUser(any()) } returns Result.success(
             User("uid-1", "Test", "test@mail.com", "", SpeakingLevel.NOT_ASSESSED)
         )
 
-        val events = mutableListOf<Unit>()
+        val events = mutableListOf<AuthEffect>()
         val job = launch(testDispatcher) {
-            viewModel.signInSuccess.collect { events.add(it) }
+            viewModel.uiEffect.collect { events.add(it) }
         }
 
         viewModel.handleGoogleSignIn("valid-token", "Test", "test@mail.com", null)
@@ -77,7 +78,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun handleGoogleSignIn_returnsToNormalAfterSuccessfulAuth() = runTest {
+    fun handleGoogleSignInReturnsToNormalAfterSuccessfulAuth() = runTest {
         coEvery { authRepository.signInWithGoogle(any()) } returns Result.success("uid-1")
         coEvery { userRepository.getOrCreateUser(any()) } returns Result.success(
             User("uid-1", "Test", "t@t.com", "")
@@ -90,7 +91,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun handleGoogleSignIn_firebaseAuthFails_setsError() = runTest {
+    fun handleGoogleSignInFirebaseAuthFailsSetsError() = runTest {
         coEvery { authRepository.signInWithGoogle("bad-token") } returns
                 Result.failure(RuntimeException("Firebase Auth failed"))
 
@@ -100,7 +101,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun handleGoogleSignIn_profileCreationFails_rollsBackAuth() = runTest {
+    fun handleGoogleSignInProfileCreationFailsRollsBackAuth() = runTest {
         coEvery { authRepository.signInWithGoogle("token") } returns Result.success("uid-1")
         coEvery { userRepository.getOrCreateUser(any()) } returns
                 Result.failure(RuntimeException("Firestore error"))
@@ -112,7 +113,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun handleGoogleSignIn_createsUserWithCorrectDefaults() = runTest {
+    fun handleGoogleSignInCreatesUserWithCorrectDefaults() = runTest {
         coEvery { authRepository.signInWithGoogle("token") } returns Result.success("uid-new")
         coEvery { userRepository.getOrCreateUser(any()) } returns Result.success(
             User("uid-new", "Quân", "quan@test.com", "https://photo.url/q.jpg")
@@ -133,7 +134,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun handleGoogleSignIn_nullDisplayNameAndEmail_defaultsToEmpty() = runTest {
+    fun handleGoogleSignInNullDisplayNameAndEmailDefaultsToEmpty() = runTest {
         coEvery { authRepository.signInWithGoogle("token") } returns Result.success("uid-1")
         coEvery { userRepository.getOrCreateUser(any()) } returns Result.success(
             User("uid-1", "", "", "")
@@ -151,7 +152,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun resetState_setsStatusNormal() = runTest {
+    fun resetStateSetsStatusNormal() = runTest {
         coEvery { authRepository.signInWithGoogle(any()) } returns
                 Result.failure(RuntimeException("error"))
 

@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -25,75 +25,36 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.speech.tts.TextToSpeech
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.VocabularyItem
+import com.project.speakmate.ui.components.ContentStatusPanel
 import com.project.speakmate.ui.profile.savedvocab.components.VocabularyCard
 import com.project.speakmate.ui.profile.savedvocab.state.SavedVocabUiState
-import java.util.Locale
-
-@Composable
-fun SavedVocabScreen(
-    onNavigateBack: () -> Unit,
-    viewModel: SavedVocabViewModel = hiltViewModel()
-) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val pronunciationWord by viewModel.pronunciationWord.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-
-    val tts = remember {
-        var instance: TextToSpeech? = null
-        instance = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                instance?.language = Locale.US
-            }
-        }
-        instance
-    }
-
-    LaunchedEffect(pronunciationWord) {
-        val word = pronunciationWord ?: return@LaunchedEffect
-        tts?.speak(word, TextToSpeech.QUEUE_FLUSH, null, null)
-        viewModel.onPronunciationConsumed()
-    }
-
-    SavedVocabScreenContent(
-        uiState = uiState,
-        onNavigateBack = onNavigateBack,
-        onSearchQueryChange = viewModel::updateSearchQuery,
-        onClearSearch = { viewModel.updateSearchQuery("") },
-        onPlayClick = { viewModel.playPronunciation(it.word) },
-        onDeleteClick = { viewModel.removeVocabulary(it.word, it.partOfSpeech) }
-    )
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SavedVocabScreenContent(
+fun SavedVocabScreen(
     uiState: SavedVocabUiState,
     onNavigateBack: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onClearSearch: () -> Unit,
     onPlayClick: (VocabularyItem) -> Unit,
-    onDeleteClick: (VocabularyItem) -> Unit
+    onDeleteClick: (VocabularyItem) -> Unit,
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit = {}
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.saved_vocab_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.saved_vocab_back))
                     }
                 }
             )
@@ -114,7 +75,7 @@ fun SavedVocabScreenContent(
                 trailingIcon = {
                     if (uiState.searchQuery.isNotEmpty()) {
                         IconButton(onClick = onClearSearch) {
-                            Icon(Icons.Default.Clear, contentDescription = null)
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.saved_vocab_clear_search))
                         }
                     }
                 },
@@ -124,10 +85,20 @@ fun SavedVocabScreenContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            if (uiState.hasDeleteError) {
+                Text(stringResource(R.string.saved_vocab_delete_error), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error)
+            }
             if (uiState.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (uiState.hasLoadError) {
+                ContentStatusPanel(
+                    R.drawable.ic_load_error, stringResource(R.string.saved_vocab_title),
+                    stringResource(R.string.saved_vocab_load_error), stringResource(R.string.content_retry),
+                    stringResource(R.string.navigation_profile), onRetry, onNavigateBack
+                )
             } else if (uiState.isEmpty) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
@@ -141,10 +112,11 @@ fun SavedVocabScreenContent(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(
-                        items = uiState.filteredVocabularies,
-                        key = { "${it.word}_${it.partOfSpeech}" }
-                    ) { vocabItem ->
+                    itemsIndexed(
+                        items = uiState.filteredVocabularies.distinctBy { it.word to it.partOfSpeech },
+                        key = { _, item -> "${item.word.length}:${item.word}${item.partOfSpeech}" },
+                        contentType = { _, _ -> VocabularyItem::class }
+                    ) { _, vocabItem ->
                         VocabularyCard(
                             item = vocabItem,
                             onPlayClick = onPlayClick,

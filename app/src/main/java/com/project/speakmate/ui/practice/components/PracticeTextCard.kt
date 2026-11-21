@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
-import com.project.speakmate.utils.extension.parseMarkdownBold
 
 @Composable
 fun PracticeTextCard(title: String, text: String, isHighlighted: Boolean, modifier: Modifier = Modifier) {

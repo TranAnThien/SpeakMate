@@ -21,8 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
+import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.ui.components.UserProfileLoadError
 import com.project.speakmate.ui.profile.components.ProfileHeader
 import com.project.speakmate.ui.profile.components.ProfileIdentity
 import com.project.speakmate.ui.profile.components.ProfileSkillCard
@@ -36,18 +36,34 @@ fun ProfileScreen(
     state: ProfileUiState,
     onOpenSettings: () -> Unit,
     onOpenVocabulary: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
-    listState: LazyListState = rememberLazyListState()
+    listState: LazyListState = rememberLazyListState(),
+    onRetryProfile: () -> Unit = {}
 ) {
+    val levelLabel = when (state.level) {
+        SpeakingLevel.NOT_ASSESSED -> stringResource(R.string.profile_unassessed_label)
+        SpeakingLevel.A1 -> stringResource(R.string.placement_a1_label)
+        SpeakingLevel.A2 -> stringResource(R.string.placement_a2_label)
+        SpeakingLevel.B1 -> stringResource(R.string.placement_b1_label)
+        SpeakingLevel.B2 -> stringResource(R.string.placement_b2_label)
+        null -> state.levelLabel
+    }
+    val description = when (state.level) {
+        null -> state.assessmentDescription
+        SpeakingLevel.NOT_ASSESSED -> stringResource(R.string.profile_unassessed_description)
+        else -> stringResource(R.string.profile_assessed_description)
+    }
     Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
         ProfileHeader(onOpenSettings)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState,
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.isProfileLoadFailed) {
+                item(key = "profile-load-error", contentType = "profile-load-error") {
+                    UserProfileLoadError(onRetryProfile)
+                }
+                return@LazyColumn
+            }
             item(key = "profile-summary", contentType = ProfileUiState::class) {
                 Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     ProfileIdentity(
@@ -57,8 +73,8 @@ fun ProfileScreen(
                     )
                     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(stringResource(R.string.profile_estimated_level, state.levelLabel), style = DesignTypography.Title, color = DesignColor.Text)
-                        Text(state.assessmentDescription, style = DesignTypography.Detail, color = DesignColor.Muted)
+                        Text(stringResource(R.string.profile_estimated_level, levelLabel), style = DesignTypography.Title, color = DesignColor.Text)
+                        Text(description, style = DesignTypography.Detail, color = DesignColor.Muted)
                     }
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DesignColor.SecondaryButton)
                         .clickable(onClick = onOpenVocabulary).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -70,12 +86,11 @@ fun ProfileScreen(
             item(key = "skills-heading", contentType = String::class) {
                 Text(stringResource(R.string.profile_skills_heading), style = DesignTypography.Title, color = DesignColor.Text)
             }
-            itemsIndexed(state.skills, key = { index, skill -> "skill:$index:${skill.id}" },
+            itemsIndexed(state.skills.distinctBy { it.id }, key = { _, skill -> "skill:${skill.id}" },
                 contentType = { _, _ -> ProfileSkillUiState::class }) { _, skill ->
                 ProfileSkillCard(skill)
             }
         }
-        AppBottomBar(onOpenTrainingPath, onOpenPractice, onOpenHistory, onOpenProfile,
-            selectedDestination = AppDestination.PROFILE, bottomPadding = 4.dp)
+
     }
 }

@@ -1,9 +1,7 @@
 package com.project.speakmate.ui.training.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 
-@Keep
 @Immutable
 data class UnitResultUiState(
     val presentation: UnitResultPresentation = UnitResultPresentation.PROCESSING,
@@ -12,5 +10,8 @@ data class UnitResultUiState(
     val criteriaHeading: String = "",
     val feedback: String = "",
     val requiredActions: List<UnitResultActionUiState> = emptyList(),
-    val criteria: List<UnitResultCriterionUiState> = emptyList()
+    val criteria: List<UnitResultCriterionUiState> = emptyList(),
+    val saveFailed: Boolean = false,
+    val isSaving: Boolean = false,
+    val isUnavailable: Boolean = false
 )

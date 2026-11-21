@@ -1,9 +1,8 @@
 package com.project.speakmate.ui.training.state
 
-import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
+import com.project.speakmate.domain.model.TrainingActivityScenario
 
-@Keep
 @Immutable
 data class GoalAssessmentUiState(
     val presentation: GoalAssessmentPresentation = GoalAssessmentPresentation.INTRODUCTION,
@@ -11,5 +10,12 @@ data class GoalAssessmentUiState(
     val description: String = "",
     val requiredActions: List<GoalAssessmentActionUiState> = emptyList(),
     val feedbackTitle: String = "",
-    val feedback: String = ""
+    val feedback: String = "",
+    val status: TrainingContentStatus = TrainingContentStatus.LOADING,
+    val activity: TrainingActivityScenario? = null,
+    val isReplay: Boolean = false,
+    val isLocked: Boolean = false,
+    val isPrimaryEnabled: Boolean = true,
+    val isSaveFailed: Boolean = false,
+    val isSaving: Boolean = false
 )

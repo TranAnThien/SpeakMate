@@ -8,12 +8,8 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 class FirestoreAssessmentTaskDataSource @Inject constructor(private val firestore: FirebaseFirestore) {
-    companion object {
-        private const val COLLECTION_NAME = "assessmentTasks"
-    }
-
     suspend fun getAssessmentTasks(): List<AssessmentTaskDto> = withContext(Dispatchers.IO) {
-        firestore.collection(COLLECTION_NAME).get().await().documents.mapNotNull { document ->
+        firestore.collection(FirestoreCollection.ASSESSMENT_TASKS).get().await().documents.mapNotNull { document ->
             document.toObject(AssessmentTaskDto::class.java)?.withDocumentId(document.id)
         }
     }

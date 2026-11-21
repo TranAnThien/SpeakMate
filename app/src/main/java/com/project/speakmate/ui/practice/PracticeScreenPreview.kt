@@ -22,10 +22,7 @@ private fun ScenarioCatalogPopulatedScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -40,10 +37,7 @@ private fun ScenarioCatalogLoadingScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -58,10 +52,7 @@ private fun ScenarioCatalogEmptyScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -76,10 +67,7 @@ private fun ScenarioCatalogUnconfiguredScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -94,10 +82,7 @@ private fun ScenarioCatalogLoadErrorScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -112,10 +97,7 @@ private fun ScenarioCatalogErrorDialogScreenPreview() {
             onSelectScenario = {},
             onRetry = {},
             onDismissError = {},
-            onOpenTrainingPath = {},
-            onOpenPractice = {},
-            onOpenHistory = {},
-            onOpenProfile = {}
+            onReturnToPath = {}
         )
     }
 }
@@ -126,13 +108,13 @@ private fun ScenarioPreparationScreenPreview() {
     SpeakMateTheme {
         ScenarioPreparationScreen(
             state = ScenarioPreparationUiState(
-                title = stringResource(R.string.practice_preview_cafe_title),
+                title = "Gọi món tại quán cà phê",
                 imageUrl = "https://images.unsplash.com/photo-1445116572660-236099ec97a0",
-                context = stringResource(R.string.practice_preview_cafe_context),
+                context = "Bạn đang ở một quán cà phê và muốn gọi đồ uống theo sở thích.",
                 aiRole = "Nhân viên quán",
                 preCallHint = "Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.",
                 isInitializing = false
-            ),
+        ),
             onBack = {},
             onStartCall = {}
         )
@@ -145,13 +127,13 @@ private fun ScenarioInitializingScreenPreview() {
     SpeakMateTheme {
         ScenarioPreparationScreen(
             state = ScenarioPreparationUiState(
-                title = stringResource(R.string.practice_preview_cafe_title),
+                title = "Gọi món tại quán cà phê",
                 imageUrl = "https://images.unsplash.com/photo-1445116572660-236099ec97a0",
-                context = stringResource(R.string.practice_preview_cafe_context),
+                context = "Bạn đang ở một quán cà phê và muốn gọi đồ uống theo sở thích.",
                 aiRole = "Nhân viên quán",
                 preCallHint = "Hãy nghĩ về món bạn muốn gọi. Bạn có thể hỏi thêm thông tin hoặc yêu cầu điều chỉnh khi cần.",
                 isInitializing = true
-            ),
+        ),
             onBack = {},
             onStartCall = {}
         )
@@ -164,9 +146,9 @@ private fun PracticeSummaryScreenPreview() {
     SpeakMateTheme {
         PracticeSummaryScreen(
             state = PracticeSummaryUiState(
-                scenarioTitle = stringResource(R.string.practice_preview_cafe_title),
-                sessionDescription = stringResource(R.string.practice_preview_session_description)
-            ),
+                scenarioTitle = "Gọi món tại quán cà phê",
+                sessionDescription = "Thời lượng: 04:32\nTrạng thái: Đã lưu"
+        ),
             onBack = {},
             onViewTranscript = {},
             onGoHome = {}
@@ -187,26 +169,26 @@ private fun rememberCatalogPreviewState(presentation: ScenarioCatalogPresentatio
     scenarios = if (presentation == ScenarioCatalogPresentation.POPULATED) listOf(
         ScenarioItemUiState(
             id = "cafe",
-            title = stringResource(R.string.practice_preview_cafe_title),
+            title = "Gọi món tại quán cà phê",
             categoryLabel = stringResource(R.string.practice_category_lifestyle),
-            roleLabel = stringResource(R.string.practice_preview_cafe_role),
-            description = stringResource(R.string.practice_preview_cafe_description),
+            roleLabel = "AI · Nhân viên quán",
+            description = "Trao đổi để chọn món và điều chỉnh đồ uống theo sở thích.",
             imageRes = R.drawable.img_practice_cafe_thumbnail
         ),
         ScenarioItemUiState(
             id = "hotel",
-            title = stringResource(R.string.practice_preview_hotel_title),
+            title = "Nhận phòng khách sạn",
             categoryLabel = stringResource(R.string.practice_category_travel),
-            roleLabel = stringResource(R.string.practice_preview_hotel_role),
-            description = stringResource(R.string.practice_preview_hotel_description),
+            roleLabel = "AI · Lễ tân",
+            description = "Xác nhận đặt phòng và hỏi thông tin lưu trú, dịch vụ.",
             imageRes = R.drawable.img_practice_hotel_thumbnail
         ),
         ScenarioItemUiState(
             id = "office",
-            title = stringResource(R.string.practice_preview_office_title),
+            title = "Báo cáo tiến độ dự án",
             categoryLabel = stringResource(R.string.practice_category_work),
-            roleLabel = stringResource(R.string.practice_preview_office_role),
-            description = stringResource(R.string.practice_preview_office_description),
+            roleLabel = "AI · Quản lý",
+            description = "Thảo luận ngắn về một công việc đang thực hiện.",
             imageRes = R.drawable.img_practice_office_thumbnail
         )
     ) else emptyList()

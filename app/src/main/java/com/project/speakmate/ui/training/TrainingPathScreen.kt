@@ -31,32 +31,27 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AppBottomBar
-import com.project.speakmate.ui.components.AppDestination
 import com.project.speakmate.ui.components.LoadErrorDialog
 import com.project.speakmate.ui.components.PrimaryButton
+import com.project.speakmate.ui.theme.DesignColor
+import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.TrainingGoalCard
 import com.project.speakmate.ui.training.components.TrainingHeader
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
+import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingGoalUiState
 import com.project.speakmate.ui.training.state.TrainingPathUiState
-import com.project.speakmate.ui.theme.DesignColor
-import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun TrainingPathScreen(
     state: TrainingPathUiState,
     onToggleGoal: (String) -> Unit,
     onOpenGoal: (String) -> Unit,
-    onOpenUnit: (String) -> Unit,
+    onOpenUnit: (TrainingActivityDestination) -> Unit,
     onContinuePath: () -> Unit,
     onShowLevelInformation: () -> Unit,
     onRetry: () -> Unit,
-    onOpenTrainingPath: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
@@ -83,7 +78,7 @@ fun TrainingPathScreen(
                     TrainingContentStatus.ERROR -> TrainingUnavailableContent(
                         isLoading = false,
                         onRetry = onRetry,
-                        errorMessage = state.errorMessage
+                        errorMessage = if (state.progressProblem != null) stringResource(R.string.training_progress_invalid) else ""
                     )
                     TrainingContentStatus.ERROR_DIALOG -> Unit
                 }
@@ -94,13 +89,7 @@ fun TrainingPathScreen(
                     PrimaryButton(stringResource(R.string.home_continue_path), onContinuePath)
                 }
             }
-            AppBottomBar(
-                onOpenTrainingPath = onOpenTrainingPath,
-                onOpenPractice = onOpenPractice,
-                onOpenHistory = onOpenHistory,
-                onOpenProfile = onOpenProfile,
-                selectedDestination = AppDestination.TRAINING
-            )
+
         }
         if (state.status == TrainingContentStatus.ERROR_DIALOG) {
             LoadErrorDialog(stringResource(R.string.training_error_dialog_title), stringResource(R.string.training_error_dialog_description), onRetry)

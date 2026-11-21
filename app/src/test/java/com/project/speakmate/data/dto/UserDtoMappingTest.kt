@@ -1,14 +1,26 @@
 package com.project.speakmate.data.dto
 
-import com.project.speakmate.domain.model.*
-import org.junit.Assert.*
-import org.junit.Test
+import com.project.speakmate.domain.model.InvalidUserProfileException
+import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
+import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.TrainingProgress
+import com.project.speakmate.domain.model.TrainingStage
+import com.project.speakmate.domain.model.User
+import com.project.speakmate.domain.model.VocabularyItem
 import java.util.Date
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class UserDtoMappingTest {
 
     @Test
-    fun toDto_mapsAllFieldsCorrectly() {
+    fun toDtoMapsAllFieldsCorrectly() {
         val user = User(
             userId = "uid-123",
             displayName = "Quân",
@@ -61,7 +73,7 @@ class UserDtoMappingTest {
     }
 
     @Test
-    fun toDto_handlesNullOptionalFields() {
+    fun toDtoHandlesNullOptionalFields() {
         val user = User(
             userId = "uid-456",
             displayName = "Test",
@@ -79,7 +91,7 @@ class UserDtoMappingTest {
     }
 
     @Test
-    fun toDomain_mapsAllFieldsCorrectly() {
+    fun toDomainMapsAllFieldsCorrectly() {
         val dto = UserDto(
             userId = "uid-789",
             displayName = "Thiên",
@@ -128,7 +140,7 @@ class UserDtoMappingTest {
     }
 
     @Test
-    fun toDomain_fallsBackToDefaults_whenLevelIsInvalid() {
+    fun rejectsAnInvalidProfileLevel() {
         val dto = UserDto(
             userId = "uid-invalid",
             displayName = "Test",
@@ -136,13 +148,11 @@ class UserDtoMappingTest {
             level = "C1_INVALID"
         )
 
-        val user = dto.toDomain()
-
-        assertEquals(SpeakingLevel.NOT_ASSESSED, user.level)
+        assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
     }
 
     @Test
-    fun toDomain_fallsBackToDefaults_whenTrainingStageIsInvalid() {
+    fun rejectsAnInvalidTrainingStage() {
         val dto = UserDto(
             userId = "uid-invalid",
             displayName = "Test",
@@ -150,14 +160,11 @@ class UserDtoMappingTest {
             trainingProgress = TrainingProgressDto(1, 1, "INVALID_STAGE")
         )
 
-        val user = dto.toDomain()
-
-        assertNotNull(user.trainingProgress)
-        assertEquals(TrainingStage.UNIT, user.trainingProgress!!.stage)
+        assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
     }
 
     @Test
-    fun toDomain_handlesNullOptionalFields() {
+    fun toDomainHandlesNullOptionalFields() {
         val dto = UserDto(
             userId = "uid-empty",
             displayName = "",
@@ -175,7 +182,7 @@ class UserDtoMappingTest {
     }
 
     @Test
-    fun roundTrip_preservesAllData() {
+    fun roundTripPreservesAllData() {
         val original = User(
             userId = "uid-round",
             displayName = "Round Trip",

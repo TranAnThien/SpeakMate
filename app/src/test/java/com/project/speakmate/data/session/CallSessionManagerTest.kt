@@ -32,6 +32,7 @@ class CallSessionManagerTest {
         private const val PAUSE_TIMEOUT_MILLIS = 30_000L
         private const val RESUME_TIMEOUT_MILLIS = 4_000L
         private const val TEST_INTERVAL_MILLIS = 1_000L
+        private const val EPOCH_START_MILLIS = 1_700_000_000_000L
         private const val MAX_SERVER_EVENTS = 256
         private const val LONG_SPEECH_MILLIS = 1_000L
         private const val SHORT_NOISE_MILLIS = 300L
@@ -45,6 +46,44 @@ class CallSessionManagerTest {
 
     @get:Rule
     val folder = TemporaryFolder()
+
+    @Test
+    fun epochEndIsFixedBeforeWaitingForTheFinalTranscript() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        speak(media, LONG_SPEECH_MILLIS)
+        media.emitInputTranscription("A large")
+        runCurrent()
+        val endedAtEpochMillis = EPOCH_START_MILLIS + testScheduler.currentTime
+
+        manager.endCall()
+        runCurrent()
+        assertEquals(endedAtEpochMillis, manager.sessionState.value.endedAtEpochMillis)
+        advanceTimeBy(TEST_INTERVAL_MILLIS)
+        media.emitInputTranscription("A large latte", isFinished = true)
+        runCurrent()
+
+        assertEquals(CallOutcome.COMPLETED, manager.sessionState.value.outcome)
+        assertEquals(endedAtEpochMillis, manager.sessionState.value.endedAtEpochMillis)
+    }
+
+    @Test
+    fun epochStartSurvivesReconnection() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        val startedAtEpochMillis = manager.sessionState.value.startedAtEpochMillis
+        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitResumptionHandle(RESUMPTION_HANDLE)
+        runCurrent()
+        advanceTimeBy(TEST_INTERVAL_MILLIS)
+        media.disconnect(CallFailure.NETWORK)
+        runCurrent()
+        advanceTimeBy(TEST_INTERVAL_MILLIS)
+        runCurrent()
+        media.acknowledgeSetup()
+        runCurrent()
+
+        assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+        assertEquals(startedAtEpochMillis, manager.sessionState.value.startedAtEpochMillis)
+    }
 
     @Test
     fun recordsOnlyAssessmentActivities() = withManager { manager, attempts ->
@@ -1312,9 +1351,84 @@ class CallSessionManagerTest {
         runCurrent()
     }
 
+    @Test
+    fun activeMarkerIsWrittenOnceAcrossAReconnectionAndRemovedAfterEnd() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, attempts ->
+            val media = startActive(manager, attempts)
+            assertEquals(1, marker.saved.size)
+            media.emitResumptionHandle(RESUMPTION_HANDLE)
+            runCurrent()
+            media.disconnect(CallFailure.NETWORK)
+            runCurrent()
+            advanceTimeBy(TEST_INTERVAL_MILLIS)
+            media.acknowledgeSetup()
+            runCurrent()
+            assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+            assertEquals(1, marker.saved.size)
+            manager.endCall()
+            runCurrent()
+            advanceTimeBy(FINALIZE_WINDOW_MILLIS + 1)
+            runCurrent()
+            assertTrue(marker.saved.single() in marker.removed)
+        }
+    }
+
+    @Test
+    fun cancellingBeforeActiveNeverWritesAnActiveMarker() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, _ ->
+            manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+            runCurrent()
+            manager.endCall()
+            runCurrent()
+            assertTrue(marker.saved.isEmpty())
+            assertTrue(marker.removed.isNotEmpty())
+        }
+    }
+
+    @Test
+    fun failedCallsRemoveTheActiveMarker() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, attempts ->
+            val media = startActive(manager, attempts)
+            media.emitFailure(CallFailure.AUDIO)
+            runCurrent()
+            assertEquals(CallState.FAILED, manager.sessionState.value.state)
+            assertTrue(marker.saved.single() in marker.removed)
+        }
+    }
+
+    @Test
+    fun leavingTheCallClearsItsMarkerEvenWhenCloseIsRepeated() {
+        val marker = FakeActiveCallMarker()
+        withManager(marker = marker) { manager, attempts ->
+            startActive(manager, attempts)
+            manager.close()
+            manager.close()
+            runCurrent()
+            assertTrue(marker.saved.single() in marker.removed)
+        }
+    }
+
+    @Test
+    fun markerIoFailureCannotFailOrDelayTheCallState() {
+        val marker = FakeActiveCallMarker().also { it.shouldFail = true }
+        withManager(marker = marker) { manager, attempts ->
+            startActive(manager, attempts)
+            assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+            manager.endCall()
+            runCurrent()
+            advanceTimeBy(FINALIZE_WINDOW_MILLIS + 1)
+            runCurrent()
+            assertEquals(CallState.ENDED, manager.sessionState.value.state)
+        }
+    }
+
     private fun withManager(
         hasPermission: Boolean = true,
         shouldFailConstruction: Boolean = false,
+        marker: FakeActiveCallMarker? = null,
         test: TestScope.(CallSessionManager, List<FakeCallSessionMedia>) -> Unit
     ) = runTest {
         val attempts = mutableListOf<FakeCallSessionMedia>()
@@ -1327,7 +1441,10 @@ class CallSessionManagerTest {
                 }
             },
             dispatcher = StandardTestDispatcher(testScheduler),
-            nowMillis = { testScheduler.currentTime }
+            nowMillis = { testScheduler.currentTime },
+            epochMillis = { EPOCH_START_MILLIS + testScheduler.currentTime },
+            saveActiveMarker = { marker?.save(it) },
+            removeActiveMarker = { marker?.remove(it) }
         )
         manager.setForeground(true)
         try {

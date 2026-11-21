@@ -124,13 +124,12 @@ private fun SessionDetailErrorDialogScreenPreview() {
 @Composable
 private fun rememberSessionDetailPreviewState(presentation: SessionDetailPresentation): SessionDetailUiState = SessionDetailUiState(
     presentation = presentation,
-    title = stringResource(R.string.unit_result_preview_unit),
-    metadata = stringResource(if (presentation == SessionDetailPresentation.TRANSCRIPT_ERROR)
-        R.string.session_detail_preview_transcript_error_metadata else R.string.session_detail_preview_metadata),
+    title = "Điều chỉnh đơn gọi món",
+    metadata = if (presentation == SessionDetailPresentation.TRANSCRIPT_ERROR) "Unit · Hôm nay, 14:20 · 05:16 · Đạt\nChưa tải được bản ghi hội thoại." else "Unit · Hôm nay, 14:20 · 05:16 · Đạt",
     criteriaHeading = stringResource(R.string.unit_result_pass_criteria_heading),
     requiredActions = listOf(
-        SessionActionUiState("resize", stringResource(R.string.unit_result_preview_action_0), true),
-        SessionActionUiState("confirm", stringResource(R.string.unit_result_preview_action_1), true)
+        SessionActionUiState("resize", "Yêu cầu đổi kích cỡ đồ uống.", true),
+        SessionActionUiState("confirm", "Xác nhận lại đơn sau khi điều chỉnh.", true)
     ),
     criteria = listOf(
         SessionCriterionUiState("range", stringResource(R.string.unit_result_criterion_name_0),
@@ -145,19 +144,19 @@ private fun rememberSessionDetailPreviewState(presentation: SessionDetailPresent
             stringResource(R.string.unit_result_criterion_description_4), true)
     ),
     messages = if (presentation == SessionDetailPresentation.COMPLETED) listOf(
-        SessionMessageUiState("message_0", stringResource(R.string.session_detail_preview_message_0_metadata),
-            stringResource(R.string.session_detail_preview_message_0_text), false),
-        SessionMessageUiState("message_1", stringResource(R.string.session_detail_preview_message_1_metadata),
-            stringResource(R.string.session_detail_preview_message_1_text), true),
-        SessionMessageUiState("message_2", stringResource(R.string.session_detail_preview_message_2_metadata),
-            stringResource(R.string.session_detail_preview_message_2_text), false),
-        SessionMessageUiState("message_3", stringResource(R.string.session_detail_preview_message_3_metadata),
-            stringResource(R.string.session_detail_preview_message_3_text), true),
-        SessionMessageUiState("message_4", stringResource(R.string.session_detail_preview_message_4_metadata),
-            stringResource(R.string.session_detail_preview_message_4_text), true),
-        SessionMessageUiState("message_5", stringResource(R.string.session_detail_preview_message_5_metadata),
-            stringResource(R.string.session_detail_preview_message_5_text), false),
-        SessionMessageUiState("message_6", stringResource(R.string.session_detail_preview_message_6_metadata),
-            stringResource(R.string.session_detail_preview_message_6_text), true)
+        SessionMessageUiState("message_0", "AI · 00:18",
+            "What would you like to order?", false),
+        SessionMessageUiState("message_1", "BẠN · 00:32",
+            "I'd like an iced latte, please.", true),
+        SessionMessageUiState("message_2", "AI · 00:41",
+            "What size would you like?", false),
+        SessionMessageUiState("message_3", "BẠN · 00:54",
+            "A medium, please. Could you make it with less sugar?", true),
+        SessionMessageUiState("message_4", "BẠN · 01:12",
+            "Actually, could you change it to a large?", true),
+        SessionMessageUiState("message_5", "AI · 01:20",
+            "Of course. A large iced latte with less sugar.", false),
+        SessionMessageUiState("message_6", "BẠN · 01:31",
+            "Yes, that's correct. Thank you.", true)
     ) else emptyList()
 )

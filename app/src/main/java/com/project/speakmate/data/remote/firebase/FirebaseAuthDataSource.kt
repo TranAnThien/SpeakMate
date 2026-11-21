@@ -9,7 +9,8 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class FirebaseAuthDataSource @Inject constructor(
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val credentialSessionProvider: CredentialSessionProvider
 ) {
     suspend fun signInWithGoogle(idToken: String): String {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -17,11 +18,14 @@ class FirebaseAuthDataSource @Inject constructor(
         return authResult.user?.uid ?: throw Exception("Login failed: User is null")
     }
 
-    fun signOut() {
+    suspend fun signOut() {
+        credentialSessionProvider.clearSession()
         auth.signOut()
     }
 
-    fun getSignedInUserId(): Flow<String?> = callbackFlow {
+    fun requireCurrentUserId(): String = checkNotNull(auth.currentUser?.uid) { "User not logged in" }
+
+    fun observeSignedInUserId(): Flow<String?> = callbackFlow {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             trySend(firebaseAuth.currentUser?.uid)
         }

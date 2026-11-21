@@ -4,25 +4,22 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import com.project.speakmate.data.audio.AudioSessionManager
 import com.project.speakmate.data.audio.AssessmentAudioFileProvider
-import com.project.speakmate.data.audio.AssessmentAudioRecorder
+import com.project.speakmate.data.audio.AudioSessionManager
 import com.project.speakmate.data.audio.PlaybackProgress
 import com.project.speakmate.data.audio.PronunciationPlayer
 import com.project.speakmate.data.remote.ai.GeminiLiveClient
 import com.project.speakmate.data.remote.ai.GeminiLiveEvent
-import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.utils.extension.default
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Named
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
@@ -31,55 +28,19 @@ class CallSessionMediaAdapter @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val httpClient: OkHttpClient,
     @param:Named(AppConstant.GEMINI_API_KEY) private val apiKey: String,
-    private val assessmentAudioFiles: AssessmentAudioFileProvider
+    assessmentAudioFiles: AssessmentAudioFileProvider
 ) : CallSessionMedia {
     private var transport: GeminiLiveClient? = null
     private var audio: AudioSessionManager? = null
     private var pronunciation: PronunciationPlayer? = null
-    private val recordingLock = Any()
-    private var recorder: AssessmentAudioRecorder? = null
-    private var recordingAudioId: String? = null
-    private var shouldRecordAssessment = false
-    private var hasRecordingFailure = false
-    private var isAudioLimitReported = false
-    private var onAudioLimitReached: (() -> Unit)? = null
-    override var assessmentAudioId: String? = null
-        private set
-    override var assessmentAudioDurationMillis: Long? = null
-        private set
+    private val assessmentRecording = CallAssessmentRecording(assessmentAudioFiles)
+    override val assessmentAudioId: String? get() = assessmentRecording.assessmentAudioId
+    override val assessmentAudioDurationMillis: Long? get() = assessmentRecording.assessmentAudioDurationMillis
 
-    override fun configureAssessmentRecording(activityType: CallActivityType, onLimitReached: () -> Unit) {
-        shouldRecordAssessment = activityType != CallActivityType.FREE_PRACTICE
-        onAudioLimitReached = onLimitReached
-    }
+    override fun configureAssessmentRecording(activityType: CallActivityType, onLimitReached: () -> Unit) =
+        assessmentRecording.configureAssessmentRecording(activityType, onLimitReached)
 
-    override fun finishAssessmentRecording(outcome: CallOutcome) {
-        synchronized(recordingLock) {
-            onAudioLimitReached = null
-            val current = recorder ?: return
-            recorder = null
-            try {
-                if (hasRecordingFailure) throw IOException()
-                current.close()
-                if (outcome == CallOutcome.COMPLETED && current.durationMillis > 0L) {
-                    assessmentAudioId = recordingAudioId
-                    assessmentAudioDurationMillis = current.durationMillis
-                } else {
-                    current.delete()
-                }
-            } catch (cancelled: CancellationException) {
-                try {
-                    current.delete()
-                } catch (deleteFailure: Exception) {
-                    cancelled.addSuppressed(deleteFailure)
-                }
-                throw cancelled
-            } catch (failure: Exception) {
-                current.delete()
-                throw failure
-            }
-        }
-    }
+    override fun finishAssessmentRecording(outcome: CallOutcome) = assessmentRecording.finishAssessmentRecording(outcome)
 
     override fun hasMicrophonePermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -155,56 +116,30 @@ class CallSessionMediaAdapter @Inject constructor(
         if (!isMediaCurrent()) return
         val client = checkNotNull(transport)
         val generation = client.enableAudio() ?: return
-        val recording = synchronized(recordingLock) {
-            if (shouldRecordAssessment && recorder == null) {
-                val audioId = assessmentAudioFiles.createAudioId()
-                recordingAudioId = audioId
-                recorder = assessmentAudioFiles.openRecorder(audioId)
-            }
-            recorder?.also { it.resumeCapture() }
-        }
+        val recording = assessmentRecording.resumeCapture()
         checkNotNull(audio).startCapture(scope, isMediaCurrent) { chunk, hasAudibleInput ->
-            synchronized(recordingLock) {
+            synchronized(assessmentRecording.lock) {
                 if (!isMediaCurrent()) return@startCapture false
-                if (recording != null && !recording.canAppend(chunk)) {
-                    if (recording.isCapturing) reportAudioLimit()
-                    return@startCapture false
-                }
+                if (!assessmentRecording.canAppend(recording, chunk)) return@startCapture false
                 val isSent = client.sendAudio(generation, chunk, hasAudibleInput)
-                if (isSent && recording != null) {
-                    try {
-                        if (!recording.append(chunk)) throw IOException()
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (failure: Exception) {
-                        hasRecordingFailure = true
-                        throw IOException(failure)
-                    }
-                    if (recording.isAtLimit) reportAudioLimit()
-                }
+                if (isSent && recording != null) assessmentRecording.append(recording, chunk)
                 isSent
             }
         }
     }
 
-    private fun reportAudioLimit() {
-        if (isAudioLimitReported) return
-        isAudioLimitReported = true
-        onAudioLimitReached?.invoke()
-    }
-
     override fun suspendUplink() {
-        synchronized(recordingLock) {
+        synchronized(assessmentRecording.lock) {
             transport?.suspendAudio()
             audio?.stopCapture()
-            recorder?.pauseCapture()
+            assessmentRecording.pauseCapture()
         }
     }
 
     override fun blockUplink() {
-        synchronized(recordingLock) {
+        synchronized(assessmentRecording.lock) {
             transport?.suspendAudio()
-            recorder?.pauseCapture()
+            assessmentRecording.pauseCapture()
         }
     }
 
@@ -223,7 +158,7 @@ class CallSessionMediaAdapter @Inject constructor(
         try {
             manager?.close()
         } finally {
-            synchronized(recordingLock) { recorder?.pauseCapture() }
+            synchronized(assessmentRecording.lock) { assessmentRecording.pauseCapture() }
         }
     }
 

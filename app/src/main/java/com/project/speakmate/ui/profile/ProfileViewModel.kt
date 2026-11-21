@@ -1,8 +1,13 @@
 package com.project.speakmate.ui.profile
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
+import com.project.speakmate.ui.profile.state.ProfileEffect
 import androidx.lifecycle.viewModelScope
+import com.project.speakmate.ui.components.AssessmentCriterionType
+import com.project.speakmate.ui.profile.state.ProfileUiState
+import com.project.speakmate.ui.profile.state.ProfileSkillUiState
+import com.project.speakmate.utils.extension.default
+import kotlinx.coroutines.flow.update
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.UserRepository
@@ -13,6 +18,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,58 +31,76 @@ class ProfileViewModel @Inject constructor(
     private val userRepository: UserRepository
 ) : ViewModel() {
 
-    private val _userProfile = MutableStateFlow<User?>(null)
-    val userProfile: StateFlow<User?> = _userProfile.asStateFlow()
+    private val _uiState = MutableStateFlow(ProfileUiState())
+    val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
-    private val _forceSignOutEvent = MutableSharedFlow<Unit>()
-    val forceSignOutEvent: SharedFlow<Unit> = _forceSignOutEvent.asSharedFlow()
+    private val _uiEffect = MutableSharedFlow<ProfileEffect>(replay = 0)
+    val uiEffect: SharedFlow<ProfileEffect> = _uiEffect.asSharedFlow()
 
     private var hasAuthenticatedSession = false
+    private var profileObservationJob: Job? = null
 
     init {
         observeCurrentUser()
     }
 
     fun observeCurrentUser() {
-        viewModelScope.launch {
-            authRepository.getSignedInUserId().collect { uid ->
-                if (uid != null) {
-                    hasAuthenticatedSession = true
-                    userRepository.getUser(uid).onSuccess { user ->
-                        if (user != null) {
-                            _userProfile.value = user
-                        } else {
-                            Log.e("ProfileViewModel", "Phát hiện tài khoản lỗi (Không có Firestore). Đang ép đăng xuất...")
-                            forceSignOutAndNavigate()
+        profileObservationJob?.cancel()
+        profileObservationJob = viewModelScope.launch {
+            try {
+                authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
+                    _uiState.update { ProfileUiState() }
+                    if (uid == null) {
+                        val shouldNavigateToAuth = hasAuthenticatedSession
+                        hasAuthenticatedSession = false
+                        if (shouldNavigateToAuth) _uiEffect.emit(ProfileEffect.SignedOut)
+                    } else {
+                        hasAuthenticatedSession = true
+                        try {
+                            userRepository.observeUser(uid).collect { user ->
+                                _uiState.update { user?.let(::toUiState).default(ProfileUiState(isProfileLoadFailed = true)) }
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            _uiState.update { ProfileUiState(isProfileLoadFailed = true) }
                         }
-                    }.onFailure { error ->
-                        Log.e("ProfileViewModel", "Lỗi truy xuất Firestore. Đang ép đăng xuất...", error)
-                        forceSignOutAndNavigate()
-                    }
-                } else {
-                    val shouldNavigateToAuth = hasAuthenticatedSession
-                    hasAuthenticatedSession = false
-                    _userProfile.value = null
-                    if (shouldNavigateToAuth) {
-                        _forceSignOutEvent.emit(Unit)
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { ProfileUiState(isProfileLoadFailed = true) }
             }
         }
     }
 
-    fun signOut(onComplete: () -> Unit) {
+    fun retryProfile() = observeCurrentUser()
+
+    fun signOut() {
         viewModelScope.launch {
-            hasAuthenticatedSession = false
-            authRepository.signOut()
-            onComplete()
+            try {
+                authRepository.signOut().getOrThrow()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isProfileLoadFailed = true) }
+            }
         }
     }
 
-    private suspend fun forceSignOutAndNavigate() {
-        hasAuthenticatedSession = false
-        _userProfile.value = null
-        authRepository.signOut()
-        _forceSignOutEvent.emit(Unit)
+    private fun toUiState(user: User): ProfileUiState {
+        val criteria = user.latestAssessmentCriteria
+        val values = criteria?.let { listOf(it.rangeMet, it.accuracyMet, it.fluencyMet, it.interactionMet, it.coherenceMet) }
+        return ProfileUiState(
+            displayName = user.displayName,
+            email = user.email,
+            avatarUrl = user.photoUrl,
+            level = user.level,
+            skills = if (values == null) emptyList() else AssessmentCriterionType.entries.mapIndexed { index, type ->
+                ProfileSkillUiState(id = type.name, isPassed = values[index], criterion = type)
+            }
+        )
     }
+
 }

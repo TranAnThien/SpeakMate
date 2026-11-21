@@ -77,7 +77,6 @@ object ReassessmentRules {
     }
 
     private fun retry(state: ReassessmentState, reason: InsufficientEvidenceReason): ReassessmentTransition {
-        if (reason == InsufficientEvidenceReason.NO_USER_SPEECH) return ReassessmentTransition.RetryTask(state, reason)
         if (state.technicalRetryCount >= PlacementRules.MAX_TECHNICAL_RETRIES) {
             return ReassessmentTransition.Stopped(StopReason.TECHNICAL_RETRY_LIMIT)
         }

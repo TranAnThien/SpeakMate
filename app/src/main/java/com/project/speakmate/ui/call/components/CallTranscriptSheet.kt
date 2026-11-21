@@ -1,9 +1,9 @@
 package com.project.speakmate.ui.call.components
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -57,6 +57,7 @@ import com.project.speakmate.ui.call.state.CallDictionaryUiState
 import com.project.speakmate.ui.call.state.CallTranscriptMessageUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.extension.default
 import kotlin.math.roundToInt
 
 @Composable
@@ -127,7 +128,7 @@ fun CallTranscriptSheet(
                     val availableHeightPx = with(density) { sheetHeight.roundToPx() }
                     val initialAnchorPx = with(density) { initialDictionaryAnchorTop.roundToPx() }
                     Box(Modifier.fillMaxWidth().padding(horizontal = 40.dp).offset {
-                        IntOffset(0, (anchorTopPx ?: initialAnchorPx).coerceIn(0, (availableHeightPx - popupHeightPx).coerceAtLeast(0)))
+                        IntOffset(0, anchorTopPx.default(initialAnchorPx).coerceIn(0, (availableHeightPx - popupHeightPx).coerceAtLeast(0)))
                     }, contentAlignment = Alignment.TopCenter) {
                         CallDictionaryPopup(dictionary, onCloseDictionary, onPlayDictionaryWord, onSaveDictionaryWord, onRetryDictionary,
                             Modifier.widthIn(max = 316.dp).heightIn(max = sheetHeight).onSizeChanged { popupHeightPx = it.height })

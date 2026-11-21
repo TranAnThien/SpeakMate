@@ -1,13 +1,9 @@
 package com.project.speakmate.data.repository
 
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.firestore.DocumentReference
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Transaction
 import com.project.speakmate.data.dto.UserDto
+import com.project.speakmate.data.dto.toDto
 import com.project.speakmate.data.remote.firebase.FirestoreUserDataSource
+import com.project.speakmate.domain.model.InvalidUserProfileException
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingProgress
@@ -17,28 +13,30 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import java.util.Date
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
 class UserRepositoryImplTest {
 
     private lateinit var firestoreDataSource: FirestoreUserDataSource
-    private lateinit var firestore: FirebaseFirestore
-    private lateinit var auth: FirebaseAuth
     private lateinit var repository: UserRepositoryImpl
 
     @Before
     fun setUp() {
         firestoreDataSource = mockk()
-        firestore = mockk(relaxed = true)
-        auth = mockk(relaxed = true)
-        repository = UserRepositoryImpl(firestoreDataSource, firestore, auth)
+        repository = UserRepositoryImpl(firestoreDataSource)
     }
 
     @Test
-    fun getOrCreateUser_returnsSuccess_whenDataSourceSucceeds() = runTest {
+    fun getOrCreateUserReturnsSuccessWhenDataSourceSucceeds() = runTest {
         val inputUser = User(
             userId = "uid-1",
             displayName = "Quân",
@@ -63,7 +61,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getOrCreateUser_returnsFailure_whenDataSourceThrows() = runTest {
+    fun getOrCreateUserReturnsFailureWhenDataSourceThrows() = runTest {
         coEvery { firestoreDataSource.getOrCreateUser(any()) } throws RuntimeException("Firestore error")
 
         val user = User("uid-1", "Test", "t@t.com", "")
@@ -74,7 +72,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getUser_returnsUser_whenDocumentExists() = runTest {
+    fun getUserReturnsUserWhenDocumentExists() = runTest {
         val dto = UserDto(
             userId = "uid-2",
             displayName = "Thiên",
@@ -94,7 +92,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getUser_returnsNull_whenDocumentNotExists() = runTest {
+    fun getUserReturnsNullWhenDocumentNotExists() = runTest {
         coEvery { firestoreDataSource.getUser("uid-none") } returns null
 
         val result = repository.getUser("uid-none")
@@ -104,7 +102,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getUser_returnsFailure_whenDataSourceThrows() = runTest {
+    fun getUserReturnsFailureWhenDataSourceThrows() = runTest {
         coEvery { firestoreDataSource.getUser("uid-err") } throws RuntimeException("Network error")
 
         val result = repository.getUser("uid-err")
@@ -114,7 +112,7 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun getOrCreateUser_passesCorrectDtoToDataSource() = runTest {
+    fun getOrCreateUserPassesCorrectDtoToDataSource() = runTest {
         val user = User(
             userId = "uid-verify",
             displayName = "Verify",
@@ -143,12 +141,48 @@ class UserRepositoryImplTest {
     }
 
     @Test
-    fun updateUserLevelAndProgress_fails_whenUserNotLoggedIn() = runTest {
-        every { auth.currentUser } returns null
+    fun observesBothMissingAndValidProfiles() = runTest {
+        every { firestoreDataSource.observeUser("uid") } returns flowOf(null, UserDto(userId = "uid", level = "A2"))
 
-        val result = repository.updateUserLevelAndProgress(
+        val updates = repository.observeUser("uid").toList()
+
+        assertNull(updates.first())
+        assertEquals(SpeakingLevel.A2, updates.last()?.level)
+    }
+
+    @Test
+    fun returnsInvalidLevelAsLoadFailureWithoutWriting() = runTest {
+        coEvery { firestoreDataSource.getUser("uid") } returns UserDto(userId = "uid", level = "UNKNOWN")
+
+        val result = repository.getUser("uid")
+
+        assertTrue(result.exceptionOrNull() is InvalidUserProfileException)
+        coVerify(exactly = 0) { firestoreDataSource.getOrCreateUser(any()) }
+    }
+
+    @Test
+    fun mapsAssessmentFieldsTogetherForTheDataSource() = runTest {
+        val criteria = SpeakingCriteriaResult(true, false, true, false, true)
+        val progress = TrainingProgress(0, 0, TrainingStage.UNIT)
+        val assessedAtMillis = 25_000L
+        coEvery { firestoreDataSource.saveAssessedLevel(any(), any(), any(), any()) } returns Unit
+
+        val result = repository.saveAssessedLevel(SpeakingLevel.A2, criteria, assessedAtMillis, progress)
+
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) {
+            firestoreDataSource.saveAssessedLevel("A2", criteria.toDto(), Date(assessedAtMillis), progress.toDto())
+        }
+    }
+
+    @Test
+    fun saveAssessedLevelFailsWhenTheDataSourceRejectsAnUnauthenticatedUser() = runTest {
+        coEvery { firestoreDataSource.saveAssessedLevel(any(), any(), any(), any()) } throws IllegalStateException("User not logged in")
+
+        val result = repository.saveAssessedLevel(
             SpeakingLevel.B1,
             SpeakingCriteriaResult(true, true, true, true, true),
+            25_000L,
             TrainingProgress(0, 0, TrainingStage.UNIT)
         )
 

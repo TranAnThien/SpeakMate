@@ -4,12 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,12 +24,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
-import com.project.speakmate.ui.practice.components.PracticeAppBar
 import com.project.speakmate.ui.practice.components.PracticeTextCard
-import com.project.speakmate.ui.practice.state.ScenarioPreparationUiState
 import com.project.speakmate.ui.practice.state.ScenarioPreparationPresentation
+import com.project.speakmate.ui.practice.state.ScenarioPreparationUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -43,7 +43,7 @@ fun ScenarioPreparationScreen(
 ) {
     if (state.presentation == ScenarioPreparationPresentation.LOADING) {
         Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-            PracticeAppBar(stringResource(R.string.practice_preparation_header), onBack)
+            BackAppBar(stringResource(R.string.practice_preparation_header), onBack)
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 SpeakMateLoadingIndicator(size = 40.dp)
                 Spacer(Modifier.height(16.dp))
@@ -54,17 +54,17 @@ fun ScenarioPreparationScreen(
     }
     if (state.presentation == ScenarioPreparationPresentation.ERROR) {
         Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-            PracticeAppBar(stringResource(R.string.practice_preparation_header), onBack)
+            BackAppBar(stringResource(R.string.practice_preparation_header), onBack)
             Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(R.string.practice_error_title), style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
-                Text(state.errorMessage, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.practice_error_description), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
                 PrimaryButton(stringResource(R.string.content_reload), onRetry)
             }
         }
         return
     }
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        PracticeAppBar(stringResource(R.string.practice_preparation_header), onBack)
+        BackAppBar(stringResource(R.string.practice_preparation_header), onBack)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)
             .padding(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Text(state.title, style = DesignTypography.Heading, color = DesignColor.Primary, textAlign = TextAlign.Center,
