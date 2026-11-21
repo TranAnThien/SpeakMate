@@ -76,7 +76,8 @@ object PracticeCompletionRules {
             criteriaResult = evaluated?.criteria,
             requiredActionResults = evaluated?.requiredActionResults.orEmpty().toMap(),
             transcripts = getFinalTranscripts(practice.session.transcript),
-            feedbackSummary = feedback
+            feedbackSummary = feedback,
+            requiredActionDescriptions = training?.requiredActions?.associate { it.requiredActionId to it.description }.orEmpty()
         )
         return PracticeCompletion(attempt, training, normalizedOutcome)
     }
