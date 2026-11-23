@@ -39,7 +39,7 @@ class FirestoreDtoFieldTest {
     @Test
     fun attemptWriterHasNoEmbeddedTranscriptOrDerivedDomainProperties() {
         val stored = toStoredMap(PracticeAttemptDto())
-        assertEquals(setOf("attemptId", "scenarioId", "practiceType", "startedAt", "endedAt", "result", "criteriaResult", "requiredActionResults", "feedbackSummary"), stored.keys)
+        assertEquals(setOf("attemptId", "scenarioId", "practiceType", "startedAt", "endedAt", "result", "criteriaResult", "requiredActionResults", "feedbackSummary", "requiredActionDescriptions"), stored.keys)
         assertFalse(stored.containsKey("transcripts"))
         assertFalse(stored.containsKey("durationSeconds"))
     }

@@ -7,9 +7,11 @@ import androidx.navigation.toRoute
 import com.project.speakmate.app.AppRoute
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.SenderType
+import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.durationInSeconds
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeRepository
+import com.project.speakmate.domain.repository.TrainingRepository
 import com.project.speakmate.ui.components.AssessmentCriterionType
 import com.project.speakmate.ui.history.state.SessionActionUiState
 import com.project.speakmate.ui.history.state.SessionCriterionUiState
@@ -33,7 +35,8 @@ import kotlinx.coroutines.launch
 class SessionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val historyRepository: HistoryRepository,
-    private val practiceRepository: PracticeRepository
+    private val practiceRepository: PracticeRepository,
+    private val trainingRepository: TrainingRepository
 ) : ViewModel() {
 
     private val attemptId: String = try { savedStateHandle.toRoute<AppRoute.SessionDetail>().attemptId } catch (_: IllegalArgumentException) { "" }
@@ -56,7 +59,12 @@ class SessionDetailViewModel @Inject constructor(
                 val attempt = historyRepository.getSessionDetail(attemptId).getOrThrow()
                 val scenarioTitle = practiceRepository.getScenario(attempt.scenarioId).getOrNull()?.name
                     ?.takeIf(String::isNotBlank).default(attempt.scenarioId)
-                _uiState.update { toDetailUiState(attempt, scenarioTitle) }
+                val missingIds = attempt.requiredActionResults.keys.filter { it !in attempt.requiredActionDescriptions }.toSet()
+                val resolvedDescriptions = if (missingIds.isNotEmpty()) {
+                    resolveActionDescriptions(missingIds)
+                } else emptyMap()
+                val allDescriptions = attempt.requiredActionDescriptions + resolvedDescriptions
+                _uiState.update { toDetailUiState(attempt, scenarioTitle, allDescriptions) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -65,7 +73,39 @@ class SessionDetailViewModel @Inject constructor(
         }
     }
 
-    private fun toDetailUiState(attempt: PracticeAttempt, scenarioTitle: String): SessionDetailUiState {
+    private suspend fun resolveActionDescriptions(actionIds: Set<String>): Map<String, String> {
+        if (actionIds.isEmpty()) return emptyMap()
+        val descriptions = mutableMapOf<String, String>()
+        val primaryLevel = actionIds.firstNotNullOfOrNull { id ->
+            SpeakingLevel.entries.firstOrNull { level -> level != SpeakingLevel.NOT_ASSESSED && id.startsWith(level.name, ignoreCase = true) }
+        }
+        val levelsToTry = if (primaryLevel != null) {
+            listOf(primaryLevel) + SpeakingLevel.entries.filter { it != SpeakingLevel.NOT_ASSESSED && it != primaryLevel }
+        } else {
+            SpeakingLevel.entries.filter { it != SpeakingLevel.NOT_ASSESSED }
+        }
+        for (level in levelsToTry) {
+            val path = trainingRepository.getTrainingPath(level).getOrNull() ?: continue
+            path.goals.forEach { goal ->
+                goal.units.forEach { unit ->
+                    unit.requiredActions.forEach { action ->
+                        descriptions[action.requiredActionId] = action.description
+                    }
+                }
+                goal.goalAssessment.requiredActions.forEach { action ->
+                    descriptions[action.requiredActionId] = action.description
+                }
+            }
+            if (actionIds.all { it in descriptions }) break
+        }
+        return descriptions
+    }
+
+    private fun toDetailUiState(
+        attempt: PracticeAttempt,
+        scenarioTitle: String,
+        actionDescriptions: Map<String, String> = emptyMap()
+    ): SessionDetailUiState {
         val durationFormatted = attempt.durationInSeconds.toDurationLabel()
         val dateFormatted = attempt.startedAt.toDateTimeLabel()
 
@@ -75,7 +115,8 @@ class SessionDetailViewModel @Inject constructor(
         }
 
         val actionList = attempt.requiredActionResults.map { (actionId, passed) ->
-            SessionActionUiState(actionId, actionId, passed)
+            val text = actionDescriptions[actionId]?.takeIf(String::isNotBlank) ?: actionId
+            SessionActionUiState(actionId, text, passed)
         }
 
         val messageList = attempt.transcripts.sortedBy { it.orderIndex }.map { msg ->

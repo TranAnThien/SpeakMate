@@ -10,7 +10,6 @@ import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
 import com.project.speakmate.test.SavedStateHandleRule
 import com.project.speakmate.ui.training.state.TrainingContentStatus
-import com.project.speakmate.utils.AppConstant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest

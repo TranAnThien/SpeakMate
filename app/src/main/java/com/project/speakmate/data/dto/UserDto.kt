@@ -44,8 +44,11 @@ fun UserDto.toDomain() = User(
     latestAssessmentCriteria = latestAssessmentCriteria?.toDomain(),
     lastAssessedAt = lastAssessedAt,
     trainingProgress = trainingProgress?.let { progress ->
-        val stage = TrainingStage.entries.firstOrNull { it.name == progress.stage }
-            ?: throw InvalidUserProfileException(FirestoreField.STAGE)
+        val stage = when (progress.stage) {
+            "IN_PROGRESS" -> TrainingStage.UNIT
+            else -> TrainingStage.entries.firstOrNull { it.name == progress.stage }
+                ?: throw InvalidUserProfileException(FirestoreField.STAGE)
+        }
         TrainingProgress(progress.currentGoalOrder, progress.currentUnitOrder, stage)
     },
     savedVocabularies = savedVocabularies.map {

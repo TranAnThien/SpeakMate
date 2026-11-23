@@ -52,7 +52,9 @@ class TrainingRepositoryImpl @Inject constructor(
 
     override suspend fun getTrainingGoal(goalId: String): Result<TrainingGoal> = suspendRunCatching { loadGoal(goalId) }
 
-    override suspend fun getTrainingUnit(unitId: String): Result<TrainingUnit> = suspendRunCatching { loadUnit(unitId) }
+    override suspend fun getTrainingUnit(unitId: String): Result<TrainingUnit> = suspendRunCatching {
+        loadUnit(unitId, loadPreparation = true)
+    }
 
     override suspend fun getScenario(scenarioId: String): Result<Scenario> = suspendRunCatching {
         checkNotNull(scenarioRepository.getScenario(scenarioId)) { "Scenario '$scenarioId' is missing or invalid." }
@@ -69,7 +71,7 @@ class TrainingRepositoryImpl @Inject constructor(
             title = document.requiredString(FirestoreField.TITLE),
             canDoDescription = document.requiredString(FirestoreField.CAN_DO_DESCRIPTION),
             goalAssessment = loadAssessment(document.requiredString(FirestoreField.GOAL_ASSESSMENT)),
-            units = coroutineScope { unitIds.map { id -> async { loadUnit(id) } }.awaitAll() }
+            units = coroutineScope { unitIds.map { id -> async { loadUnit(id, loadPreparation = false) } }.awaitAll() }
         )
     }
 
@@ -78,17 +80,21 @@ class TrainingRepositoryImpl @Inject constructor(
         return contentMapper.toAssessment(document)
     }
 
-    private suspend fun loadUnit(unitId: String): TrainingUnit {
+    private suspend fun loadUnit(unitId: String, loadPreparation: Boolean = true): TrainingUnit {
         val document = dataSource.getTrainingUnit(unitId)
-        val preparation = document.requiredMap(FirestoreField.PREPARATION)
-        val vocabularyIds = preparation.requiredReferenceIds(FirestoreField.VOCABULARY)
-        val grammarIds = preparation.requiredReferenceIds(FirestoreField.GRAMMAR_POINTS)
-        val patternIds = preparation.requiredReferenceIds(FirestoreField.SENTENCE_PATTERNS)
-        val loadedPreparation = coroutineScope {
-            val vocabulary = async { vocabularyIds.map { id -> loadVocabulary(id) } }
-            val grammar = async { grammarIds.map { id -> loadGrammar(id) } }
-            val patterns = async { patternIds.map { id -> loadPattern(id) } }
-            UnitPreparation(vocabulary.await(), grammar.await(), patterns.await())
+        val loadedPreparation = if (loadPreparation) {
+            val preparation = document.requiredMap(FirestoreField.PREPARATION)
+            val vocabularyIds = preparation.requiredReferenceIds(FirestoreField.VOCABULARY)
+            val grammarIds = preparation.requiredReferenceIds(FirestoreField.GRAMMAR_POINTS)
+            val patternIds = preparation.requiredReferenceIds(FirestoreField.SENTENCE_PATTERNS)
+            coroutineScope {
+                val vocabulary = async { vocabularyIds.map { id -> loadVocabulary(id) } }
+                val grammar = async { grammarIds.map { id -> loadGrammar(id) } }
+                val patterns = async { patternIds.map { id -> loadPattern(id) } }
+                UnitPreparation(vocabulary.await(), grammar.await(), patterns.await())
+            }
+        } else {
+            UnitPreparation(emptyList(), emptyList(), emptyList())
         }
         return TrainingUnit(
             unitId = document.stringOrId(FirestoreField.UNIT_ID),

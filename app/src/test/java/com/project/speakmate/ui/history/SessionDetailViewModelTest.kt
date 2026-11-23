@@ -10,6 +10,7 @@ import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.TranscriptMessage
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeRepository
+import com.project.speakmate.domain.repository.TrainingRepository
 import com.project.speakmate.test.MainDispatcherRule
 import com.project.speakmate.test.SavedStateHandleRule
 import com.project.speakmate.ui.components.AssessmentCriterionType.FLUENCY
@@ -24,6 +25,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
@@ -35,6 +37,11 @@ class SessionDetailViewModelTest {
 
     @get:Rule
     val savedStateHandleRule = SavedStateHandleRule()
+
+    @Before
+    fun setUp() {
+        coEvery { trainingRepository.getTrainingPath(any()) } returns Result.failure(RuntimeException("Not found"))
+    }
 
     private val sampleAttempt = PracticeAttempt(
         attemptId = "attempt_123",
@@ -52,6 +59,8 @@ class SessionDetailViewModelTest {
         feedbackSummary = "Tốt"
     )
 
+    private val trainingRepository: TrainingRepository = mockk(relaxed = true)
+
     @Test
     fun loadSessionDetailWithNullCriteriaResultProducesEmptyCriteriaList() = runTest {
         val historyRepository = mockk<HistoryRepository>()
@@ -60,7 +69,7 @@ class SessionDetailViewModelTest {
         coEvery { practiceRepository.getScenario(any()) } returns Result.failure(RuntimeException("Not found"))
 
         val savedStateHandle = SavedStateHandle(mapOf("attemptId" to "attempt_123"))
-        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository)
+        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository, trainingRepository)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -84,7 +93,7 @@ class SessionDetailViewModelTest {
         coEvery { practiceRepository.getScenario("ordering_coffee") } returns Result.success(scenario)
 
         val savedStateHandle = SavedStateHandle(mapOf("attemptId" to "attempt_123"))
-        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository)
+        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository, trainingRepository)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -108,7 +117,7 @@ class SessionDetailViewModelTest {
         coEvery { practiceRepository.getScenario(any()) } returns Result.failure(RuntimeException("Not found"))
 
         val savedStateHandle = SavedStateHandle(mapOf("attemptId" to "attempt_123"))
-        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository)
+        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository, trainingRepository)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -126,7 +135,7 @@ class SessionDetailViewModelTest {
         coEvery { practiceRepository.getScenario(any()) } returns Result.failure(RuntimeException("Not found"))
 
         val savedStateHandle = SavedStateHandle(mapOf("attemptId" to "attempt_123"))
-        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository)
+        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository, trainingRepository)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -139,7 +148,7 @@ class SessionDetailViewModelTest {
         val attempt = sampleAttempt.copy(result = null, transcripts = sampleAttempt.transcripts.map { it.copy(isInterrupted = true) })
         coEvery { history.getSessionDetail(any()) } returns Result.success(attempt)
         coEvery { practice.getScenario(any()) } returns Result.failure(IllegalStateException())
-        val viewModel = SessionDetailViewModel(SavedStateHandle(mapOf("attemptId" to "attempt_123")), history, practice)
+        val viewModel = SessionDetailViewModel(SavedStateHandle(mapOf("attemptId" to "attempt_123")), history, practice, trainingRepository)
         advanceUntilIdle()
         assertEquals(NOT_EVALUATED, viewModel.uiState.value.result)
         assertTrue(viewModel.uiState.value.messages[0].isInterrupted)
@@ -149,9 +158,28 @@ class SessionDetailViewModelTest {
 
     @Test
     fun missingAttemptArgumentIsALoadErrorInsteadOfACrash() = runTest {
-        val viewModel = SessionDetailViewModel(SavedStateHandle(), mockk(), mockk())
+        val viewModel = SessionDetailViewModel(SavedStateHandle(), mockk(), mockk(), trainingRepository)
         advanceUntilIdle()
         assertEquals(SessionDetailPresentation.LOAD_ERROR, viewModel.uiState.value.presentation)
     }
 
+    @Test
+    fun loadSessionDetailUsesActionDescriptionWhenAvailable() = runTest {
+        val historyRepository = mockk<HistoryRepository>()
+        val practiceRepository = mockk<PracticeRepository>()
+        val attemptWithDescription = sampleAttempt.copy(
+            requiredActionResults = mapOf("A1-G01-U01-RA01" to true),
+            requiredActionDescriptions = mapOf("A1-G01-U01-RA01" to "Chào hỏi và giới thiệu tên")
+        )
+        coEvery { historyRepository.getSessionDetail("attempt_123") } returns Result.success(attemptWithDescription)
+        coEvery { practiceRepository.getScenario(any()) } returns Result.failure(RuntimeException("Not found"))
+
+        val savedStateHandle = SavedStateHandle(mapOf("attemptId" to "attempt_123"))
+        val viewModel = SessionDetailViewModel(savedStateHandle, historyRepository, practiceRepository, trainingRepository)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("Chào hỏi và giới thiệu tên", state.requiredActions[0].text)
+        assertEquals("A1-G01-U01-RA01", state.requiredActions[0].id)
+    }
 }

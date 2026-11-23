@@ -13,7 +13,8 @@ data class PracticeAttempt(
     val criteriaResult: SpeakingCriteriaResult?,
     val requiredActionResults: Map<String, Boolean>,
     val transcripts: List<TranscriptMessage>,
-    val feedbackSummary: String?
+    val feedbackSummary: String?,
+    val requiredActionDescriptions: Map<String, String> = emptyMap()
 )
 
 val PracticeAttempt.durationInSeconds: Long

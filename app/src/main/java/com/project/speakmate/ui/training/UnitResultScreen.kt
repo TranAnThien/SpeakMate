@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -43,7 +44,7 @@ fun UnitResultScreen(
     scrollState: ScrollState = rememberScrollState(),
     onRetrySave: () -> Unit = {}
 ) {
-    Column(modifier.fillMaxSize().background(DesignColor.Background)) {
+    Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
         BackAppBar(if (state.presentation == UnitResultPresentation.PROCESSING)
             stringResource(R.string.unit_result_header) else state.title, onBack)
         if (state.presentation == UnitResultPresentation.PROCESSING) {

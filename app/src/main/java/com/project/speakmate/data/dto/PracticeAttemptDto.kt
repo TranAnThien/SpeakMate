@@ -17,7 +17,8 @@ data class PracticeAttemptDto(
     val result: String? = null,
     val criteriaResult: SpeakingCriteriaResultDto? = null,
     val requiredActionResults: Map<String, Boolean> = emptyMap(),
-    val feedbackSummary: String? = null
+    val feedbackSummary: String? = null,
+    val requiredActionDescriptions: Map<String, String> = emptyMap()
 )
 
 fun PracticeAttempt.toDto(): PracticeAttemptDto {
@@ -30,7 +31,8 @@ fun PracticeAttempt.toDto(): PracticeAttemptDto {
         result = this.result?.name,
         criteriaResult = criteriaResult?.toDto(),
         requiredActionResults = this.requiredActionResults,
-        feedbackSummary = this.feedbackSummary
+        feedbackSummary = this.feedbackSummary,
+        requiredActionDescriptions = this.requiredActionDescriptions
     )
 }
 
@@ -51,6 +53,7 @@ fun PracticeAttemptDto.toDomain(transcripts: List<TranscriptMessage>): PracticeA
         criteriaResult = criteriaResult?.toDomain(),
         requiredActionResults = this.requiredActionResults,
         transcripts = transcripts,
-        feedbackSummary = this.feedbackSummary
+        feedbackSummary = this.feedbackSummary,
+        requiredActionDescriptions = this.requiredActionDescriptions
     )
 }
