@@ -5,7 +5,7 @@ import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.ScenarioPreparationMetadata
 
 interface PracticeRepository {
-    suspend fun getScenarioCatalog(): Result<List<FreePractice>>
-    suspend fun getScenario(scenarioId: String): Result<Scenario>
-    suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<ScenarioPreparationMetadata>
+    suspend fun getScenarioCatalog(requireServer: Boolean = false): Result<List<FreePractice>>
+    suspend fun getScenario(scenarioId: String, requireServer: Boolean = false): Result<Scenario>
+    suspend fun getScenarioPreparationMetadata(scenarioId: String, requireServer: Boolean = false): Result<ScenarioPreparationMetadata>
 }

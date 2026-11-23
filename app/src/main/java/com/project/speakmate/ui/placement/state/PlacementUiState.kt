@@ -5,6 +5,7 @@ import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.model.PlacementResult
 import com.project.speakmate.domain.model.PlacementStopReason
 import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.PracticeRecoveryReason
 
 data class PlacementUiState(
     val phase: PlacementPhase = PlacementPhase.LOADING,
@@ -18,5 +19,10 @@ data class PlacementUiState(
     val isResultSaved: Boolean = false,
     val insufficientReason: InsufficientEvidenceReason? = null,
     val stopReason: PlacementStopReason? = null,
-    val hasReachedAudioLimit: Boolean = false
+    val hasReachedAudioLimit: Boolean = false,
+    val pendingGradingReason: InsufficientEvidenceReason? = null,
+    val recoveryProblem: PracticeRecoveryReason? = null,
+    val currentTaskNumber: Int = 0,
+    val taskRole: com.project.speakmate.domain.model.PlacementRole? = null,
+    val canRetryLoad: Boolean = false
 )

@@ -1,14 +1,18 @@
 package com.project.speakmate.ui.history
 
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.AssessmentResult
-import com.project.speakmate.domain.model.PracticeAttempt
-import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.PendingPracticeCompletion
+import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeCompletionStatus
+import com.project.speakmate.domain.model.PracticeHistoryPage
+import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.repository.HistoryRepository
-import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.domain.repository.PracticeCompletionRepository
+import com.project.speakmate.domain.repository.PracticeRepository
+import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.MainDispatcherRule
 import com.project.speakmate.ui.history.state.HistoryPresentation
 import com.project.speakmate.ui.history.state.HistoryResultPresentation
@@ -17,14 +21,19 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import java.util.Date
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,6 +48,7 @@ class HistoryViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val historyListFlow = MutableStateFlow<List<PracticeAttempt>>(emptyList())
+    private val viewModelStore = ViewModelStore()
     private val pendingFlow = MutableStateFlow<List<PendingPracticeCompletion>>(emptyList())
     private lateinit var historyRepository: HistoryRepository
     private lateinit var practiceRepository: PracticeRepository
@@ -67,9 +77,46 @@ class HistoryViewModelTest {
         practiceRepository = mockk(relaxed = true)
         completionRepository = mockk(relaxed = true)
         every { completionRepository.observePendingCompletions() } returns pendingFlow
-        every { historyRepository.observePracticeHistory() } returns historyListFlow
+        coEvery { historyRepository.getPracticeHistoryPage(any(), any()) } coAnswers {
+            val type = firstArg<PracticeType?>()
+            Result.success(PracticeHistoryPage(historyListFlow.value.filter { type == null || it.practiceType == type }))
+        }
         coEvery { practiceRepository.getScenario(any()) } returns Result.failure(RuntimeException("Not found"))
-        viewModel = HistoryViewModel(historyRepository, practiceRepository, completionRepository)
+        viewModel = HistoryViewModel(historyRepository, practiceRepository, completionRepository, FakeAuthRepository())
+        viewModelStore.put(HistoryViewModel::class.java.name, viewModel)
+        viewModel.onStarted()
+    }
+
+    @After
+    fun clearViewModel() = runTest {
+        if (!::viewModel.isInitialized) return@runTest
+        val job = viewModel.viewModelScope.coroutineContext[Job]
+        viewModelStore.clear()
+        job?.join()
+    }
+
+    @Test
+    fun retryRestartsPendingObserverAfterFailure() = runTest {
+        viewModelStore.clear()
+        var subscriptions = 0
+        every { completionRepository.observePendingCompletions() } answers {
+            flow {
+                subscriptions++
+                if (subscriptions == 1) throw IllegalStateException()
+                emitAll(pendingFlow)
+            }
+        }
+        viewModel = HistoryViewModel(historyRepository, practiceRepository, completionRepository, FakeAuthRepository())
+        viewModelStore.put(HistoryViewModel::class.java.name, viewModel)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+        assertEquals(HistoryPresentation.LOAD_ERROR, viewModel.uiState.value.presentation)
+        viewModel.retry()
+        advanceUntilIdle()
+        viewModel.onStarted()
+        advanceUntilIdle()
+        assertEquals(2, subscriptions)
+        assertEquals(HistoryPresentation.EMPTY, viewModel.uiState.first { it.presentation != HistoryPresentation.LOADING }.presentation)
     }
 
     @Test
@@ -81,9 +128,10 @@ class HistoryViewModelTest {
     fun emptyListResultsInEmptyPresentation() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         historyListFlow.value = emptyList()
+        viewModel.retry()
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.presentation != HistoryPresentation.LOADING }
         assertEquals(HistoryPresentation.EMPTY, state.presentation)
         assertTrue(state.groups.isEmpty())
         assertFalse(state.filters.isEmpty())
@@ -98,9 +146,10 @@ class HistoryViewModelTest {
             makeAttempt("3", PracticeType.TRAINING_UNIT, AssessmentResult.FAIL)
         )
         historyListFlow.value = attempts
+        viewModel.retry()
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.presentation == HistoryPresentation.POPULATED }
         assertEquals(HistoryPresentation.POPULATED, state.presentation)
         assertEquals(1, state.groups.size)
         assertEquals(3, state.groups[0].sessions.size)
@@ -122,9 +171,10 @@ class HistoryViewModelTest {
 
         val attempts = listOf(makeAttempt("1", PracticeType.FREE_PRACTICE, null))
         historyListFlow.value = attempts
+        viewModel.retry()
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.groups.flatMap { group -> group.sessions }.any { it.title == "Gọi món tại nhà hàng" } }
         val session = state.groups[0].sessions.first()
         assertEquals("Gọi món tại nhà hàng", session.title)
     }
@@ -133,13 +183,15 @@ class HistoryViewModelTest {
     fun defaultFiltersHasThreeFilters() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         historyListFlow.value = emptyList()
+        viewModel.retry()
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
-        assertEquals(3, state.filters.size)
+        val state = viewModel.uiState.first { it.presentation != HistoryPresentation.LOADING }
+        assertEquals(4, state.filters.size)
         assertEquals("all", state.filters[0].id)
         assertEquals("training_unit", state.filters[1].id)
-        assertEquals("free_practice", state.filters[2].id)
+        assertEquals("goal_assessment", state.filters[2].id)
+        assertEquals("free_practice", state.filters[3].id)
     }
 
     @Test
@@ -151,16 +203,18 @@ class HistoryViewModelTest {
             makeAttempt("3", PracticeType.GOAL_ASSESSMENT, AssessmentResult.FAIL)
         )
         historyListFlow.value = attempts
+        viewModel.retry()
         advanceUntilIdle()
 
         viewModel.selectFilter("training_unit")
+        viewModel.retry()
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.selectedFilterId == "training_unit" && it.presentation == HistoryPresentation.POPULATED }
         assertEquals("training_unit", state.selectedFilterId)
         assertEquals(1, state.groups.size)
-        assertEquals(2, state.groups[0].sessions.size)
-        assertTrue(state.groups[0].sessions.all { it.id == "2" || it.id == "3" })
+        assertEquals(1, state.groups[0].sessions.size)
+        assertTrue(state.groups[0].sessions.all { it.id == "2" })
     }
     @Test
     fun nullResultDistinguishesAssessmentsFromFreePracticeAndKeepsCallStartTime() = runTest {
@@ -170,31 +224,39 @@ class HistoryViewModelTest {
             makeAttempt("unit", PracticeType.TRAINING_UNIT),
             makeAttempt("goal", PracticeType.GOAL_ASSESSMENT)
         )
+        viewModel.retry()
         advanceUntilIdle()
-        val sessions = viewModel.uiState.value.groups.flatMap { it.sessions }
+        val sessions = viewModel.uiState.first { it.groups.flatMap { group -> group.sessions }.size == 3 }.groups.flatMap { it.sessions }
         assertEquals(HistoryResultPresentation.COMPLETED, sessions[0].result)
         assertEquals(HistoryResultPresentation.NOT_EVALUATED, sessions[1].result)
         assertEquals(HistoryResultPresentation.NOT_EVALUATED, sessions[2].result)
-        assertEquals(java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(now), sessions[0].performedAt)
+        assertEquals(now.time, sessions[0].startedAtMillis)
         assertEquals("01:05", sessions[0].duration)
         viewModel.selectFilter("training_unit")
+        viewModel.retry()
         advanceUntilIdle()
-        assertEquals(setOf("unit", "goal"), viewModel.uiState.value.groups.flatMap { it.sessions }.map { it.id }.toSet())
+        val filtered = viewModel.uiState.first { it.selectedFilterId == "training_unit" && it.presentation == HistoryPresentation.POPULATED }
+        assertEquals(setOf("unit"), filtered.groups.flatMap { it.sessions }.map { it.id }.toSet())
     }
 
     @Test
     fun pendingCompletionsRemainVisibleWhenSavedHistoryIsEmptyOrFails() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         pendingFlow.value = listOf(pending("free", PracticeType.FREE_PRACTICE, PracticeCompletionStatus.SAVE_FAILED))
+        viewModel.retry()
         advanceUntilIdle()
-        assertEquals(HistoryPresentation.EMPTY, viewModel.uiState.value.presentation)
+        assertEquals(HistoryPresentation.EMPTY, viewModel.uiState.first {
+            it.presentation == HistoryPresentation.EMPTY && it.pendingSessions.isNotEmpty()
+        }.presentation)
         assertEquals(listOf("free"), viewModel.uiState.value.pendingSessions.map { it.id })
 
-        every { historyRepository.observePracticeHistory() } returns flow { throw IllegalStateException() }
+        coEvery { historyRepository.getPracticeHistoryPage(any(), any()) } returns Result.failure(IllegalStateException())
+        viewModel.retry()
         viewModel.retry()
         advanceUntilIdle()
 
-        assertEquals(HistoryPresentation.LOAD_ERROR, viewModel.uiState.value.presentation)
+        assertEquals(HistoryPresentation.EMPTY, viewModel.uiState.value.presentation)
+        assertTrue(viewModel.uiState.first { it.hasRefreshError }.hasRefreshError)
         assertEquals(listOf("free"), viewModel.uiState.value.pendingSessions.map { it.id })
         viewModel.retrySave("free")
         verify(exactly = 1) { completionRepository.retrySave("free") }
@@ -210,17 +272,23 @@ class HistoryViewModelTest {
             pending("goal", PracticeType.GOAL_ASSESSMENT, PracticeCompletionStatus.SAVING)
         )
         historyListFlow.value = listOf(makeAttempt("free", PracticeType.FREE_PRACTICE), makeAttempt("saved", PracticeType.TRAINING_UNIT))
+        viewModel.retry()
         advanceUntilIdle()
-        assertEquals(setOf("free", "unit", "goal"), viewModel.uiState.value.pendingSessions.map { it.id }.toSet())
-        assertEquals(listOf("saved"), viewModel.uiState.value.groups.flatMap { it.sessions }.map { it.id })
+        val pendingState = viewModel.uiState.first { it.pendingSessions.isNotEmpty() }
+        assertEquals(setOf("free", "unit", "goal"), pendingState.pendingSessions.map { it.id }.toSet())
+        assertEquals(listOf("saved"), viewModel.uiState.first { it.groups.flatMap { group ->
+            group.sessions }.any { it.id == "saved" } }.groups.flatMap { it.sessions }.map { it.id })
 
         viewModel.selectFilter("training_unit")
+        viewModel.retry()
         advanceUntilIdle()
-        assertEquals(listOf("unit", "goal"), viewModel.uiState.value.pendingSessions.map { it.id })
+        assertEquals(listOf("unit"), viewModel.uiState.first { it.selectedFilterId == "training_unit" }.pendingSessions.map { it.id })
         viewModel.selectFilter("free_practice")
+        viewModel.retry()
         advanceUntilIdle()
-        assertEquals(listOf("free"), viewModel.uiState.value.pendingSessions.map { it.id })
-        assertTrue(viewModel.uiState.value.groups.isEmpty())
+        val freeState = viewModel.uiState.first { it.selectedFilterId == "free_practice" }
+        assertEquals(listOf("free"), freeState.pendingSessions.map { it.id })
+        assertTrue(freeState.groups.isEmpty())
     }
 
     @Test
@@ -231,20 +299,25 @@ class HistoryViewModelTest {
             pending("saving", PracticeType.TRAINING_UNIT, PracticeCompletionStatus.SAVING),
             pending("failed", PracticeType.TRAINING_UNIT, PracticeCompletionStatus.SAVE_FAILED)
         )
+        viewModel.retry()
         advanceUntilIdle()
+        viewModel.uiState.first { it.pendingSessions.isNotEmpty() }
         viewModel.retrySave("missing")
         viewModel.retrySave("grading")
         viewModel.retrySave("saving")
         viewModel.retrySave("failed")
         verify(exactly = 1) { completionRepository.retrySave(any()) }
         pendingFlow.value = listOf(pending("failed", PracticeType.TRAINING_UNIT, PracticeCompletionStatus.SAVING))
+        viewModel.retry()
         advanceUntilIdle()
+        viewModel.uiState.first { it.pendingSessions.singleOrNull()?.status == PracticeCompletionStatus.SAVING }
         viewModel.retrySave("failed")
         verify(exactly = 1) { completionRepository.retrySave("failed") }
 
         pendingFlow.value = emptyList()
+        viewModel.retry()
         advanceUntilIdle()
-        assertTrue(viewModel.uiState.value.pendingSessions.isEmpty())
+        assertTrue(viewModel.uiState.first { it.pendingSessions.isEmpty() }.pendingSessions.isEmpty())
     }
 
     @Test
@@ -257,17 +330,22 @@ class HistoryViewModelTest {
         historyListFlow.value = listOf(makeAttempt("saved", PracticeType.TRAINING_UNIT))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         pendingFlow.value = listOf(pending("free", PracticeType.FREE_PRACTICE, PracticeCompletionStatus.SAVE_FAILED))
+        viewModel.retry()
         advanceUntilIdle()
-        assertEquals(HistoryPresentation.LOADING, viewModel.uiState.value.presentation)
-        assertEquals("free", viewModel.uiState.value.pendingSessions.single().id)
+        assertEquals(HistoryPresentation.POPULATED, viewModel.uiState.first { it.presentation == HistoryPresentation.POPULATED && it.pendingSessions.isNotEmpty() }.presentation)
+        assertEquals("free", viewModel.uiState.first { it.pendingSessions.isNotEmpty() }.pendingSessions.single().id)
         viewModel.selectFilter("training_unit")
+        viewModel.retry()
         advanceUntilIdle()
-        assertTrue(viewModel.uiState.value.pendingSessions.isEmpty())
+        assertTrue(viewModel.uiState.first { it.selectedFilterId == "training_unit" }.pendingSessions.isEmpty())
         viewModel.selectFilter("all")
         gate.complete(Unit)
+        viewModel.retry()
         advanceUntilIdle()
-        assertEquals("free", viewModel.uiState.value.pendingSessions.single().id)
-        assertEquals(HistoryPresentation.POPULATED, viewModel.uiState.value.presentation)
+        assertEquals("free", viewModel.uiState.first { it.pendingSessions.isNotEmpty() }.pendingSessions.single().id)
+        assertEquals(HistoryPresentation.POPULATED, viewModel.uiState.first {
+            it.selectedFilterId == "all" && it.presentation == HistoryPresentation.POPULATED
+        }.presentation)
     }
 
     @Test
@@ -275,13 +353,16 @@ class HistoryViewModelTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         pendingFlow.value = listOf(pending("same", PracticeType.FREE_PRACTICE, PracticeCompletionStatus.SAVE_FAILED))
         historyListFlow.value = listOf(makeAttempt("same", PracticeType.FREE_PRACTICE))
+        viewModel.retry()
         advanceUntilIdle()
-        assertTrue(viewModel.uiState.value.groups.isEmpty())
-        assertEquals("same", viewModel.uiState.value.pendingSessions.single().id)
+        val pendingState = viewModel.uiState.first { it.pendingSessions.isNotEmpty() }
+        assertTrue(pendingState.groups.isEmpty())
+        assertEquals("same", pendingState.pendingSessions.single().id)
         pendingFlow.value = emptyList()
+        viewModel.retry()
         advanceUntilIdle()
-        assertTrue(viewModel.uiState.value.pendingSessions.isEmpty())
-        assertEquals("same", viewModel.uiState.value.groups.single().sessions.single().id)
+        assertTrue(viewModel.uiState.first { it.pendingSessions.isEmpty() }.pendingSessions.isEmpty())
+        assertEquals("same", viewModel.uiState.first { it.groups.flatMap { group -> group.sessions }.any { it.id == "same" } }.groups.single().sessions.single().id)
     }
 
     private fun pending(id: String, type: PracticeType, status: PracticeCompletionStatus) = PendingPracticeCompletion(

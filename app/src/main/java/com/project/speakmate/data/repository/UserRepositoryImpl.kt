@@ -31,9 +31,9 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getUser(userId: String): Result<User?> {
+    override suspend fun getUser(userId: String, requireServer: Boolean): Result<User?> {
         return try {
-            val userDto = firestoreUserDataSource.getUser(userId)
+            val userDto = firestoreUserDataSource.getUser(userId, requireServer)
             Result.success(userDto?.toDomain())
         } catch (cancelled: CancellationException) {
             throw cancelled

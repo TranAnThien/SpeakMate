@@ -30,6 +30,7 @@ import com.project.speakmate.R
 import com.project.speakmate.ui.call.state.CallDictionaryStatus
 import com.project.speakmate.ui.call.state.CallDictionaryUiState
 import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
+import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
 import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
@@ -41,18 +42,30 @@ fun CallDictionaryPopup(
     onPlayPronunciation: () -> Unit,
     onSaveWord: () -> Unit,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onStopPronunciation: () -> Unit = {}
 ) {
     Surface(modifier.fillMaxWidth(), color = DesignColor.Surface, shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, DesignColor.DictionaryBorder)) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             CallDictionaryHeader(state, onClose, onPlayPronunciation)
+            if (state.isPronouncing && !state.isPronunciationLoading) SecondaryButton(stringResource(R.string.call_pronunciation_stop), onStopPronunciation)
+            if (state.isPronouncing) Text(
+                stringResource(
+                    if (state.isPronunciationLoading) R.string.call_pronunciation_loading else R.string.call_pronunciation_playing
+                ),
+                style = DesignTypography.Caption,
+                color = DesignColor.Muted
+            )
             if (state.hasPronunciationError) {
                 Text(stringResource(R.string.call_pronunciation_unavailable), style = DesignTypography.Caption, color = DesignColor.Muted)
             }
             when (state.status) {
-                CallDictionaryStatus.LOADING -> CallDictionaryMessage(stringResource(R.string.call_dictionary_loading))
+                CallDictionaryStatus.LOADING -> {
+                    SpeakMateLoadingIndicator(size = 24.dp)
+                    CallDictionaryMessage(stringResource(R.string.call_dictionary_loading))
+                }
                 CallDictionaryStatus.NOT_FOUND -> CallDictionaryMessage(stringResource(R.string.call_dictionary_not_found))
                 CallDictionaryStatus.ERROR -> {
                     CallDictionaryMessage(stringResource(R.string.call_dictionary_error))
@@ -73,13 +86,14 @@ private fun CallDictionaryHeader(state: CallDictionaryUiState, onClose: () -> Un
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(state.word, style = DesignTypography.Title, color = DesignColor.Text)
-            if (phoneticLine.isNotEmpty()) Text(phoneticLine, style = DesignTypography.Detail, color = DesignColor.Muted)
+            if (state.status == CallDictionaryStatus.SUCCESS && phoneticLine.isNotEmpty()) Text(phoneticLine, style = DesignTypography.Detail, color = DesignColor.Muted)
         }
         Box(Modifier.size(48.dp).background(DesignColor.PaleBlue, RoundedCornerShape(12.dp))
-            .clickable(enabled = !state.isPronouncing, role = Role.Button, onClick = onPlayPronunciation)
+            .clickable(enabled = state.status == CallDictionaryStatus.SUCCESS && !state.isPronouncing, role = Role.Button, onClick = onPlayPronunciation)
             .semantics { contentDescription = playLabel },
             contentAlignment = Alignment.Center) {
-            Image(painterResource(R.drawable.ic_training_preparation_speaker), null, Modifier.size(22.dp))
+            if (state.isPronunciationLoading) SpeakMateLoadingIndicator(size = 22.dp)
+            else Image(painterResource(R.drawable.ic_training_preparation_speaker), null, Modifier.size(22.dp))
         }
         Box(Modifier.size(48.dp).clickable(role = Role.Button, onClick = onClose).semantics { contentDescription = closeLabel },
             contentAlignment = Alignment.Center) {

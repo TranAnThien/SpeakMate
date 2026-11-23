@@ -15,7 +15,13 @@ data class GoalAssessmentUiState(
     val activity: TrainingActivityScenario? = null,
     val isReplay: Boolean = false,
     val isLocked: Boolean = false,
+    val isStarting: Boolean = false,
+    val isStartReady: Boolean = false,
     val isPrimaryEnabled: Boolean = true,
     val isSaveFailed: Boolean = false,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    val isSaved: Boolean = false,
+    val hasProgressError: Boolean = false,
+    val resultActions: List<UnitResultActionUiState> = emptyList(),
+    val criteria: List<UnitResultCriterionUiState> = emptyList()
 )

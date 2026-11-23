@@ -24,10 +24,10 @@ class FakePracticeRepository(
         )
     )
 ) : PracticeRepository {
-    override suspend fun getScenarioCatalog(): Result<List<FreePractice>> = catalogResult
+    override suspend fun getScenarioCatalog(requireServer: Boolean): Result<List<FreePractice>> = catalogResult
 
-    override suspend fun getScenario(scenarioId: String): Result<Scenario> =
+    override suspend fun getScenario(scenarioId: String, requireServer: Boolean): Result<Scenario> =
         scenarioResult.map { it.copy(scenarioId = scenarioId) }
 
-    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<ScenarioPreparationMetadata> = metadataResult
+    override suspend fun getScenarioPreparationMetadata(scenarioId: String, requireServer: Boolean): Result<ScenarioPreparationMetadata> = metadataResult
 }

@@ -1,5 +1,6 @@
 package com.project.speakmate.data.remote.firebase
 
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.snapshots
@@ -36,8 +37,9 @@ class FirestoreUserDataSource @Inject constructor(
         }.await()
     }
 
-    suspend fun getUser(userId: String): UserDto? {
-        val documentSnapshot = usersCollection.document(userId).get().await()
+    suspend fun getUser(userId: String, requireServer: Boolean = false): UserDto? {
+        val documentSnapshot = usersCollection.document(userId).get(if (requireServer) Source.SERVER else Source.DEFAULT).await()
+        if (requireServer) check(!documentSnapshot.metadata.isFromCache && !documentSnapshot.metadata.hasPendingWrites())
         return if (documentSnapshot.exists()) {
             documentSnapshot.requireUserDto()
         } else {

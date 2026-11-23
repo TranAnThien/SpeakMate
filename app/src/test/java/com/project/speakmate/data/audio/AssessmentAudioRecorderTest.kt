@@ -2,12 +2,14 @@ package com.project.speakmate.data.audio
 
 import com.project.speakmate.utils.AppConstant
 import java.io.File
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -17,6 +19,10 @@ class AssessmentAudioRecorderTest {
         private const val MILLIS_PER_SECOND = 1_000L
         private const val HEADER_BYTES = 44
         private const val BYTES_PER_SECOND = AppConstant.CALL_INPUT_SAMPLE_RATE * AppConstant.PCM16_BYTES_PER_SAMPLE
+        private const val CHANNELS_OFFSET = 22
+        private const val SAMPLE_RATE_OFFSET = 24
+        private const val DATA_LENGTH_OFFSET = 40
+        private const val READ_WRITE_MODE = "rw"
     }
 
     @get:Rule
@@ -134,5 +140,68 @@ class AssessmentAudioRecorderTest {
         second.close()
         assertEquals(HEADER_BYTES + BYTES_PER_SECOND.toLong(), firstFile.length())
         assertArrayEquals(byteArrayOf(1, 2), secondFile.readBytes().drop(HEADER_BYTES).toByteArray())
+    }
+
+    @Test
+    fun readingFinalizedAudioKeepsTheSameBytesAndFile() {
+        val file = File(folder.root, "readable.wav")
+        val recorder = AssessmentAudioRecorder(file)
+        recorder.append(ByteArray(BYTES_PER_SECOND))
+        recorder.close()
+        val original = file.readBytes()
+
+        assertArrayEquals(original, AssessmentAudioRecorder.getAudioBytes(file))
+        assertArrayEquals(original, AssessmentAudioRecorder.getAudioBytes(file))
+        assertArrayEquals(original, file.readBytes())
+    }
+
+    @Test
+    fun missingEmptyAndHeaderOnlyAudioCannotBeReadForGrading() {
+        val file = File(folder.root, "missing.wav")
+        assertNull(AssessmentAudioRecorder.getAudioBytes(file))
+        file.writeBytes(byteArrayOf())
+        assertNull(AssessmentAudioRecorder.getAudioBytes(file))
+        file.writeBytes(ByteArray(HEADER_BYTES))
+        assertNull(AssessmentAudioRecorder.getAudioBytes(file))
+    }
+
+    @Test
+    fun truncatedAndTrailingDataAreRejectedInsteadOfSentToAi() {
+        val file = File(folder.root, "truncated.wav")
+        val recorder = AssessmentAudioRecorder(file)
+        recorder.append(ByteArray(BYTES_PER_SECOND))
+        recorder.close()
+        val original = file.readBytes()
+
+        listOf(original.size - 1, original.size - AppConstant.PCM16_BYTES_PER_SAMPLE,
+            original.size + 1, original.size + AppConstant.PCM16_BYTES_PER_SAMPLE).forEach { size ->
+            file.writeBytes(original.copyOf(size))
+            assertNull(AssessmentAudioRecorder.getAudioBytes(file))
+        }
+    }
+
+    @Test
+    fun wrongContainerFormatAndDeclaredLengthAreRejected() {
+        val file = File(folder.root, "invalid.wav")
+        val recorder = AssessmentAudioRecorder(file)
+        recorder.append(ByteArray(BYTES_PER_SECOND))
+        recorder.close()
+        val original = file.readBytes()
+
+        listOf(0, CHANNELS_OFFSET, SAMPLE_RATE_OFFSET, DATA_LENGTH_OFFSET).forEach { offset ->
+            val invalid = original.copyOf()
+            invalid[offset] = (invalid[offset].toInt() xor 1).toByte()
+            file.writeBytes(invalid)
+            assertNull(AssessmentAudioRecorder.getAudioBytes(file))
+        }
+    }
+
+    @Test
+    fun audioLargerThanTheRecordingLimitIsRejectedBeforeReading() {
+        val file = File(folder.root, "oversized.wav")
+        val maximumBytes = AssessmentAudioRecorder.MAX_ASSESSMENT_AUDIO_MILLIS * BYTES_PER_SECOND / MILLIS_PER_SECOND + HEADER_BYTES
+        RandomAccessFile(file, READ_WRITE_MODE).use { it.setLength(maximumBytes + AppConstant.PCM16_BYTES_PER_SAMPLE) }
+
+        assertNull(AssessmentAudioRecorder.getAudioBytes(file))
     }
 }

@@ -39,6 +39,8 @@ class FakeCallSessionMedia : CallSessionMedia {
         private set
     var shouldFailReconnect = false
     var shouldFailPronunciation = false
+    var shouldDelayPronunciationStart = false
+    private var onPronunciationStarted: (() -> Unit)? = null
     val pronouncedTexts = mutableListOf<String>()
     var isPlaybackPaused = false
         private set
@@ -53,6 +55,7 @@ class FakeCallSessionMedia : CallSessionMedia {
     private var isUplinkCurrent: (() -> Boolean)? = null
     val isUplinkEnabled: Boolean get() = isUplinkCurrent?.invoke() == true
     var hasPermission = true
+    var isMicrophoneBlocked = false
     var shouldFailAudioOpen = false
     var shouldFailClose = false
     var shouldFailRecordingAppend = false
@@ -78,6 +81,8 @@ class FakeCallSessionMedia : CallSessionMedia {
         private set
     var turnMarks = 0
         private set
+
+    override fun isMicrophoneSilenced(): Boolean = isMicrophoneBlocked
 
     override fun hasMicrophonePermission(): Boolean = hasPermission
 
@@ -135,15 +140,19 @@ class FakeCallSessionMedia : CallSessionMedia {
         isPlaybackPaused = isPaused
     }
 
-    override fun speakPronunciation(text: String, onFinished: (Boolean) -> Unit) {
+    override fun speakPronunciation(text: String, onStarted: () -> Unit, onFinished: (Boolean) -> Unit) {
         check(!shouldFailPronunciation)
         pronouncedTexts += text
+        onPronunciationStarted = onStarted
+        if (!shouldDelayPronunciationStart) onStarted()
         onPronunciationFinished = onFinished
     }
 
     override fun stopPronunciation() {
         pronunciationStops++
     }
+
+    fun startPronunciation() { onPronunciationStarted?.invoke() }
 
     fun finishPronunciation(isSuccess: Boolean) {
         onPronunciationFinished?.invoke(isSuccess)
@@ -266,6 +275,7 @@ class FakeCallSessionMedia : CallSessionMedia {
     }
 
     fun silenceMicrophone(isSilenced: Boolean) {
+        isMicrophoneBlocked = isSilenced
         onMicrophoneSilenced?.invoke(isSilenced)
     }
 

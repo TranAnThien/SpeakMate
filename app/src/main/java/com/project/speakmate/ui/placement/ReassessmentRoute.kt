@@ -3,23 +3,26 @@ package com.project.speakmate.ui.placement
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.R
-import com.project.speakmate.utils.extension.default
-import com.project.speakmate.domain.rules.PlacementRules
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.InsufficientEvidenceReason
+import com.project.speakmate.domain.model.PlacementRole
 import com.project.speakmate.domain.model.ReassessmentStep
 import com.project.speakmate.domain.model.ReassessmentTransition
 import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.rules.PlacementRules
 import com.project.speakmate.ui.call.CallRoute
+import com.project.speakmate.ui.components.AssessmentPendingContent
+import com.project.speakmate.ui.placement.components.AssessmentRecoveryContent
 import com.project.speakmate.ui.placement.state.PlacementStatus
 import com.project.speakmate.ui.placement.state.PlacementStatusFlow
 import com.project.speakmate.ui.placement.state.PlacementStatusUiState
@@ -29,6 +32,7 @@ import com.project.speakmate.ui.placement.state.PromotionResultUiState
 import com.project.speakmate.ui.placement.state.PromotionStepUiState
 import com.project.speakmate.ui.placement.state.ReassessmentPhase
 import com.project.speakmate.ui.placement.state.ReassessmentUiState
+import com.project.speakmate.utils.extension.default
 
 @Composable
 fun ReassessmentRoute(
@@ -38,6 +42,7 @@ fun ReassessmentRoute(
     onReturnToPath: () -> Unit,
     onOpenPromotedPath: () -> Unit,
     onHome: () -> Unit,
+    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -62,9 +67,18 @@ fun ReassessmentRoute(
     BackHandler(enabled = !shouldShowCall || !isCallDestination, onBack = exitAssessment)
     if (shouldShowCall != isCallDestination || state.phase in listOf(ReassessmentPhase.LOADING, ReassessmentPhase.CLOSED)) {
         PlacementStatusScreen(
-            PlacementStatusUiState(flow = PlacementStatusFlow.REASSESSMENT),
+            PlacementStatusUiState(status = PlacementStatus.LOADING, flow = PlacementStatusFlow.REASSESSMENT),
             exitAssessment, viewModel::continueAssessment, viewModel::retryTask, exitAssessment, exitAssessment, modifier
         )
+        return
+    }
+    if (state.pendingGradingReason != null) {
+        AssessmentPendingContent(exitAssessment, viewModel::retryGrading, null, stringResource(R.string.promotion_header), modifier)
+        return
+    }
+    if (state.recoveryProblem != null) {
+        AssessmentRecoveryContent(stringResource(R.string.promotion_header), stringResource(R.string.recovery_assessment_expired),
+            viewModel::retryLoad, exitAssessment, modifier)
         return
     }
     when (state.phase) {
@@ -85,7 +99,8 @@ fun ReassessmentRoute(
                 },
                 conditionTitle = stringResource(R.string.promotion_runtime_condition_title, state.nextLevel.name),
                 conditionDescription = stringResource(R.string.promotion_runtime_condition_description, state.currentLevel.name, state.nextLevel.name),
-                note = stringResource(R.string.promotion_introduction_note)
+                note = stringResource(R.string.promotion_introduction_note),
+                currentLevelLabel = state.currentLevel.name
             ),
             onBack = exitAssessment,
             onStartAssessment = viewModel::start,
@@ -102,7 +117,11 @@ fun ReassessmentRoute(
                     onExit = exitAssessment,
                     modifier = modifier,
                     activityContext = CallActivityContext.Assessment(scenario, CallActivityType.REASSESSMENT, task.communicativeGoal),
-                    onCallFinished = viewModel::submitCallResult
+                    onCallFinished = viewModel::submitCallResult,
+                    activityStep = state.assessment?.step?.ordinal?.plus(1),
+                    activityLevel = task.targetLevel,
+                    activityRole = if (state.assessment?.step == ReassessmentStep.NEXT_PROBE)
+                        PlacementRole.PROBE else PlacementRole.CONFIRMATION
                 )
             }
         }
@@ -116,16 +135,21 @@ fun ReassessmentRoute(
                 isTimeLimitReached = state.hasReachedAudioLimit,
                 flow = PlacementStatusFlow.REASSESSMENT,
                 reassessmentStep = state.assessment?.step,
-                assessmentLevel = state.assessment?.currentTask?.targetLevel.default(state.currentLevel)
+                assessmentLevel = state.assessment?.currentTask?.targetLevel.default(state.currentLevel),
+                taskNumber = state.assessment?.step?.ordinal?.plus(1).default(0),
+                taskRole = if (state.assessment?.step == ReassessmentStep.NEXT_PROBE) PlacementRole.PROBE
+                    else PlacementRole.CONFIRMATION,
+                canRetryLoad = state.phase == ReassessmentPhase.ERROR
             ),
             onBack = exitAssessment,
             onContinueAssessment = viewModel::continueAssessment,
-            onRetryAssessment = viewModel::retryTask,
+            onRetryAssessment = if (state.phase == ReassessmentPhase.ERROR) viewModel::retryLoad else viewModel::retryTask,
             onDeferAssessment = exitAssessment,
-            onGoHome = if (state.phase == ReassessmentPhase.ERROR) viewModel::retryLoad else exitAssessment,
+            onGoHome = exitAssessment,
             modifier = modifier
         )
-        ReassessmentPhase.RESULT -> ReassessmentCompletedResult(state, viewModel::retryTask, viewModel::retrySave, exitAssessment, modifier)
+        ReassessmentPhase.RESULT -> ReassessmentCompletedResult(state, viewModel::retryTask, viewModel::retrySave, exitAssessment,
+            { viewModel.exit(); onOpenProfile() }, modifier)
         ReassessmentPhase.LOADING, ReassessmentPhase.CLOSED -> Unit
     }
 }
@@ -136,6 +160,7 @@ private fun ReassessmentCompletedResult(
     onRetry: () -> Unit,
     onRetrySave: () -> Unit,
     onReturnToPath: () -> Unit,
+    onOpenProfile: () -> Unit,
     modifier: Modifier
 ) {
     val transition = state.result
@@ -148,16 +173,35 @@ private fun ReassessmentCompletedResult(
         transition is ReassessmentTransition.Promoted && !state.isSaved -> R.string.promotion_runtime_save_title
         transition is ReassessmentTransition.Promoted -> R.string.promotion_runtime_promoted_title
         transition is ReassessmentTransition.NotPromoted -> R.string.promotion_runtime_maintained_title
-        transition is ReassessmentTransition.NotEligible -> R.string.promotion_runtime_not_eligible
+        transition is ReassessmentTransition.Stopped -> when (transition.reason) {
+            ReassessmentTransition.StopReason.TECHNICAL_RETRY_LIMIT -> R.string.assessment_retry_limit_title
+            ReassessmentTransition.StopReason.NO_TASK_AVAILABLE -> R.string.assessment_content_missing_title
+            else -> R.string.assessment_state_stopped_title
+        }
+        transition is ReassessmentTransition.NotEligible -> if (transition.reason == ReassessmentTransition.EligibilityReason.HIGHEST_LEVEL)
+            R.string.assessment_b2_terminal_title else R.string.promotion_runtime_not_eligible
         else -> R.string.promotion_insufficient_compact_title
     }, state.nextLevel.name)
     val description = stringResource(when (transition) {
         is ReassessmentTransition.Promoted -> if (state.isSaved) R.string.promotion_runtime_promoted_description else R.string.promotion_runtime_qualified_description
         is ReassessmentTransition.NotPromoted -> R.string.promotion_runtime_maintained_description
-        is ReassessmentTransition.RetryTask -> R.string.promotion_runtime_insufficient_description
+        is ReassessmentTransition.RetryTask -> when (transition.reason) {
+            InsufficientEvidenceReason.NO_USER_SPEECH -> R.string.assessment_no_speech
+            InsufficientEvidenceReason.NOT_ENOUGH_SPEECH -> R.string.assessment_not_enough_speech
+            InsufficientEvidenceReason.AUDIO_UNAVAILABLE -> R.string.assessment_audio_missing
+            InsufficientEvidenceReason.TRANSCRIPT_UNAVAILABLE -> R.string.assessment_transcript_missing
+            InsufficientEvidenceReason.CALL_FAILED -> R.string.assessment_call_failed
+            else -> R.string.promotion_runtime_insufficient_description
+        }
         is ReassessmentTransition.Stopped -> if (transition.reason == ReassessmentTransition.StopReason.TECHNICAL_RETRY_LIMIT) {
             R.string.promotion_runtime_retry_limit
-        } else R.string.promotion_runtime_unavailable_description
+        } else if (transition.reason == ReassessmentTransition.StopReason.NO_TASK_AVAILABLE) R.string.assessment_content_missing
+        else R.string.assessment_state_stopped_description
+        is ReassessmentTransition.NotEligible -> when (transition.reason) {
+            ReassessmentTransition.EligibilityReason.HIGHEST_LEVEL -> R.string.assessment_b2_terminal
+            ReassessmentTransition.EligibilityReason.LEVEL_NOT_ASSESSED -> R.string.assessment_not_assessed
+            ReassessmentTransition.EligibilityReason.PATH_NOT_COMPLETED -> R.string.assessment_path_incomplete
+        }
         else -> R.string.promotion_runtime_not_eligible_description
     }, state.currentLevel.name, state.nextLevel.name, PlacementRules.MAX_TECHNICAL_RETRIES)
     val saveFailure = stringResource(R.string.unit_result_save_failed)
@@ -178,6 +222,7 @@ private fun ReassessmentCompletedResult(
         onReturnToCurrentPath = onReturnToPath,
         onRetryAssessment = onRetry,
         modifier = modifier,
-        onRetrySave = onRetrySave
+        onRetrySave = onRetrySave,
+        onOpenProfile = onOpenProfile
     )
 }

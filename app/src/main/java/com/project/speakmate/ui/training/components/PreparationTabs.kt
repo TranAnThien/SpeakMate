@@ -1,7 +1,7 @@
 package com.project.speakmate.ui.training.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -36,7 +36,8 @@ fun PreparationTabs(
                 val onSelect = remember(section, onSelectSection) { { onSelectSection(section) } }
                 Box(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
                     .background(if (section == selectedSection) DesignColor.Primary else DesignColor.Surface)
-                    .clickable(onClick = onSelect).padding(horizontal = 4.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
+                    .selectable(selected = section == selectedSection, role = androidx.compose.ui.semantics.Role.Tab, onClick = onSelect)
+                    .padding(horizontal = 4.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
                     Text(stringResource(when (section) {
                         PreparationSection.OVERVIEW -> R.string.preparation_overview
                         PreparationSection.VOCABULARY -> R.string.preparation_vocabulary

@@ -1,6 +1,7 @@
 package com.project.speakmate.ui.practice
 
 import androidx.lifecycle.SavedStateHandle
+import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.SavedStateHandleRule
 import com.project.speakmate.ui.practice.state.ScenarioPreparationPresentation
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,8 @@ class ScenarioPreparationViewModelTest {
     fun selectedFreePracticeLoadsReferencedScenarioBeforeCallCanStart() = runTest {
         val viewModel = ScenarioPreparationViewModel(
             SavedStateHandle(mapOf("practiceId" to "fp-1")),
-            FakeScenarioPreparationPracticeRepository()
+            FakeScenarioPreparationPracticeRepository(),
+            FakeAuthRepository()
         )
 
         val state = viewModel.uiState.value
@@ -45,9 +47,9 @@ class ScenarioPreparationViewModelTest {
 
         assertEquals("Prompt", state.scenario?.promptTemplate)
         viewModel.prepareCall()
-        assertTrue(viewModel.uiState.value.isInitializing)
+        assertTrue(viewModel.uiState.value.isStarting)
 
-        viewModel.resetCallPreparation()
-        assertTrue(!viewModel.uiState.value.isInitializing)
+        viewModel.cancelStart()
+        assertTrue(!viewModel.uiState.value.isStarting)
     }
 }

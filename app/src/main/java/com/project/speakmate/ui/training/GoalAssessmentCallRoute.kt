@@ -7,9 +7,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.project.speakmate.R
+import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.ui.call.CallRoute
@@ -43,11 +48,15 @@ fun GoalAssessmentCallRoute(
     }
     val callActivity = activity
     if (callActivity == null) {
-        TrainingUnavailableContent(
-            isLoading = state.status == TrainingContentStatus.LOADING,
-            onRetry = if (state.isLocked) onBack else viewModel::retry,
-            modifier = modifier
-        )
+        Column(modifier.fillMaxSize()) {
+            BackAppBar(stringResource(R.string.goal_assessment_header), onBack)
+            TrainingUnavailableContent(
+                isLoading = state.status == TrainingContentStatus.LOADING,
+                onRetry = if (state.isLocked) onBack else viewModel::retry,
+                errorMessage = if (state.isLocked) stringResource(R.string.goal_assessment_locked) else "",
+                modifier = Modifier.weight(1f)
+            )
+        }
     } else {
         CallRoute(
             scenario = callActivity.scenario,

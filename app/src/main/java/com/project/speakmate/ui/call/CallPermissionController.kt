@@ -48,7 +48,7 @@ fun rememberCallPermissionController(
     val settingsUnavailable = stringResource(R.string.call_permission_settings_unavailable)
     val permission = Manifest.permission.RECORD_AUDIO
     var isAwaitingSettings by rememberSaveable { mutableStateOf(false) }
-    var isPermissionRequestInProgress by remember { mutableStateOf(false) }
+    var isPermissionRequestInProgress by rememberSaveable { mutableStateOf(false) }
     var shouldOpenSettings by rememberSaveable { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
@@ -65,7 +65,8 @@ fun rememberCallPermissionController(
         shouldOpenSettings = false
         val callContext = activityContext ?: when (activityType) {
             CallActivityType.FREE_PRACTICE -> CallActivityContext.FreePractice(scenario)
-            else -> CallActivityContext.Assessment(scenario, activityType, communicativeGoal)
+            CallActivityType.INITIAL_PLACEMENT, CallActivityType.REASSESSMENT -> CallActivityContext.Assessment(scenario, activityType, communicativeGoal)
+            else -> { viewModel.showConfigurationError(); return }
         }
         viewModel.startCall(callContext)
     }
@@ -80,6 +81,7 @@ fun rememberCallPermissionController(
     fun dismissPermission() {
         isAwaitingSettings = false
         viewModel.dismissMicrophonePermission()
+        viewModel.exitCall()
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -111,7 +113,9 @@ fun rememberCallPermissionController(
                     startWithPermission()
                 } else {
                     isPermissionRequestInProgress = true
-                    permissionLauncher.launch(permission)
+                    try { permissionLauncher.launch(permission) }
+                    catch (_: IllegalStateException) { isPermissionRequestInProgress = false; viewModel.showMicrophonePermission(MicrophonePermissionPresentation.DENIED) }
+                    catch (_: SecurityException) { isPermissionRequestInProgress = false; viewModel.showMicrophonePermission(MicrophonePermissionPresentation.DENIED) }
                 }
             }
         },
@@ -121,6 +125,9 @@ fun rememberCallPermissionController(
             try {
                 context.startActivity(intent)
             } catch (_: ActivityNotFoundException) {
+                isAwaitingSettings = false
+                Toast.makeText(context, settingsUnavailable, Toast.LENGTH_LONG).show()
+            } catch (_: SecurityException) {
                 isAwaitingSettings = false
                 Toast.makeText(context, settingsUnavailable, Toast.LENGTH_LONG).show()
             }

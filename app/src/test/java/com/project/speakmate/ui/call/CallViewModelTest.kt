@@ -1,30 +1,22 @@
 package com.project.speakmate.ui.call
 
-import com.project.speakmate.data.session.PracticeCompletionManager
 import com.project.speakmate.data.repository.PracticeCompletionRepositoryImpl
-import com.project.speakmate.test.FakeAuthRepository
-import com.project.speakmate.domain.model.CallActivityContext
-import com.project.speakmate.domain.model.CallOutcome
-import com.project.speakmate.domain.model.CallFailure
-import com.project.speakmate.domain.model.PracticeCompletion
-import com.project.speakmate.domain.model.RequiredAction
-import com.project.speakmate.domain.rules.AssessmentRules
-import com.project.speakmate.domain.rules.PracticeCompletionRules
+import com.project.speakmate.data.session.PracticeCompletionManager
 import com.project.speakmate.data.session.PracticeCompletionTestFixtures
 import com.project.speakmate.domain.model.AssessmentOutcome
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
-import org.junit.After
 import com.project.speakmate.domain.model.AssessmentResult
+import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallFailure
+import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.CallState
 import com.project.speakmate.domain.model.DictionaryLookupResult
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.model.PracticeCompletion
 import com.project.speakmate.domain.model.PracticeType
+import com.project.speakmate.domain.model.RequiredAction
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SenderType
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
@@ -37,6 +29,9 @@ import com.project.speakmate.domain.repository.DictionaryRepository
 import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import com.project.speakmate.domain.repository.SpeakingAssessmentRepository
+import com.project.speakmate.domain.rules.AssessmentRules
+import com.project.speakmate.domain.rules.PracticeCompletionRules
+import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.MainDispatcherRule
 import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import io.mockk.coEvery
@@ -44,17 +39,26 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import java.time.Clock
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallViewModelTest {
@@ -63,8 +67,12 @@ class CallViewModelTest {
         private const val ORDER_ACTION_ID = "order_drink"
     }
 
+
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
+
+    @get:Rule
+    val operationFolder = TemporaryFolder()
 
     private val sessionStateFlow = MutableStateFlow(CallSessionState())
     private val audioLevelFlow = MutableStateFlow(0f)
@@ -107,7 +115,7 @@ class CallViewModelTest {
         coEvery { historyRepository.saveCompletedPractice(any(), any()) } returns Result.success(Unit)
         completionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         val completionRepository = PracticeCompletionRepositoryImpl(
-            PracticeCompletionManager(completionScope, FakeAuthRepository(), historyRepository, speakingAssessmentRepository)
+            PracticeCompletionManager(completionScope, FakeAuthRepository(), historyRepository, speakingAssessmentRepository, Clock.systemUTC())
         )
 
         viewModel = CallViewModel(
@@ -116,6 +124,14 @@ class CallViewModelTest {
             savedVocabularyRepository = savedVocabularyRepository,
             completionRepository = completionRepository
         )
+    }
+
+    @Test
+    fun automaticStartIsConsumedOnceAcrossRouteRecreation() = runTest {
+        assertTrue(viewModel.consumeStartReady())
+        Assert.assertFalse(viewModel.consumeStartReady())
+        Assert.assertFalse(viewModel.uiState.value.isExiting)
+        Assert.assertFalse(viewModel.uiState.value.isStartReady)
     }
 
     @Test
@@ -159,7 +175,7 @@ class CallViewModelTest {
     }
 
     @Test
-    fun callEndedNullResultWhenAiServiceThrowsExceptionStillSavesAttemptWithNullResult() = runTest {
+    fun callEndedWhenAiServiceThrowsKeepsTheCompletedAttemptPending() = runTest {
         viewModel.startCall(trainingContext())
 
         sessionStateFlow.value = CallSessionState(
@@ -175,20 +191,11 @@ class CallViewModelTest {
 
         coEvery { speakingAssessmentRepository.evaluate(any()) } throws RuntimeException("AI evaluation timeout")
 
-        val attemptSlot = slot<PracticeCompletion>()
-        coEvery { historyRepository.saveCompletedPractice(any(), capture(attemptSlot)) } returns Result.success(Unit)
-
         finishCall(isNetworkError = false)
-        advanceUntilIdle()
+        runCurrent()
 
-        coVerify(exactly = 1) { historyRepository.saveCompletedPractice(any(), any()) }
-        val savedAttempt = attemptSlot.captured.attempt
-        assertEquals("cafe_ordering", savedAttempt.scenarioId)
-        assertEquals(PracticeType.TRAINING_UNIT, savedAttempt.practiceType)
-        assertNull(savedAttempt.result)
-        assertNull(savedAttempt.criteriaResult)
-        assertNull(savedAttempt.feedbackSummary)
-        assertEquals(1, savedAttempt.transcripts.size)
+        coVerify(exactly = 1) { speakingAssessmentRepository.evaluate(any()) }
+        coVerify(exactly = 0) { historyRepository.saveCompletedPractice(any(), any()) }
     }
 
     @Test
@@ -351,6 +358,7 @@ class CallViewModelTest {
 
     @Test
     fun lateVocabularySaveDoesNotChangeTheNewEntry() = runTest {
+        viewModel.startCall(CallActivityContext.FreePractice(testScenario))
         val earlierSave = CompletableDeferred<Result<VocabularySaveResult>>()
         val currentSave = CompletableDeferred<Result<VocabularySaveResult>>()
         coEvery { dictionaryRepository.lookUp(any(), any()) } coAnswers {

@@ -8,5 +8,7 @@ data class ScenarioCatalogUiState(
     val presentation: ScenarioCatalogPresentation = ScenarioCatalogPresentation.POPULATED,
     val categories: List<ContentFilterUiState> = emptyList(),
     val selectedCategoryId: String = "",
-    val scenarios: List<ScenarioItemUiState> = emptyList()
+    val scenarios: List<ScenarioItemUiState> = emptyList(),
+    val isRefreshing: Boolean = false,
+    val hasRefreshError: Boolean = false
 )

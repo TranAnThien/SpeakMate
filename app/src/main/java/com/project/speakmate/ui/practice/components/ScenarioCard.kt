@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -33,25 +34,20 @@ fun ScenarioCard(scenario: ScenarioItemUiState, onSelectScenario: () -> Unit, mo
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(DesignColor.Surface)
         .clickable(onClick = onSelectScenario).padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        val imageUrl = scenario.imageUrl
-        val imageRes = scenario.imageRes
-        if (!imageUrl.isNullOrEmpty()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
-            )
-        } else if (imageRes != null) {
-            Image(painterResource(imageRes), null, Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
-        } else {
-            Spacer(Modifier.size(72.dp))
-        }
+        com.project.speakmate.ui.components.ScenarioImage(scenario.imageUrl, Modifier.size(72.dp), scenario.imageRes, isCompact = true)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(scenario.categoryLabel, style = DesignTypography.Label, color = DesignColor.Primary)
-            Text(scenario.title, style = DesignTypography.Title, color = DesignColor.Text)
-            Text(scenario.roleLabel.default(stringResource(R.string.practice_default_role)), style = DesignTypography.Detail, color = DesignColor.Primary)
-            Text(scenario.description, style = DesignTypography.Detail, color = DesignColor.Muted)
+            Text(scenario.title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = DesignTypography.Title, color = DesignColor.Text)
+            Text(scenario.description, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = DesignTypography.Detail, color = DesignColor.Muted)
+            val level = scenario.suggestedLevel
+            val minutes = scenario.estimatedDurationMinutes
+            val metadata = when {
+                level != null && minutes != null -> pluralStringResource(R.plurals.practice_level_duration, minutes, level.name, minutes)
+                level != null -> level.name
+                minutes != null -> pluralStringResource(R.plurals.practice_duration_minutes, minutes, minutes)
+                else -> ""
+            }
+            if (metadata.isNotBlank()) Text(metadata, style = DesignTypography.Caption, color = DesignColor.Primary)
+
         }
         Icon(painterResource(R.drawable.ic_content_chevron), null, Modifier.size(20.dp), tint = DesignColor.Muted)
     }

@@ -58,7 +58,9 @@ class AudioSessionManager(
     private var playbackJob: Job? = null
     @Volatile
     private var isPlaying = false
+    @Volatile
     private var isMicrophoneSilenced = false
+    val isMicrophoneBlocked: Boolean get() = isMicrophoneSilenced
     private var isRecordingCallbackRegistered = false
     private var originalAudioMode = AudioManager.MODE_NORMAL
 

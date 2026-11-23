@@ -12,5 +12,6 @@ data class TrainingGoalUiState(
     val status: TrainingProgressStatus = TrainingProgressStatus.LOCKED,
     val isExpanded: Boolean = false,
     val units: List<TrainingUnitUiState> = emptyList(),
-    val order: Int = 0
+    val order: Int = 0,
+    val isConfigured: Boolean = true
 )

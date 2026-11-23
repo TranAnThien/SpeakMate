@@ -3,7 +3,7 @@ package com.project.speakmate.data.audio
 import java.io.File
 import java.util.UUID
 
-class AssessmentAudioFileProvider(private val directory: File) {
+class AssessmentAudioFileProvider(private val directory: File, private val legacyDirectory: File? = null) {
     companion object {
         private const val EXTENSION = ".wav"
         private const val SEPARATOR = "_"
@@ -11,7 +11,6 @@ class AssessmentAudioFileProvider(private val directory: File) {
     }
 
     private val processId = UUID.randomUUID().toString()
-
     fun createAudioId(): String = UUID.randomUUID().toString()
 
     fun openRecorder(audioId: String): AssessmentAudioRecorder {
@@ -20,20 +19,27 @@ class AssessmentAudioFileProvider(private val directory: File) {
         return AssessmentAudioRecorder(getOwnedFile(audioId))
     }
 
+    @Synchronized
     fun getAudioFile(audioId: String): File? {
         if (!isValidId(audioId)) return null
         val file = getOwnedFile(audioId)
         return file.takeIf { it.isFile && it.length() > 0L }
     }
 
+    @Synchronized
     fun deleteAudio(audioId: String) {
         if (!isValidId(audioId)) return
         val file = getOwnedFile(audioId)
-        if (!file.isFile) return
-        check(!file.exists() || file.delete())
+        if (file.isFile) check(!file.exists() || file.delete())
     }
 
+    @Synchronized
     fun clearPreviousProcessFiles() {
+        legacyDirectory?.let { legacy ->
+            legacy.listFiles()?.filter { file -> file.isFile && file.canonicalFile.parentFile == legacy.canonicalFile &&
+                file.name.endsWith(EXTENSION) && file.name.removeSuffix(EXTENSION).split(SEPARATOR).let { parts -> parts.size == FILE_NAME_PARTS && parts.all(::isValidId) }
+            }?.forEach { check(it.delete() || !it.exists()) }
+        }
         val files = directory.listFiles() ?: return
         for (file in files) {
             if (!file.isFile || file.canonicalFile.parentFile != directory.canonicalFile) continue

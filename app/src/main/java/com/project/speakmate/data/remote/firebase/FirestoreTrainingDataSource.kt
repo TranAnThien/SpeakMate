@@ -1,5 +1,6 @@
 package com.project.speakmate.data.remote.firebase
 
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.data.remote.firebase.FirestoreCollection
@@ -13,17 +14,17 @@ class FirestoreTrainingDataSource(private val firestore: FirebaseFirestore) {
     private val units get() = firestore.collection(FirestoreCollection.TRAINING_UNITS)
     private val assessments get() = firestore.collection(FirestoreCollection.GOAL_ASSESSMENTS)
 
-    suspend fun getTrainingPath(level: SpeakingLevel): DocumentSnapshot =
-        paths.document(level.name).get().await().required("Training path ${level.name}")
+    suspend fun getTrainingPath(level: SpeakingLevel, requireServer: Boolean = false): DocumentSnapshot =
+        paths.document(level.name).get(if (requireServer) Source.SERVER else Source.DEFAULT).await().required("Training path ${level.name}")
 
-    suspend fun getTrainingGoal(goalId: String): DocumentSnapshot =
-        goals.document(goalId).get().await().required("Training goal $goalId")
+    suspend fun getTrainingGoal(goalId: String, requireServer: Boolean = false): DocumentSnapshot =
+        goals.document(goalId).get(if (requireServer) Source.SERVER else Source.DEFAULT).await().required("Training goal $goalId")
 
-    suspend fun getTrainingUnit(unitId: String): DocumentSnapshot =
-        units.document(unitId).get().await().required("Training unit $unitId")
+    suspend fun getTrainingUnit(unitId: String, requireServer: Boolean = false): DocumentSnapshot =
+        units.document(unitId).get(if (requireServer) Source.SERVER else Source.DEFAULT).await().required("Training unit $unitId")
 
-    suspend fun getAssessment(assessmentId: String): DocumentSnapshot =
-        assessments.document(assessmentId).get().await().required("Goal assessment $assessmentId")
+    suspend fun getAssessment(assessmentId: String, requireServer: Boolean = false): DocumentSnapshot =
+        assessments.document(assessmentId).get(if (requireServer) Source.SERVER else Source.DEFAULT).await().required("Goal assessment $assessmentId")
 
     suspend fun getVocabulary(id: String): DocumentSnapshot =
         firestore.collection(FirestoreCollection.VOCABULARIES).document(id).get().await().required("Vocabulary $id")

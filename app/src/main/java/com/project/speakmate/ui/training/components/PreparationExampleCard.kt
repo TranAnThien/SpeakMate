@@ -24,17 +24,23 @@ import com.project.speakmate.ui.training.state.PreparationExampleUiState
 fun PreparationExampleCard(
     example: PreparationExampleUiState,
     onPlayExample: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playback: com.project.speakmate.domain.model.PronunciationPlaybackState = com.project.speakmate.domain.model.PronunciationPlaybackState()
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.ExampleSurface, RoundedCornerShape(16.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(example.sentence, style = DesignTypography.Detail, color = DesignColor.Text)
+        if (playback.text == example.sentence && playback.status == com.project.speakmate.domain.model.PronunciationState.FAILED) Text(
+            stringResource(R.string.call_pronunciation_unavailable),
+            style = DesignTypography.Caption,
+            color = DesignColor.Error
+        )
         Text(example.translation, style = DesignTypography.Detail, color = DesignColor.Muted)
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.preparation_listen_example), style = DesignTypography.Detail, color = DesignColor.Primary,
                 modifier = Modifier.weight(1f).clickable(onClick = onPlayExample).padding(vertical = 14.dp))
-            PreparationAudioButton(onPlayExample)
+            PreparationAudioButton(onPlayExample, text = example.sentence, playback = playback)
         }
     }
 }

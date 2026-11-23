@@ -11,16 +11,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import com.project.speakmate.R
-import com.project.speakmate.domain.model.SenderType
-import com.project.speakmate.ui.history.state.SessionMessageUiState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.project.speakmate.R
+import com.project.speakmate.domain.model.SenderType
+import com.project.speakmate.ui.components.TranscriptMessageUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
-fun SessionTranscriptMessage(message: SessionMessageUiState, modifier: Modifier = Modifier) {
+fun SessionTranscriptMessage(message: TranscriptMessageUiState, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(when {

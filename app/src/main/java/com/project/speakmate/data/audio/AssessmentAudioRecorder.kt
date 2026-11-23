@@ -22,6 +22,39 @@ class AssessmentAudioRecorder(private val file: File) {
         private const val READ_WRITE_MODE = "rw"
         private const val BYTES_PER_SECOND = AppConstant.CALL_INPUT_SAMPLE_RATE * AppConstant.PCM16_BYTES_PER_SAMPLE * CHANNELS
         private const val MAX_AUDIO_BYTES = MAX_ASSESSMENT_AUDIO_MILLIS * BYTES_PER_SECOND / AppConstant.MILLIS_PER_SECOND
+
+        fun getAudioBytes(file: File): ByteArray? {
+            val size = file.length()
+            val payloadBytes = size - HEADER_BYTES
+            if (payloadBytes <= 0L || payloadBytes > MAX_AUDIO_BYTES || payloadBytes % AppConstant.PCM16_BYTES_PER_SAMPLE != 0L) return null
+            return file.inputStream().use { stream ->
+                val bytes = ByteArray(size.toInt())
+                var offset = 0
+                while (offset < bytes.size) {
+                    val count = stream.read(bytes, offset, bytes.size - offset)
+                    if (count <= 0) return null
+                    offset += count
+                }
+                if (stream.read() != -1 || !createHeader(payloadBytes).contentEquals(bytes.copyOfRange(0, HEADER_BYTES))) return null
+                bytes
+            }
+        }
+
+        private fun createHeader(audioBytes: Long): ByteArray = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+            .put(RIFF.toByteArray(StandardCharsets.US_ASCII))
+            .putInt(RIFF_CONTENT_BYTES + audioBytes.toInt())
+            .put(WAVE.toByteArray(StandardCharsets.US_ASCII))
+            .put(FORMAT.toByteArray(StandardCharsets.US_ASCII))
+            .putInt(FORMAT_BYTES)
+            .putShort(PCM_FORMAT.toShort())
+            .putShort(CHANNELS.toShort())
+            .putInt(AppConstant.CALL_INPUT_SAMPLE_RATE)
+            .putInt(BYTES_PER_SECOND)
+            .putShort((CHANNELS * AppConstant.PCM16_BYTES_PER_SAMPLE).toShort())
+            .putShort((AppConstant.PCM16_BYTES_PER_SAMPLE * AppConstant.BITS_PER_BYTE).toShort())
+            .put(DATA.toByteArray(StandardCharsets.US_ASCII))
+            .putInt(audioBytes.toInt())
+            .array()
     }
 
     private var output: RandomAccessFile? = null
@@ -116,19 +149,5 @@ class AssessmentAudioRecorder(private val file: File) {
         }
     }
 
-    private fun createHeader(): ByteArray = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
-        .put(RIFF.toByteArray(StandardCharsets.US_ASCII))
-        .putInt(RIFF_CONTENT_BYTES + audioBytes.toInt())
-        .put(WAVE.toByteArray(StandardCharsets.US_ASCII))
-        .put(FORMAT.toByteArray(StandardCharsets.US_ASCII))
-        .putInt(FORMAT_BYTES)
-        .putShort(PCM_FORMAT.toShort())
-        .putShort(CHANNELS.toShort())
-        .putInt(AppConstant.CALL_INPUT_SAMPLE_RATE)
-        .putInt(BYTES_PER_SECOND)
-        .putShort((CHANNELS * AppConstant.PCM16_BYTES_PER_SAMPLE).toShort())
-        .putShort((AppConstant.PCM16_BYTES_PER_SAMPLE * AppConstant.BITS_PER_BYTE).toShort())
-        .put(DATA.toByteArray(StandardCharsets.US_ASCII))
-        .putInt(audioBytes.toInt())
-        .array()
+    private fun createHeader(): ByteArray = Companion.createHeader(audioBytes)
 }

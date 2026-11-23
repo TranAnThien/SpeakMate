@@ -21,7 +21,8 @@ import com.project.speakmate.ui.training.state.PreparationGrammarUiState
 fun PreparationGrammarCard(
     grammar: PreparationGrammarUiState,
     onPlayExample: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playback: com.project.speakmate.domain.model.PronunciationPlaybackState = com.project.speakmate.domain.model.PronunciationPlaybackState()
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -35,7 +36,7 @@ fun PreparationGrammarCard(
         val examples = grammar.examples.ifEmpty { listOf(grammar.example).filter { it.sentence.isNotBlank() } }
         examples.forEach { example ->
             val onPlay = remember(example.sentence, onPlayExample) { { onPlayExample(example.sentence) } }
-            PreparationExampleCard(example, onPlay)
+            PreparationExampleCard(example, onPlay, playback = playback)
         }
         PreparationNote(grammar.usageNote)
     }

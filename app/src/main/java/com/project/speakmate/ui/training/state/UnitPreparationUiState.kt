@@ -15,7 +15,12 @@ data class UnitPreparationUiState(
     val grammar: List<PreparationGrammarUiState> = emptyList(),
     val sentencePatterns: List<PreparationPatternUiState> = emptyList(),
     val activity: TrainingActivityScenario? = null,
-    val isLocked: Boolean = false
+    val isLocked: Boolean = false,
+    val isReplay: Boolean = false,
+    val isStarting: Boolean = false,
+    val isStartReady: Boolean = false,
+    val hasStartError: Boolean = false,
+    val playback: com.project.speakmate.domain.model.PronunciationPlaybackState = com.project.speakmate.domain.model.PronunciationPlaybackState()
 ) {
     val canStartRoleplay: Boolean get() = status == TrainingContentStatus.CONTENT && activity != null
 }

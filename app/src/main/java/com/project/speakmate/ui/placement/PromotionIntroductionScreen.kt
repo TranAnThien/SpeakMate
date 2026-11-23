@@ -1,5 +1,6 @@
 package com.project.speakmate.ui.placement
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,32 +46,28 @@ fun PromotionIntroductionScreen(
         BackAppBar(stringResource(R.string.promotion_header), onBack)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState).padding(horizontal = 24.dp)
             .padding(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(painterResource(R.drawable.img_placement_mascot), null, Modifier.size(80.dp))
-                Spacer(Modifier.height(12.dp))
-                Text(state.title, style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
-                Text(state.description, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+            if (state.currentLevelLabel.isNotBlank()) Text(stringResource(R.string.assessment_completed_path, state.currentLevelLabel),
+                style = DesignTypography.Label, color = DesignColor.Muted)
+            Text(state.title, style = DesignTypography.Heading, color = DesignColor.Text)
+            Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp))
+                .border(1.dp, DesignColor.Border, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.assessment_each_call_heading), style = DesignTypography.Title, color = DesignColor.Text)
+                Text(state.description, style = DesignTypography.Body, color = DesignColor.Muted)
+            }
+            Column(Modifier.fillMaxWidth().background(DesignColor.SurfaceContainer, RoundedCornerShape(16.dp)).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(state.conditionTitle, style = DesignTypography.Title, color = DesignColor.Text)
+                Text(state.conditionDescription, style = DesignTypography.Body, color = DesignColor.Muted)
+                Text(stringResource(R.string.placement_result_disclaimer), style = DesignTypography.Detail, color = DesignColor.Muted)
             }
             PromotionStepsCard(state.steps)
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.promotion_condition_heading), style = DesignTypography.Title, color = DesignColor.Text)
-                Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(state.conditionTitle, style = DesignTypography.Title, color = DesignColor.Text)
-                    Text(state.conditionDescription, style = DesignTypography.Detail, color = DesignColor.Muted)
-                }
-            }
-            Column(Modifier.fillMaxWidth().background(DesignColor.SecondaryButton, RoundedCornerShape(16.dp)).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.promotion_before_start), style = DesignTypography.Title, color = DesignColor.Text)
-                Text(state.note, style = DesignTypography.Detail, color = DesignColor.Primary)
-            }
         }
         Column(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             PrimaryButton(stringResource(R.string.placement_start), onStartAssessment)
-            SecondaryButton(stringResource(R.string.goal_assessment_return_to_path), onReturnToPath)
+            TextButton(onClick = onReturnToPath, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.goal_assessment_return_to_path), style = DesignTypography.Button)
+            }
         }
     }
 }

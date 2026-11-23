@@ -21,7 +21,7 @@ import com.project.speakmate.domain.model.TranscriptMessage
 
 object PracticeCompletionTestFixtures {
     const val USER_ID = "user-1"
-    const val AUDIO_ID = "audio"
+    const val AUDIO_ID = "4309885b-f8e5-4f82-a75b-19e237f07628"
     const val START_MILLIS = 1_000L
     const val END_MILLIS = 8_000L
     const val EPOCH_START_MILLIS = 1_700_000_000_000L

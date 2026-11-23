@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,24 +43,26 @@ fun CallControls(
     onEndCall: () -> Unit,
     onOpenTranscript: () -> Unit,
     modifier: Modifier = Modifier,
-    isTranscriptAvailable: Boolean = true
+    isTranscriptAvailable: Boolean = true,
+    isEnabled: Boolean = true
 ) {
     Row(modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 9.dp,
-        bottom = if (isConnecting) 45.dp else if (isTranscriptAvailable) 37.dp else 42.dp),
+        bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(if (isTranscriptAvailable) 12.dp else 24.dp, Alignment.CenterHorizontally)) {
         if (!isConnecting) CallControlItem(
             stringResource(if (isMuted) R.string.call_unmute else R.string.call_mute),
             if (isMuted) R.drawable.ic_placement_microphone else R.drawable.ic_placement_microphone_off,
             if (isMuted) DesignColor.IconBlue else DesignColor.Surface, DesignColor.Text, 56.dp, 24.dp, onToggleMute,
-            if (isTranscriptAvailable) Modifier.weight(1f) else Modifier.size(width = 108.dp, height = 110.dp),
+            if (isTranscriptAvailable) Modifier.weight(1f) else Modifier.width(108.dp),
             isToggled = isMuted,
-            toggleDescription = stringResource(R.string.call_mute)
+            toggleDescription = stringResource(R.string.call_mute),
+            isEnabled = isEnabled
         )
         CallControlItem(stringResource(if (isConnecting) R.string.call_cancel_connection else R.string.call_end),
             R.drawable.ic_call_end, DesignColor.CallDanger, DesignColor.Surface, 72.dp, 36.dp, onEndCall,
-            if (isConnecting || !isTranscriptAvailable) Modifier.size(width = 108.dp, height = 110.dp) else Modifier.weight(1f))
+            if (isConnecting || !isTranscriptAvailable) Modifier.width(108.dp) else Modifier.weight(1f), isEnabled = isEnabled)
         if (!isConnecting && isTranscriptAvailable) CallControlItem(stringResource(R.string.call_transcript), R.drawable.ic_call_transcript,
-            DesignColor.Surface, DesignColor.Text, 56.dp, 24.dp, onOpenTranscript, Modifier.weight(1f))
+            DesignColor.Surface, DesignColor.Text, 56.dp, 24.dp, onOpenTranscript, Modifier.weight(1f), isEnabled = isEnabled)
     }
 }
 
@@ -74,10 +77,11 @@ private fun CallControlItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isToggled: Boolean? = null,
-    toggleDescription: String? = null
+    toggleDescription: String? = null,
+    isEnabled: Boolean = true
 ) {
-    val actionModifier = if (isToggled == null) modifier.clickable(onClick = onClick)
-    else modifier.toggleable(value = isToggled, role = Role.Switch, onValueChange = { onClick() })
+    val actionModifier = if (isToggled == null) modifier.clickable(enabled = isEnabled, onClick = onClick)
+    else modifier.toggleable(value = isToggled, enabled = isEnabled, role = Role.Switch, onValueChange = { onClick() })
     val labeledModifier = if (toggleDescription == null) actionModifier
     else actionModifier.semantics { contentDescription = toggleDescription }
     Column(labeledModifier, horizontalAlignment = Alignment.CenterHorizontally) {

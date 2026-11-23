@@ -40,7 +40,7 @@ class SavedVocabularyRepositoryImplTest {
         every { auth.currentUser } returns user
         every { user.uid } returns "uid123"
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()))
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()), backgroundScope)
         val result = repo.saveVocabulary(makeItem(word = "   ", mean = "meaning"))
 
         assertTrue(result.isFailure)
@@ -55,7 +55,7 @@ class SavedVocabularyRepositoryImplTest {
         every { auth.currentUser } returns user
         every { user.uid } returns "uid123"
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()))
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()), backgroundScope)
         val result = repo.saveVocabulary(makeItem(word = "run", mean = "   "))
 
         assertTrue(result.isFailure)
@@ -67,7 +67,7 @@ class SavedVocabularyRepositoryImplTest {
         val firestore = mockk<FirebaseFirestore>()
         every { auth.currentUser } returns null
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()))
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()), backgroundScope)
         val result = repo.saveVocabulary(makeItem("hello", "xin chào"))
 
         assertTrue(result.isFailure)
@@ -82,7 +82,7 @@ class SavedVocabularyRepositoryImplTest {
         val firestore = mockk<FirebaseFirestore>()
         every { auth.currentUser } returns null
 
-        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()))
+        val repo = SavedVocabularyRepositoryImpl(firestore, FirebaseAuthDataSource(auth, mockk()), backgroundScope)
         val result = repo.removeVocabulary("hello", "noun")
 
         assertTrue(result.isFailure)

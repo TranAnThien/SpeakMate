@@ -15,7 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.PrimaryButton
@@ -31,7 +33,8 @@ fun UnitResultFooter(
     onReviewLesson: () -> Unit,
     modifier: Modifier = Modifier,
     hasSaveFailed: Boolean = false,
-    onRetrySave: () -> Unit = {}
+    onRetrySave: () -> Unit = {},
+    isActionEnabled: Boolean = true
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -43,12 +46,12 @@ fun UnitResultFooter(
             hasSaveFailed -> onRetrySave
             isPassed -> onContinuePath
             else -> onRetryUnit
-        })
+        }, enabled = isActionEnabled)
         Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(16.dp))
-            .background(DesignColor.SecondaryButton).clickable(onClick = if (isPassed) onReplayUnit else onReviewLesson)
+            .background(DesignColor.SecondaryButton).clickable(enabled = isActionEnabled, role = Role.Button, onClick = if (isPassed) onReplayUnit else onReviewLesson)
             .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
             Text(stringResource(if (isPassed) R.string.unit_result_replay else R.string.unit_result_review),
-                style = DesignTypography.Button, color = DesignColor.Primary, textAlign = TextAlign.Center)
+                style = DesignTypography.Button, color = DesignColor.Primary, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }

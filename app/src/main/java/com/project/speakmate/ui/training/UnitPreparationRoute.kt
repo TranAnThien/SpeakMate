@@ -3,8 +3,15 @@ package com.project.speakmate.ui.training
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import com.project.speakmate.ui.components.BackAppBar
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -22,18 +29,26 @@ fun UnitPreparationRoute(
     onBack: () -> Unit,
     onStartRoleplay: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: UnitPreparationViewModel = hiltViewModel()
+    viewModel: UnitPreparationViewModel = hiltViewModel(),
+    noticeContent: @Composable () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val startRoleplay by rememberUpdatedState(onStartRoleplay)
+    LaunchedEffect(state.isStartReady, viewModel, lifecycleOwner) {
+        if (state.isStartReady) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            if (viewModel.consumeStartReady()) startRoleplay()
+        }
+    }
     LaunchedEffect(unitId, viewModel) { viewModel.getPreparation(unitId) }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.stopPronunciation() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.stopPronunciation(); viewModel.cancelStart() }
     if (state.status == TrainingContentStatus.CONTENT) {
         val vocabularyTitle = stringResource(R.string.preparation_vocabulary)
         val grammarTitle = stringResource(R.string.preparation_grammar)
         val patternsTitle = stringResource(R.string.preparation_patterns)
-        val vocabularyCount = stringResource(R.string.preparation_vocabulary_count, state.vocabulary.size)
-        val grammarCount = stringResource(R.string.preparation_grammar_count, state.grammar.size)
-        val patternsCount = stringResource(R.string.preparation_patterns_count, state.sentencePatterns.size)
+        val vocabularyCount = pluralStringResource(R.plurals.preparation_vocabulary_items, state.vocabulary.size, state.vocabulary.size)
+        val grammarCount = pluralStringResource(R.plurals.preparation_grammar_items, state.grammar.size, state.grammar.size)
+        val patternsCount = pluralStringResource(R.plurals.preparation_pattern_items, state.sentencePatterns.size, state.sentencePatterns.size)
         val contextLabel = stringResource(R.string.preparation_unit_context)
         val displayState = remember(state, vocabularyTitle, grammarTitle, patternsTitle, vocabularyCount, grammarCount, patternsCount, contextLabel) {
             state.copy(
@@ -49,27 +64,27 @@ fun UnitPreparationRoute(
             state = displayState,
             onBack = onBack,
             onSelectSection = viewModel::selectSection,
-            onStartRoleplay = {
-                if (viewModel.uiState.value.canStartRoleplay) {
-                    viewModel.stopPronunciation()
-                    onStartRoleplay()
-                }
-            },
+            onStartRoleplay = viewModel::prepareStart,
             onPlayWord = viewModel::playText,
             onPlayPattern = viewModel::playText,
             onPlayExample = viewModel::playText,
-            modifier = modifier
+            modifier = modifier,
+            noticeContent = noticeContent
         )
     } else {
+        Column(modifier.fillMaxSize()) {
+        BackAppBar(stringResource(R.string.preparation_title), onBack)
         TrainingUnavailableContent(
             isLoading = state.status == TrainingContentStatus.LOADING,
-            onRetry = viewModel::retry,
+            onRetry = if (state.isLocked) onBack else viewModel::retry,
             errorMessage = if (state.isLocked) stringResource(R.string.preparation_unit_locked) else "",
             loadingTitleRes = R.string.preparation_loading_title,
             loadingDescriptionRes = R.string.preparation_loading_description,
             errorTitleRes = R.string.preparation_error_title,
             errorDescriptionRes = R.string.preparation_error_description,
-            modifier = modifier
+            modifier = Modifier.weight(1f)
         )
+        noticeContent()
+        }
     }
 }

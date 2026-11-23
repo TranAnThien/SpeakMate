@@ -42,6 +42,8 @@ class CallSessionMediaAdapter @Inject constructor(
 
     override fun finishAssessmentRecording(outcome: CallOutcome) = assessmentRecording.finishAssessmentRecording(outcome)
 
+    override fun isMicrophoneSilenced(): Boolean = audio?.isMicrophoneBlocked != false
+
     override fun hasMicrophonePermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
@@ -101,9 +103,9 @@ class CallSessionMediaAdapter @Inject constructor(
         audio?.setPlaybackPaused(isPaused)
     }
 
-    override fun speakPronunciation(text: String, onFinished: (Boolean) -> Unit) {
+    override fun speakPronunciation(text: String, onStarted: () -> Unit, onFinished: (Boolean) -> Unit) {
         val player = pronunciation ?: PronunciationPlayer(context).also { pronunciation = it }
-        player.speak(text, onFinished)
+        player.speak(text, onStarted, onFinished)
     }
 
     override fun stopPronunciation() {

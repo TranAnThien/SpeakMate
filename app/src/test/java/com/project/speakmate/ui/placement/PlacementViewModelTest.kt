@@ -1,6 +1,8 @@
 package com.project.speakmate.ui.placement
 
 import androidx.lifecycle.ViewModelStore
+import com.project.speakmate.data.repository.AssessmentGradingRepositoryImpl
+import com.project.speakmate.data.session.AssessmentGradingManager
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
@@ -11,6 +13,7 @@ import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.model.TrainingStage
+import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AssessmentTaskRepository
 import com.project.speakmate.domain.repository.ScenarioRepository
 import com.project.speakmate.domain.rules.PlacementRules
@@ -23,6 +26,8 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import java.time.Clock
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -46,6 +51,7 @@ class PlacementViewModelTest {
         private const val NOW_MILLIS = 2_000L
         private const val AUDIO_ID = "audio"
         private const val VIEW_MODEL_KEY = "placement"
+        private const val OTHER_USER_ID = "other-user"
         private const val NAVIGATION_WAIT_MILLIS = 1_001L
     }
 
@@ -53,7 +59,7 @@ class PlacementViewModelTest {
     val mainDispatcherRule = MainDispatcherRule(StandardTestDispatcher())
 
     private val auth = FakeAuthRepository(PlacementTestFixtures.USER_ID)
-    private val users = FakeUserRepository()
+    private val users = FakeUserRepository(User(PlacementTestFixtures.USER_ID, "Sample", "sample@example.com", ""))
     private val checkpoints = FakePlacementCheckpointRepository(PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION))
     private val assessments = FakeSpeakingAssessmentRepository(PlacementTestFixtures.getOutcome(AssessmentResult.FAIL))
     private val tasks = mockk<AssessmentTaskRepository>()
@@ -93,14 +99,14 @@ class PlacementViewModelTest {
         viewModel.resume()
         advanceUntilIdle()
         viewModel.submitCallResult(completedSession())
-        advanceUntilIdle()
+        runCurrent()
         val result = viewModel.uiState.value.result
 
         assertTrue(viewModel.uiState.value.saveFailed)
         assertNotNull(checkpoints.saved?.pendingResult)
         users.saveFailure = null
         viewModel.confirmResultSaved()
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(1, assessments.evaluations)
         assertEquals(2, users.saveCalls)
@@ -206,7 +212,9 @@ class PlacementViewModelTest {
 
         assertEquals(0, assessments.evaluations)
         assertEquals(0, users.saveCalls)
-        assertEquals(PlacementStep.INITIAL_A2, checkpoints.saved?.step)
+        assertNull(checkpoints.saved)
+        assertEquals(PlacementPhase.INTRODUCTION, viewModel.uiState.value.phase)
+        assertEquals(com.project.speakmate.domain.model.PracticeRecoveryReason.ASSESSMENT_EXPIRED, viewModel.uiState.value.recoveryProblem)
         assertEquals(listOf(AUDIO_ID), assessments.clearedAudioIds)
     }
 
@@ -227,7 +235,9 @@ class PlacementViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, users.saveCalls)
-        assertEquals(PlacementStep.INITIAL_A2, checkpoints.saved?.step)
+        assertNull(checkpoints.saved)
+        assertEquals(PlacementPhase.INTRODUCTION, viewModel.uiState.value.phase)
+        assertEquals(com.project.speakmate.domain.model.PracticeRecoveryReason.ASSESSMENT_EXPIRED, viewModel.uiState.value.recoveryProblem)
     }
 
     @Test
@@ -282,13 +292,53 @@ class PlacementViewModelTest {
         assertEquals(0, users.saveCalls)
     }
 
+    @Test
+    fun assessedAccountRestoredWithoutAResultCannotStartInitialPlacement() = runTest {
+        users.setUser(User(PlacementTestFixtures.USER_ID, "Sample", "sample@example.com", "", SpeakingLevel.A2))
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        assertEquals(PlacementPhase.ALREADY_ASSESSED, viewModel.uiState.value.phase)
+        assertNull(checkpoints.saved)
+        viewModel.start()
+        viewModel.skip()
+        advanceUntilIdle()
+        assertEquals(PlacementPhase.ALREADY_ASSESSED, viewModel.uiState.value.phase)
+        assertEquals(0, users.skipCalls)
+    }
+
+    @Test
+    fun alreadyAssessedProfileIsNotOverwrittenByARestoredPendingInitialResult() = runTest {
+        users.setUser(User(PlacementTestFixtures.USER_ID, "Sample", "sample@example.com", "", SpeakingLevel.A2))
+        val criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
+        checkpoints.saved = requireNotNull(checkpoints.saved).copy(
+            pendingResult = PlacementResult(SpeakingLevel.A1, criteria, NOW_MILLIS, AssessmentResult.PASS)
+        )
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        assertEquals(PlacementPhase.ALREADY_ASSESSED, viewModel.uiState.value.phase)
+        assertEquals(0, users.saveCalls)
+        assertNull(checkpoints.saved)
+    }
+
+    @Test
+    fun changingAccountsLoadsTheObservedOwnerWithoutStickingInLoading() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        users.setUser(User(OTHER_USER_ID, "Sample", "sample@example.com", ""))
+        auth.signedInUserId.value = OTHER_USER_ID
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.phase != PlacementPhase.LOADING)
+        assertEquals(0, users.saveCalls)
+    }
+
     private fun createViewModel(shouldConfigureClock: Boolean = true): PlacementViewModel {
         if (shouldConfigureClock) coEvery { clock.millis() } returns NOW_MILLIS
         coEvery { tasks.getAssessmentTasks() } returns PlacementTestFixtures.getTasks()
-        coEvery { scenarios.getScenario(any()) } answers {
+        coEvery { scenarios.getScenario(any(), requireServer = true) } answers {
             Scenario(firstArg(), "Scenario", "Description", "Prompt")
         }
-        return PlacementViewModel(auth, tasks, checkpoints, assessments, scenarios, clock, users)
+        return PlacementViewModel(auth, tasks, checkpoints, AssessmentGradingRepositoryImpl(AssessmentGradingManager(
+            CoroutineScope(Dispatchers.Main), assessments, auth, clock)), scenarios, clock, users)
     }
 
     private fun completedSession() = CallSessionState(

@@ -48,7 +48,7 @@ fun CallFailureContent(
             Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
                 .padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 36.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    Image(painterResource(R.drawable.img_call_error), null, Modifier.size(200.dp))
+                    CallAvatar(com.project.speakmate.ui.call.state.CallPresentation.FAILED, Modifier.size(200.dp), isConnectionFailure = isConnectionFailure)
                     Text(stringResource(R.string.call_failure_title), style = DesignTypography.Heading, color = DesignColor.Primary, textAlign = TextAlign.Center)
                     Text(description, style = DesignTypography.Body, color = DesignColor.Text, textAlign = TextAlign.Center)
                     if (isConnectionFailure) {

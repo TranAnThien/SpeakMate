@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
@@ -24,20 +26,16 @@ import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun PromotionStepsCard(steps: List<PromotionStepUiState>, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.promotion_steps_heading), style = DesignTypography.Title, color = DesignColor.Text)
-        steps.forEachIndexed { index, step ->
-            key(index, step.id) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(24.dp).background(DesignColor.SecondaryButton, CircleShape), contentAlignment = Alignment.Center) {
-                        Text(step.numberLabel, style = DesignTypography.SectionLabel, color = DesignColor.Primary)
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(step.text, style = DesignTypography.Detail, color = DesignColor.Text)
-                        Text(stringResource(R.string.promotion_step_caption, step.number), style = DesignTypography.Detail, color = DesignColor.Muted)
-                    }
+        steps.distinctBy { it.id }.forEach { step ->
+            key(step.id) {
+                Row(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painterResource(R.drawable.ic_training_flag), null, Modifier.size(24.dp), tint = DesignColor.Tertiary)
+                    Text(step.text, style = DesignTypography.Body, color = DesignColor.Text, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.promotion_step_caption, step.number), style = DesignTypography.Badge, color = DesignColor.OnWarningContainer,
+                        modifier = Modifier.background(DesignColor.WarningContainer, RoundedCornerShape(12.dp)).padding(8.dp))
                 }
             }
         }

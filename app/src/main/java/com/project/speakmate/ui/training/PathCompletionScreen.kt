@@ -14,17 +14,16 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.BackAppBar
+import com.project.speakmate.ui.components.AnimatedMascot
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.GoalAssessmentFooter
@@ -46,9 +45,7 @@ fun PathCompletionScreen(
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(80.dp).background(DesignColor.ResultSuccessSurface, RoundedCornerShape(36.dp)), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_placement_passed), null, Modifier.size(32.dp), tint = DesignColor.Success)
-                }
+                AnimatedMascot(R.raw.lottie_path_complete, R.drawable.img_training_path_complete, Modifier.size(200.dp))
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.path_completion_title, state.levelLabel), style = DesignTypography.Heading,
                     color = DesignColor.Text, textAlign = TextAlign.Center)

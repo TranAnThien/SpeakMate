@@ -1,8 +1,8 @@
 package com.project.speakmate.data.session
 
-import com.project.speakmate.data.audio.PlaybackProgress
 import com.project.speakmate.data.audio.AssessmentAudioFileProvider
 import com.project.speakmate.data.audio.AssessmentAudioRecorder
+import com.project.speakmate.data.audio.PlaybackProgress
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallInterruption
@@ -20,8 +20,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Test
 import org.junit.Rule
+import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -33,6 +33,7 @@ class CallSessionManagerTest {
         private const val RESUME_TIMEOUT_MILLIS = 4_000L
         private const val TEST_INTERVAL_MILLIS = 1_000L
         private const val EPOCH_START_MILLIS = 1_700_000_000_000L
+        private const val PRONUNCIATION_TIMEOUT_MILLIS = 10_000L
         private const val MAX_SERVER_EVENTS = 256
         private const val LONG_SPEECH_MILLIS = 1_000L
         private const val SHORT_NOISE_MILLIS = 300L
@@ -1453,6 +1454,113 @@ class CallSessionManagerTest {
             manager.close()
             runCurrent()
         }
+    }
+
+    @Test
+    fun pronunciationWaitsForTheActualStartedCallback() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        media.shouldDelayPronunciationStart = true
+        manager.playPronunciation("latte")
+        runCurrent()
+        assertEquals(PronunciationState.LOADING, manager.sessionState.value.pronunciation)
+        assertFalse(media.isUplinkEnabled)
+        media.startPronunciation()
+        runCurrent()
+        assertEquals(PronunciationState.PLAYING, manager.sessionState.value.pronunciation)
+        advanceTimeBy(PRONUNCIATION_TIMEOUT_MILLIS)
+        runCurrent()
+        assertEquals(PronunciationState.PLAYING, manager.sessionState.value.pronunciation)
+        assertEquals(0, media.pronunciationStops)
+        media.finishPronunciation(true)
+        runCurrent()
+        assertEquals(PronunciationState.IDLE, manager.sessionState.value.pronunciation)
+        assertTrue(media.isUplinkEnabled)
+        assertEquals(1, attempts.size)
+    }
+
+    @Test
+    fun pronunciationTimeoutReleasesTheHoldWithoutFailingTheCall() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        media.shouldDelayPronunciationStart = true
+        manager.playPronunciation("latte")
+        runCurrent()
+        advanceTimeBy(PRONUNCIATION_TIMEOUT_MILLIS)
+        runCurrent()
+        assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+        assertEquals(PronunciationState.FAILED, manager.sessionState.value.pronunciation)
+        assertTrue(media.isUplinkEnabled)
+        assertTrue(media.pronunciationStops > 0)
+        media.startPronunciation()
+        media.finishPronunciation(true)
+        runCurrent()
+        assertEquals(PronunciationState.FAILED, manager.sessionState.value.pronunciation)
+        assertEquals(1, attempts.size)
+    }
+
+    @Test
+    fun endingWhilePronunciationIsLoadingRejectsLateStartedCallbacks() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        media.shouldDelayPronunciationStart = true
+        manager.playPronunciation("latte")
+        runCurrent()
+        manager.endCall()
+        runCurrent()
+        val ended = manager.sessionState.value
+        media.startPronunciation()
+        media.finishPronunciation(true)
+        advanceTimeBy(PRONUNCIATION_TIMEOUT_MILLIS)
+        runCurrent()
+        assertEquals(ended, manager.sessionState.value)
+        assertEquals(CallState.ENDED, ended.state)
+        assertFalse(media.isUplinkEnabled)
+    }
+
+    @Test
+    fun microphoneRetryKeepsTheOriginalRecoveryDeadlineWhileStillBlocked() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        media.silenceMicrophone(true)
+        runCurrent()
+        advanceTimeBy(TEST_INTERVAL_MILLIS)
+        manager.resumeCall()
+        runCurrent()
+        assertEquals(CallInterruption.MICROPHONE, manager.sessionState.value.interruption)
+        advanceTimeBy(MICROPHONE_WINDOW_MILLIS - TEST_INTERVAL_MILLIS)
+        runCurrent()
+        assertEquals(CallFailure.MICROPHONE_PERMISSION, manager.sessionState.value.failure)
+        assertEquals(1, attempts.size)
+    }
+
+    @Test
+    fun microphoneRetryUsesTheDeviceSnapshotWithoutOpeningAnotherSession() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        media.silenceMicrophone(true)
+        runCurrent()
+        val startedAt = manager.sessionState.value.startedAtMillis
+        media.isMicrophoneBlocked = false
+        manager.resumeCall()
+        runCurrent()
+        assertEquals(null, manager.sessionState.value.interruption)
+        assertEquals(startedAt, manager.sessionState.value.startedAtMillis)
+        assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
+        assertTrue(media.isUplinkEnabled)
+        assertEquals(1, attempts.size)
+    }
+
+    @Test
+    fun doublePronunciationWhileLoadingStartsOneUtteranceForTheSelectedWord() = withManager { manager, attempts ->
+        val media = startActive(manager, attempts)
+        media.shouldDelayPronunciationStart = true
+        manager.playPronunciation("latte")
+        manager.playPronunciation("latte")
+        runCurrent()
+        assertEquals(listOf("latte"), media.pronouncedTexts)
+        assertEquals("latte", manager.sessionState.value.pronunciationText)
+        assertEquals(PronunciationState.LOADING, manager.sessionState.value.pronunciation)
+        manager.playPronunciation("large")
+        runCurrent()
+        assertEquals(listOf("latte", "large"), media.pronouncedTexts)
+        assertEquals("large", manager.sessionState.value.pronunciationText)
+        assertEquals(1, attempts.size)
     }
 
     private fun TestScope.startActive(manager: CallSessionManager, attempts: List<FakeCallSessionMedia>): FakeCallSessionMedia {

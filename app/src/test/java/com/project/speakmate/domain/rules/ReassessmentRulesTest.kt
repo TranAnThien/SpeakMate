@@ -34,6 +34,20 @@ class ReassessmentRulesTest {
     private val random = Random(ReassessmentTestFixtures.RANDOM_SEED)
 
     @Test
+    fun nullAtB2ConfirmationNeverPromotesOrDropsThePassedTaskRecords() {
+        val initial = start(B1)
+        val probe = (apply(initial, pass) as ReassessmentTransition.NextStep).state
+        val confirmation = (apply(probe, pass) as ReassessmentTransition.NextStep).state
+        InsufficientEvidenceReason.entries.forEach { reason ->
+            val retry = apply(confirmation, AssessmentOutcome.InsufficientEvidence(reason)) as ReassessmentTransition.RetryTask
+            assertEquals(confirmation.copy(technicalRetryCount = 1), retry.state)
+            assertEquals(B1, retry.state.currentLevel)
+            assertEquals(B2, retry.state.nextLevel)
+            assertEquals(confirmation.currentTask, retry.state.currentTask)
+        }
+    }
+
+    @Test
     fun mapsEveryLevelToItsImmediateSuccessorOrNoSuccessor() {
         assertEquals(A2, A1.getNextLevel())
         assertEquals(B1, A2.getNextLevel())

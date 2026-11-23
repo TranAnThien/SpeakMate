@@ -5,10 +5,12 @@ import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.Source
 import com.project.speakmate.domain.model.FreePractice
 import com.project.speakmate.domain.repository.ScenarioRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -27,7 +29,7 @@ class PracticeRepositoryImplTest {
 
     init {
         every { firestore.collection("freePractices") } returns collection
-        every { collection.get() } returns task
+        every { collection.get(any<Source>()) } returns task
         every { task.isComplete } returns true
         every { task.isCanceled } returns false
         every { task.exception } returns null
@@ -58,6 +60,20 @@ class PracticeRepositoryImplTest {
     fun emptyConfiguredCatalogIsAnEmptySuccess() = runTest {
         every { snapshot.documents } returns emptyList()
         assertEquals(emptyList<FreePractice>(), repository.getScenarioCatalog().getOrThrow())
+        verify(exactly = 1) { collection.get(Source.DEFAULT) }
+    }
+
+    @Test
+    fun serverCatalogUsesServerSourceAndConfirmedMetadata() = runTest {
+        every { snapshot.documents } returns emptyList()
+        every { snapshot.metadata } returns mockk {
+            every { isFromCache } returns false
+            every { hasPendingWrites() } returns false
+        }
+
+        assertEquals(emptyList<FreePractice>(), repository.getScenarioCatalog(requireServer = true).getOrThrow())
+        verify(exactly = 1) { collection.get(Source.SERVER) }
+        verify(exactly = 0) { collection.get(Source.DEFAULT) }
     }
 
     @Test

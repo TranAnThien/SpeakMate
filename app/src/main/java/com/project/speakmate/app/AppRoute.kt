@@ -11,7 +11,7 @@ sealed interface AppRoute {
     data object Home : AppRoute
 
     @Serializable
-    data object TrainingPath : AppRoute
+    data class TrainingPath(val goalId: String? = null) : AppRoute
 
     @Serializable
     data object ScenarioCatalog : AppRoute
@@ -44,16 +44,13 @@ sealed interface AppRoute {
     data object PathCompletion : AppRoute
 
     @Serializable
-    data class GoalDetail(val goalId: String) : AppRoute
-
-    @Serializable
     data class UnitPreparation(val unitId: String) : AppRoute
 
     @Serializable
     data class UnitCall(val unitId: String, val isRetry: Boolean = false) : AppRoute
 
     @Serializable
-    data class UnitResult(val unitId: String, val attemptId: String) : AppRoute
+    data class UnitResult(val unitId: String, val attemptId: String, val isReplay: Boolean = false) : AppRoute
 
     @Serializable
     data class GoalAssessment(
@@ -71,6 +68,9 @@ sealed interface AppRoute {
 
     @Serializable
     data class ScenarioPreparation(val practiceId: String, val isCalling: Boolean = false) : AppRoute
+
+    @Serializable
+    data class PracticeSummary(val attemptId: String, val scenarioTitle: String = "") : AppRoute
 
     @Serializable
     data class SessionDetail(val attemptId: String) : AppRoute

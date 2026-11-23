@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.theme.DesignColor
@@ -46,7 +47,8 @@ fun TrainingGoalCard(
             RoundedCornerShape(16.dp)).padding(17.dp)) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onToggle), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(goal.label.ifBlank { stringResource(R.string.training_goal_number, goal.order + 1) }, style = DesignTypography.SectionLabel, color = DesignColor.Muted, modifier = Modifier.weight(1f))
+                Text(goal.label.ifBlank { stringResource(R.string.training_goal_number, goal.order + 1) }, style = DesignTypography.SectionLabel,
+                    color = DesignColor.Muted, modifier = Modifier.weight(1f))
                 Text(stringResource(when (goal.status) {
                     TrainingProgressStatus.CURRENT -> R.string.training_current
                     TrainingProgressStatus.COMPLETED -> R.string.training_completed
@@ -57,7 +59,7 @@ fun TrainingGoalCard(
                         RoundedCornerShape(12.dp)).padding(horizontal = 8.dp, vertical = 5.dp))
                 Image(painterResource(if (goal.isExpanded) R.drawable.ic_training_collapse else R.drawable.ic_training_expand), null, Modifier.size(20.dp, 24.dp))
             }
-            Text(goal.title, style = DesignTypography.Title, color = DesignColor.Text)
+            Text(goal.title, style = DesignTypography.Title, color = DesignColor.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(goal.summary, style = DesignTypography.Detail, color = DesignColor.Muted)
             Text(stringResource(when {
                 goal.isExpanded -> R.string.training_collapse_units
@@ -71,8 +73,8 @@ fun TrainingGoalCard(
             Spacer(Modifier.height(8.dp))
             goal.units.forEachIndexed { index, unit ->
                 key(unit.isAssessment, unit.id) {
-                    val onOpen = remember(unit.destination, unit.canOpen, onOpenUnit) {
-                        { if (unit.canOpen) unit.destination?.let(onOpenUnit) }
+                    val onOpen = remember(unit.destination, onOpenUnit) {
+                        { unit.destination?.let(onOpenUnit); Unit }
                     }
                     if (index > 0) HorizontalDivider(color = DesignColor.Border)
                     TrainingUnitRow(unit, onOpen)

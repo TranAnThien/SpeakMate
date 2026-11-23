@@ -2,12 +2,39 @@ package com.project.speakmate.data.repository
 
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.RequiredAction
+import com.project.speakmate.domain.model.UnitPreparation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class TrainingContentMapperTest {
     private val mapper = TrainingContentMapper()
+
+    @Test
+    fun oneValidPreparationSectionAllowsTheOthersToBeEmpty() {
+        val vocabulary = mapper.toVocabulary(TrainingContentTestFixtures.getDocument(TrainingContentTestFixtures.getVocabulary()), "vocabulary")
+        mapper.validatePreparation(UnitPreparation(listOf(vocabulary), emptyList(), emptyList()))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun entirelyMissingPreparationIsInvalidContent() {
+        TrainingContentMapper().validatePreparation(UnitPreparation(emptyList(), emptyList(), emptyList()))
+    }
+
+    @Test
+    fun missingOrMalformedOptionalPreparationSectionsStayEmpty() {
+        listOf(null, "invalid", emptyMap<String, Any>(), mapOf("vocabulary" to "invalid")).forEach { preparation ->
+            assertEquals(emptyList<String>(), mapper.getPreparationReferenceIds(preparation, "vocabulary"))
+        }
+    }
+
+    @Test
+    fun optionalReferencesKeepValidIdsInOrderAndRemoveDuplicates() {
+        val preparation = mapOf("vocabulary" to listOf(null, "invalid", emptyMap<String, Any>(), mapOf("id" to ""), mapOf("id" to 3), mapOf("id" to "one"),
+            mapOf("id" to "one"), mapOf("id" to "two")))
+        assertEquals(listOf("one", "two"), mapper.getPreparationReferenceIds(preparation, "vocabulary"))
+        assertEquals(emptyList<String>(), mapper.getPreparationReferenceIds(preparation, "grammarPoints"))
+    }
 
     @Test
     fun vocabularyPreservesEveryStoredFieldAndNestedExample() {

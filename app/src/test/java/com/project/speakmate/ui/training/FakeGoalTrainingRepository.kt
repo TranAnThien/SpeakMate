@@ -1,10 +1,10 @@
 package com.project.speakmate.ui.training
 
-import kotlinx.coroutines.CompletableDeferred
-import com.project.speakmate.domain.model.TrainingPath
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.TrainingPath
 import com.project.speakmate.domain.repository.TrainingRepository
+import kotlinx.coroutines.CompletableDeferred
 
 class FakeGoalTrainingRepository : TrainingRepository {
     var path = GoalAssessmentTestFixtures.path
@@ -12,11 +12,13 @@ class FakeGoalTrainingRepository : TrainingRepository {
     var pathGate: CompletableDeferred<Unit>? = null
     val requestedScenarioIds = mutableListOf<String>()
 
-    override suspend fun getTrainingPath(level: SpeakingLevel): Result<TrainingPath> {
+    override suspend fun getTrainingPath(level: SpeakingLevel, requireServer: Boolean): Result<TrainingPath> {
         pathGate?.await()
         val exception = failure
         return if (exception != null) Result.failure(exception) else Result.success(path)
     }
+
+    override suspend fun getTrainingPathStructure(level: SpeakingLevel) = getTrainingPath(level, true)
 
     override suspend fun getTrainingGoal(goalId: String) =
         Result.success(path.goals.first { it.goalId == goalId })
@@ -24,7 +26,7 @@ class FakeGoalTrainingRepository : TrainingRepository {
     override suspend fun getTrainingUnit(unitId: String) =
         Result.success(path.goals.flatMap { it.units }.first { it.unitId == unitId })
 
-    override suspend fun getScenario(scenarioId: String): Result<Scenario> {
+    override suspend fun getScenario(scenarioId: String, requireServer: Boolean): Result<Scenario> {
         requestedScenarioIds += scenarioId
         return Result.success(GoalAssessmentTestFixtures.scenario.copy(scenarioId = scenarioId))
     }

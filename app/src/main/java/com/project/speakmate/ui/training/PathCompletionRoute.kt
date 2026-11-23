@@ -24,7 +24,7 @@ fun PathCompletionRoute(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val level = SpeakingLevel.entries.firstOrNull { it.name == state.level }
-    if (state.status != TrainingContentStatus.CONTENT || state.canContinue || level == null) {
+    if (state.status != TrainingContentStatus.CONTENT || !state.isPathCompleted || state.canContinue || level == null) {
         TrainingUnavailableContent(
             isLoading = state.status == TrainingContentStatus.LOADING,
             onRetry = if (state.status == TrainingContentStatus.ERROR) viewModel::retry else onReturnToPath,

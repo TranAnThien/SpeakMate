@@ -1,27 +1,26 @@
 package com.project.speakmate.ui.auth
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.project.speakmate.domain.model.InvalidUserProfileException
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.UserRepository
-import com.project.speakmate.ui.auth.state.AuthEffect
 import com.project.speakmate.ui.auth.state.GoogleSignInStatus
 import com.project.speakmate.ui.auth.state.GoogleSignInUiState
+import com.project.speakmate.ui.components.LegalDocument
 import com.project.speakmate.utils.extension.defaultEmpty
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -30,70 +29,175 @@ class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
 ) : ViewModel() {
-
     val signedInUserId: Flow<String?> = authRepository.observeSignedInUserId()
-
     private val _uiState = MutableStateFlow(GoogleSignInUiState())
     val uiState: StateFlow<GoogleSignInUiState> = _uiState.asStateFlow()
+    private var signInJob: Job? = null
+    private var profileJob: Job? = null
+    private var observerJob: Job? = null
+    private var signOutJob: Job? = null
+    private var isCredentialRequestActive = false
 
-    private val _uiEffect = MutableSharedFlow<AuthEffect>(replay = 0)
-    val uiEffect: SharedFlow<AuthEffect> = _uiEffect.asSharedFlow()
+    init { observeSession() }
 
-    fun startSignIn() {
-        _uiState.update { it.copy(status = GoogleSignInStatus.LOADING) }
-    }
-
-    fun handleGoogleSignIn(idToken: String, displayName: String?, email: String?, photoUrl: String?) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(status = GoogleSignInStatus.LOADING) }
-
+    private fun observeSession() {
+        observerJob?.cancel()
+        observerJob = viewModelScope.launch {
             try {
-                val authResult = authRepository.signInWithGoogle(idToken)
-                authResult.onSuccess { userId ->
-                    checkAndInitializeUser(userId, displayName, email, photoUrl)
-                }.onFailure { error ->
-                    Log.e("AuthViewModel", "FirebaseAuth failed", error)
-                    _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }
+                signedInUserId.distinctUntilChanged().collectLatest { uid ->
+                    try {
+                        profileJob?.cancel()
+                        if (uid == null) {
+                            signInJob?.cancel()
+                            isCredentialRequestActive = false
+                            _uiState.update { GoogleSignInUiState(isCheckingProfile = false,
+                                status = if (signOutJob?.isActive == true) GoogleSignInStatus.SIGNING_OUT else GoogleSignInStatus.NORMAL) }
+                        } else {
+                            _uiState.update { GoogleSignInUiState(userId = uid, status = GoogleSignInStatus.LOADING) }
+                            profileJob = viewModelScope.launch {
+                                signInJob?.join()
+                                prepareProfile(uid)
+                            }
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { showProfileError() }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (error: Exception) {
-                showSignInError(error)
+            } catch (_: Exception) {
+                showProfileError()
             }
         }
     }
 
+    private fun showProfileError() {
+        _uiState.update { it.copy(status = if (it.userId == null) GoogleSignInStatus.ERROR else GoogleSignInStatus.PROFILE_ERROR,
+            isCheckingProfile = false, isProfileReady = false) }
+    }
+
+    fun startSignIn(): Boolean {
+        if (observerJob?.isActive != true) observeSession()
+        val state = _uiState.value
+        if (isCredentialRequestActive || signInJob?.isActive == true || signOutJob?.isActive == true || state.isCheckingProfile || state.isProfileReady ||
+            state.userId != null) return false
+        isCredentialRequestActive = true
+        _uiState.update { it.copy(status = GoogleSignInStatus.LOADING, legalDocument = null) }
+        return true
+    }
+
+    fun handleGoogleSignIn(idToken: String, displayName: String?, email: String?, photoUrl: String?) {
+        if (!isCredentialRequestActive || signInJob?.isActive == true) return
+        isCredentialRequestActive = false
+        signInJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            var operationUserId: String? = null
+            try {
+                val uid = authRepository.signInWithGoogle(idToken).getOrThrow()
+                operationUserId = uid
+                if (!isCurrentUser(uid)) return@launch
+                userRepository.getOrCreateUser(User(
+                    userId = uid,
+                    displayName = displayName.defaultEmpty(),
+                    email = email.defaultEmpty(),
+                    photoUrl = photoUrl.defaultEmpty(),
+                    level = SpeakingLevel.NOT_ASSESSED,
+                    savedVocabularies = emptyList()
+                )).getOrThrow()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                val uid = operationUserId
+                if (uid != null && !isCurrentUser(uid)) return@launch
+                if (uid == null && _uiState.value.userId != null) return@launch
+                _uiState.update {
+                    it.copy(status = if (it.userId == null) GoogleSignInStatus.ERROR else GoogleSignInStatus.PROFILE_ERROR,
+                        isCheckingProfile = false, isProfileReady = false)
+                }
+            }
+        }
+        signInJob?.start()
+    }
+
     fun cancelSignIn() {
-        _uiState.update { it.copy(status = GoogleSignInStatus.NORMAL) }
+        if (!isCredentialRequestActive) return
+        isCredentialRequestActive = false
+        _uiState.update { it.copy(status = GoogleSignInStatus.CANCELLED) }
     }
 
     fun showSignInError(error: Throwable) {
-        Log.e("AuthViewModel", "Google Sign-In failed")
+        if (error is CancellationException) throw error
+        isCredentialRequestActive = false
         _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }
     }
 
-    private suspend fun checkAndInitializeUser(userId: String, displayName: String?, email: String?, photoUrl: String?) {
-        val defaultUser = User(
-            userId = userId,
-            displayName = displayName.defaultEmpty(),
-            email = email.defaultEmpty(),
-            photoUrl = photoUrl.defaultEmpty(),
-            level = SpeakingLevel.NOT_ASSESSED,
-            savedVocabularies = emptyList()
-        )
+    fun showOffline() {
+        if (_uiState.value.userId != null || _uiState.value.status == GoogleSignInStatus.LOADING || signOutJob?.isActive == true) return
+        _uiState.update { it.copy(status = GoogleSignInStatus.OFFLINE) }
+    }
 
-        val error = userRepository.getOrCreateUser(defaultUser).exceptionOrNull()
-        if (error == null || error is InvalidUserProfileException) {
-            _uiState.update { it.copy(status = GoogleSignInStatus.NORMAL) }
-            _uiEffect.emit(AuthEffect.SignedIn)
-        } else {
-            Log.e("AuthViewModel", "Firestore getOrCreateUser failed", error)
-            authRepository.signOut()
-            _uiState.update { it.copy(status = GoogleSignInStatus.ERROR) }
+    fun retryProfile() {
+        if (observerJob?.isActive != true) {
+            observeSession()
+            return
+        }
+        val uid = _uiState.value.userId ?: return
+        if (profileJob?.isActive == true || signInJob?.isActive == true || !isCurrentUser(uid)) return
+        _uiState.update { it.copy(status = GoogleSignInStatus.LOADING, isCheckingProfile = true, isProfileReady = false) }
+        profileJob = viewModelScope.launch { prepareProfile(uid) }
+    }
+
+    fun signOut() {
+        val uid = _uiState.value.userId ?: return
+        if (_uiState.value.isCheckingProfile || signOutJob?.isActive == true) return
+        _uiState.update { it.copy(isCheckingProfile = false, status = GoogleSignInStatus.SIGNING_OUT) }
+        profileJob?.cancel()
+        signOutJob = viewModelScope.launch {
+            try {
+                if (isCurrentUser(uid)) authRepository.signOut().getOrThrow()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (isCurrentUser(uid)) _uiState.update { it.copy(status = GoogleSignInStatus.PROFILE_ERROR, isCheckingProfile = false) }
+            } finally {
+                if (_uiState.value.userId == null) _uiState.update { it.copy(status = GoogleSignInStatus.NORMAL, isCheckingProfile = false) }
+            }
         }
     }
 
-    fun resetState() {
-        _uiState.update { it.copy(status = GoogleSignInStatus.NORMAL) }
+    fun isSessionReady(userId: String): Boolean =
+        _uiState.value.userId == userId && _uiState.value.isProfileReady && isCurrentUser(userId)
+
+    fun showTerms() {
+        _uiState.update { it.copy(legalDocument = LegalDocument.TERMS) }
+    }
+
+    fun showPrivacyPolicy() {
+        _uiState.update { it.copy(legalDocument = LegalDocument.PRIVACY) }
+    }
+
+    fun dismissLegalInformation() {
+        _uiState.update { it.copy(legalDocument = null) }
+    }
+
+    private suspend fun prepareProfile(uid: String) {
+        try {
+            val user = checkNotNull(userRepository.getUser(uid).getOrThrow())
+            check(user.userId == uid)
+            if (!isCurrentUser(uid) || _uiState.value.userId != uid) return
+            _uiState.update {
+                it.copy(status = GoogleSignInStatus.NORMAL, isCheckingProfile = false, isProfileReady = true)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            if (isCurrentUser(uid) && _uiState.value.userId == uid) {
+                _uiState.update { it.copy(status = GoogleSignInStatus.PROFILE_ERROR, isCheckingProfile = false, isProfileReady = false) }
+            }
+        }
+    }
+
+    private fun isCurrentUser(uid: String): Boolean = try {
+        authRepository.requireCurrentUserId() == uid
+    } catch (_: IllegalStateException) {
+        false
     }
 }

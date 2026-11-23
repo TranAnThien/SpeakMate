@@ -18,6 +18,7 @@ import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.model.TrainingStage.GOAL_ASSESSMENT
 import com.project.speakmate.domain.model.TrainingStage.PATH_COMPLETED
 import com.project.speakmate.domain.model.TrainingStage.UNIT
+import com.project.speakmate.domain.model.UnitPreparation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -31,6 +32,48 @@ class TrainingProgressRulesTest {
     private val partial = getOutcome(AssessmentTestFixtures.getPartialEvidenceSet())
     private val fail = getOutcome(AssessmentTestFixtures.getFailEvidenceSet())
     private val insufficientEvidence = getOutcome(AssessmentTestFixtures.getInsufficientEvidenceSet())
+
+    @Test
+    fun progressOutcomeUsesStructureWithoutPreparationContent() {
+        val structure = path.copy(goals = path.goals.map { goal ->
+            goal.copy(units = goal.units.map { unit ->
+                unit.copy(preparation = UnitPreparation(emptyList(), emptyList(), emptyList()))
+            })
+        })
+        val progress = TrainingProgress(0, 0, UNIT)
+        assertEquals(rules.applyOutcome(path, progress, UnitActivity(0, 0), pass),
+            rules.applyOutcome(structure, progress, UnitActivity(0, 0), pass))
+    }
+
+    @Test
+    fun countsUnitsAndOneAssessmentForEveryGoal() {
+        assertEquals(9, rules.getTotalActivityCount(path))
+        assertEquals(0, rules.getCompletedActivityCount(path, TrainingProgress(0, 0, UNIT)))
+        assertEquals(1, rules.getCompletedActivityCount(path, TrainingProgress(0, 1, UNIT)))
+        assertEquals(3, rules.getCompletedActivityCount(path, TrainingProgress(0, 2, GOAL_ASSESSMENT)))
+        assertEquals(4, rules.getCompletedActivityCount(path, TrainingProgress(1, 0, UNIT)))
+        assertEquals(9, rules.getCompletedActivityCount(path, TrainingProgress(2, 0, PATH_COMPLETED)))
+    }
+
+    @Test
+    fun replayKeepsTheCompletedActivityCountUnchanged() {
+        val progress = TrainingProgress(1, 0, UNIT)
+        val decision = rules.applyOutcome(path, progress, UnitActivity(0, 0), pass)
+        assertEquals(TrainingProgressDecision.Unchanged(ProgressHoldReason.REPLAY), decision)
+        assertEquals(4, rules.getCompletedActivityCount(path, progress))
+    }
+
+    @Test
+    fun emptyAndInvalidProgressDoNotBecomeCompletedActivities() {
+        val empty = path.copy(goals = emptyList())
+        assertEquals(0, rules.getTotalActivityCount(empty))
+        assertEquals(0, rules.getCompletedActivityCount(empty, TrainingProgress(0, 0, UNIT)))
+        assertEquals(0, rules.getCompletedActivityCount(path, TrainingProgress(-1, 0, UNIT)))
+        val assessmentOnly = TrainingProgressTestFixtures.getPath(listOf(0))
+        assertEquals(1, rules.getTotalActivityCount(assessmentOnly))
+        assertEquals(0, rules.getCompletedActivityCount(assessmentOnly, TrainingProgress(0, 0, GOAL_ASSESSMENT)))
+        assertEquals(1, rules.getCompletedActivityCount(assessmentOnly, TrainingProgress(0, 0, PATH_COMPLETED)))
+    }
 
     @Test
     fun marksOnlyTheActiveUnitCurrentAtEachPosition() {

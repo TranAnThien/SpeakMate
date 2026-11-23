@@ -3,111 +3,75 @@ package com.project.speakmate.ui.profile.savedvocab.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.PronunciationState
 import com.project.speakmate.domain.model.VocabularyItem
+import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
+import com.project.speakmate.ui.theme.DesignColor
+import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun VocabularyCard(
     item: VocabularyItem,
     onPlayClick: (VocabularyItem) -> Unit,
     onDeleteClick: (VocabularyItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playbackStatus: PronunciationState = PronunciationState.IDLE
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = item.word,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (item.partOfSpeech.isNotBlank()) {
-                            Text(
-                                text = " (${item.partOfSpeech})",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontStyle = FontStyle.Italic,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-                            )
-                        }
-                    }
-                    if (item.phonetic.isNotBlank()) {
-                        Text(
-                            text = item.phonetic,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
+    val play = remember(item, onPlayClick) { { onPlayClick(item) } }
+    val delete = remember(item, onDeleteClick) { { onDeleteClick(item) } }
+    val loadingDescription = stringResource(R.string.accessibility_loading)
+    Surface(modifier.fillMaxWidth(), color = DesignColor.Surface, shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(item.word, style = DesignTypography.Heading, color = DesignColor.Text)
+                    val detail = listOf(item.phonetic, item.partOfSpeech).filter(String::isNotBlank).joinToString(stringResource(R.string.saved_vocab_detail_separator))
+                    if (detail.isNotBlank()) Text(detail, style = DesignTypography.Detail, color = DesignColor.Muted)
                 }
-
-                Row {
-                    IconButton(onClick = { onPlayClick(item) }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.accessibility_play_pronunciation))
+                if (playbackStatus == PronunciationState.LOADING || playbackStatus == PronunciationState.PLAYING) {
+                    TextButton(onClick = play, modifier = Modifier.semantics {
+                        if (playbackStatus == PronunciationState.LOADING) stateDescription = loadingDescription
+                    }) {
+                        if (playbackStatus == PronunciationState.LOADING) SpeakMateLoadingIndicator(size = 20.dp, strokeWidth = 2.dp)
+                        Text(stringResource(R.string.saved_vocab_stop), style = DesignTypography.Button)
                     }
-                    IconButton(onClick = { onDeleteClick(item) }) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = stringResource(R.string.accessibility_delete_vocabulary),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                } else IconButton(onClick = play) {
+                    Icon(painterResource(R.drawable.ic_training_preparation_speaker),
+                        stringResource(if (playbackStatus == PronunciationState.FAILED) R.string.saved_vocab_retry_pronunciation else R.string.accessibility_play_pronunciation),
+                        Modifier.size(24.dp), tint = DesignColor.Text)
+                }
+                IconButton(onClick = delete) {
+                    Icon(Icons.Default.Delete, stringResource(R.string.accessibility_delete_vocabulary), tint = DesignColor.Text)
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = item.mean, style = MaterialTheme.typography.bodyLarge)
-
+            if (playbackStatus == PronunciationState.FAILED) {
+                Text(stringResource(R.string.call_pronunciation_unavailable), style = DesignTypography.Detail, color = DesignColor.Error)
+            }
+            Text(item.mean, style = DesignTypography.Body, color = DesignColor.Text)
             if (item.example.sentence.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
-                        Text(
-                            text = item.example.sentence,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (item.example.translate.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = item.example.translate,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
+                Text(item.example.sentence, style = DesignTypography.Detail, color = DesignColor.Muted)
+                if (item.example.translate.isNotBlank()) Text(item.example.translate, style = DesignTypography.Detail, color = DesignColor.Muted)
             }
         }
     }

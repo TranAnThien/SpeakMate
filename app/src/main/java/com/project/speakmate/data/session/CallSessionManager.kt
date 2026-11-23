@@ -50,6 +50,7 @@ class CallSessionManager(
         private const val RECONNECT_WINDOW_MILLIS = 30_000L
         private const val MICROPHONE_WINDOW_MILLIS = 60_000L
         private const val FINALIZE_WINDOW_MILLIS = 3_000L
+        private const val PRONUNCIATION_TIMEOUT_MILLIS = 10_000L
         private const val MAX_SERVER_EVENTS = 256
     }
 
@@ -172,6 +173,11 @@ class CallSessionManager(
         commands.trySend command@{
             val current = session ?: return@command
             val state = mutableSessionState.value
+            if (state.state == CallState.ACTIVE && state.interruption == CallInterruption.MICROPHONE) {
+                if (isForeground && isMediaCurrent(revision) && !current.isFinalizing && current.media.hasMicrophonePermission() &&
+                    !current.media.isMicrophoneSilenced()) setMicrophoneSilenced(current, false)
+                return@command
+            }
             if (state.state != CallState.PAUSED || state.interruption == CallInterruption.NETWORK || current.isFinalizing ||
                 !isForeground || !isMediaCurrent(revision) || current.resumeJob?.isActive == true
             ) return@command
@@ -196,12 +202,32 @@ class CallSessionManager(
             val current = session ?: return@command
             val state = mutableSessionState.value.state
             if (current.isFinalizing || text.isBlank() || state != CallState.ACTIVE && state != CallState.PAUSED) return@command
+            if (current.isPronouncing && mutableSessionState.value.pronunciationText == text) return@command
             val revision = ++current.pronunciationRevision
             if (!current.isPronouncing) holdCallAudio(current)
             current.isPronouncing = true
-            mutableSessionState.update { it.copy(pronunciation = PronunciationState.PLAYING) }
+            current.pronunciationJob?.cancel()
+            mutableSessionState.update { it.copy(pronunciation = PronunciationState.LOADING, pronunciationText = text) }
+            current.pronunciationJob = current.scope.launch {
+                delay(PRONUNCIATION_TIMEOUT_MILLIS)
+                commands.trySend {
+                    if (session === current && current.pronunciationRevision == revision &&
+                        mutableSessionState.value.pronunciation == PronunciationState.LOADING) {
+                        runSupportOperation { current.media.stopPronunciation() }
+                        endPronunciation(current, false)
+                    }
+                }
+            }
             try {
-                current.media.speakPronunciation(text) { isSuccess ->
+                current.media.speakPronunciation(text, onStarted = {
+                    commands.trySend {
+                        if (session === current && current.pronunciationRevision == revision && current.isPronouncing) {
+                            current.pronunciationJob?.cancel()
+                            current.pronunciationJob = null
+                            mutableSessionState.update { it.copy(pronunciation = PronunciationState.PLAYING) }
+                        }
+                    }
+                }) { isSuccess ->
                     commands.trySend {
                         if (session === current && current.pronunciationRevision == revision) endPronunciation(current, isSuccess)
                     }
@@ -219,7 +245,7 @@ class CallSessionManager(
             val current = session ?: return@command
             if (!current.isPronouncing) {
                 mutableSessionState.update {
-                    if (it.pronunciation == PronunciationState.FAILED) it.copy(pronunciation = PronunciationState.IDLE) else it
+                    if (it.pronunciation == PronunciationState.FAILED) it.copy(pronunciation = PronunciationState.IDLE, pronunciationText = "") else it
                 }
                 return@command
             }
@@ -621,6 +647,7 @@ class CallSessionManager(
         pronunciationHold.beginHold(current)
         runSupportOperation {
             current.media.blockUplink()
+            current.media.suspendUplink()
             current.media.finishAudioInput()
             current.media.setPlaybackPaused(true)
         }
@@ -638,18 +665,24 @@ class CallSessionManager(
     }
 
     private fun endPronunciation(current: CallSession, isSuccess: Boolean) {
+        current.pronunciationJob?.cancel()
+        current.pronunciationJob = null
+        current.pronunciationRevision++
         current.isPronouncing = false
         releaseCallAudio(current)
         mutableSessionState.update {
-            it.copy(pronunciation = if (isSuccess) PronunciationState.IDLE else PronunciationState.FAILED)
+            it.copy(pronunciation = if (isSuccess) PronunciationState.IDLE else PronunciationState.FAILED,
+                pronunciationText = if (isSuccess) "" else it.pronunciationText)
         }
     }
 
     private fun cancelPronunciation(current: CallSession) {
+        current.pronunciationJob?.cancel()
+        current.pronunciationJob = null
         if (!current.isPronouncing && !current.isCallAudioHeld) return
         pronunciationHold.cancelPronunciation(current)
         runSupportOperation { current.media.stopPronunciation() }
-        mutableSessionState.update { it.copy(pronunciation = PronunciationState.IDLE) }
+        mutableSessionState.update { it.copy(pronunciation = PronunciationState.IDLE, pronunciationText = "") }
     }
 
     private inline fun runSupportOperation(operation: () -> Unit) {
@@ -830,6 +863,7 @@ class CallSessionManager(
                 interruption = null,
                 isFinalizing = false,
                 pronunciation = PronunciationState.IDLE,
+                pronunciationText = "",
                 isMuted = false,
                 isPlaying = false,
                 isProcessing = false,

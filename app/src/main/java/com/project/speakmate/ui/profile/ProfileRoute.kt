@@ -17,6 +17,7 @@ fun ProfileRoute(
     onOpenSettings: () -> Unit,
     onOpenVocabulary: () -> Unit,
     onSignedOut: () -> Unit,
+    onStartPlacement: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
@@ -37,6 +38,7 @@ fun ProfileRoute(
         onOpenSettings = onOpenSettings,
         onOpenVocabulary = onOpenVocabulary,
         onRetryProfile = viewModel::retryProfile,
+        onStartPlacement = onStartPlacement,
         modifier = modifier
     )
 }

@@ -23,7 +23,8 @@ fun PreparationVocabularyCard(
     word: PreparationVocabularyUiState,
     onPlayWord: () -> Unit,
     onPlayExample: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playback: com.project.speakmate.domain.model.PronunciationPlaybackState = com.project.speakmate.domain.model.PronunciationPlaybackState()
 ) {
     Column(modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -32,9 +33,14 @@ fun PreparationVocabularyCard(
                 Text(word.word, style = DesignTypography.Title, color = DesignColor.Text)
                 Text(word.pronunciationLabel, style = DesignTypography.Detail, color = DesignColor.Muted)
             }
-            PreparationAudioButton(onPlayWord)
+            PreparationAudioButton(onPlayWord, text = word.word, playback = playback)
         }
+        if (playback.text == word.word && playback.status == com.project.speakmate.domain.model.PronunciationState.FAILED) Text(
+            stringResource(R.string.call_pronunciation_unavailable),
+            style = DesignTypography.Caption,
+            color = DesignColor.Error
+        )
         Text(stringResource(R.string.preparation_word_meaning, word.meaning), style = DesignTypography.Detail, color = DesignColor.Text)
-        PreparationExampleCard(word.example, onPlayExample)
+        PreparationExampleCard(word.example, onPlayExample, playback = playback)
     }
 }

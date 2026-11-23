@@ -64,7 +64,11 @@ fun HomeScreen(
                         HomeLevelCard(state.level, state.presentation == HomePresentation.UNASSESSED)
                         when (state.presentation) {
                             HomePresentation.UNASSESSED -> HomeAssessmentCard(onStartAssessment)
-                            HomePresentation.ACTIVE -> HomeCurrentLearningCard(state.goalTitle, state.unitTitle, if (state.isGoalAssessment) stringResource(R.string.home_goal_assessment_description) else state.unitDescription)
+                            HomePresentation.ACTIVE -> HomeCurrentLearningCard(
+                                state.goalTitle,
+                                state.unitTitle,
+                                if (state.isGoalAssessment) stringResource(R.string.home_goal_assessment_description) else state.unitDescription
+                            )
                             HomePresentation.PATH_COMPLETE, HomePresentation.HIGHEST_LEVEL_COMPLETE -> HomeCompletionCard(
                                 state.level, state.nextLevel, state.presentation == HomePresentation.HIGHEST_LEVEL_COMPLETE,
                                 onStartReassessment, onReviewPath
@@ -88,8 +92,7 @@ fun HomeScreen(
         }
         if (state.presentation == HomePresentation.ERROR_DIALOG) {
             LoadErrorDialog(stringResource(R.string.home_error_dialog_title), stringResource(R.string.home_error_dialog_description),
-                onRetry, titleStyle = DesignTypography.SectionTitle, descriptionStyle = DesignTypography.EmptyBody,
-                actionMinHeight = 52.dp, actionSpacing = 23.dp)
+                onRetry)
         }
     }
 }

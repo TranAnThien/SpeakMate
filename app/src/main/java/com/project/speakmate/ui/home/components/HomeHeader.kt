@@ -29,10 +29,10 @@ import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun HomeHeader(isLoading: Boolean, avatarUrl: String?, onViewProfile: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 24.dp),
+    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Text(stringResource(R.string.app_name), style = DesignTypography.Brand, color = DesignColor.Primary)
-        Box(Modifier.size(40.dp).background(if (isLoading) DesignColor.Skeleton else if (!avatarUrl.isNullOrEmpty()) DesignColor.Surface else DesignColor.IconBlue, CircleShape)
+        Box(Modifier.size(48.dp).background(if (isLoading) DesignColor.Skeleton else if (!avatarUrl.isNullOrEmpty()) DesignColor.Surface else DesignColor.IconBlue, CircleShape)
             .clip(CircleShape)
             .clickable(enabled = !isLoading, onClick = onViewProfile), contentAlignment = Alignment.Center) {
             if (!isLoading) {

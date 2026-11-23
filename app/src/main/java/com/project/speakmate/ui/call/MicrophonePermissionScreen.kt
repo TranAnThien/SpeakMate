@@ -31,6 +31,8 @@ import com.project.speakmate.ui.call.state.MicrophonePermissionUiState
 import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.SecondaryButton
+import com.project.speakmate.ui.components.AnimatedMascot
+import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -58,7 +60,8 @@ fun MicrophonePermissionScreen(
                 contentAlignment = Alignment.Center) {
                 if (state.presentation == MicrophonePermissionPresentation.RATIONALE) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                        Image(painterResource(R.drawable.img_placement_mascot), null, Modifier.size(180.dp))
+                        AnimatedMascot(R.raw.lottie_call_mascot, R.drawable.img_placement_mascot, Modifier.size(180.dp),
+                            marker = AppConstant.CALL_MASCOT_IDLE_MARKER)
                         Text(stringResource(R.string.call_permission_rationale_title), style = DesignTypography.Heading,
                             color = DesignColor.Primary, textAlign = TextAlign.Center)
                         Text(stringResource(R.string.call_permission_rationale_description), style = DesignTypography.Body,

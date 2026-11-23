@@ -24,6 +24,30 @@ class PlacementRulesTest {
     private val initial = PlacementTestFixtures.getCheckpoint()
 
     @Test
+    fun nullAtA1ConfirmationNeverAssignsALevelOrExtendsTheCheckpoint() {
+        InsufficientEvidenceReason.entries.forEach { reason ->
+            val initial = PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION).copy(candidateLevel = SpeakingLevel.A1)
+            val task = tasks.single { it.taskId == initial.currentTaskId }
+            var current = initial
+            repeat(PlacementRules.MAX_TECHNICAL_RETRIES) {
+                val transition = PlacementRules.applyOutcome(current, task, AssessmentOutcome.InsufficientEvidence(reason), tasks,
+                    Random(PlacementTestFixtures.RANDOM_SEED), initial.createdAtMillis + 1)
+                val retry = transition as PlacementTransition.RetryTask
+                assertEquals(initial.step, retry.checkpoint.step)
+                assertEquals(initial.currentTaskId, retry.checkpoint.currentTaskId)
+                assertEquals(initial.candidateLevel, retry.checkpoint.candidateLevel)
+                assertEquals(initial.records, retry.checkpoint.records)
+                assertEquals(initial.expiresAtMillis, retry.checkpoint.expiresAtMillis)
+                assertNull(retry.checkpoint.pendingResult)
+                current = retry.checkpoint
+            }
+            val stopped = PlacementRules.applyOutcome(current, task, AssessmentOutcome.InsufficientEvidence(reason), tasks,
+                Random(PlacementTestFixtures.RANDOM_SEED), initial.createdAtMillis + 1)
+            assertEquals(PlacementTransition.Stopped(PlacementStopReason.TECHNICAL_RETRY_LIMIT), stopped)
+        }
+    }
+
+    @Test
     fun initialA2PassGoesToB1Probe() = assertPass(PlacementStep.INITIAL_A2, PlacementStep.B1_PROBE)
 
     @Test

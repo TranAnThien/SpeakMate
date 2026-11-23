@@ -37,7 +37,9 @@ fun ProfileIdentity(
         if (!avatarUrl.isNullOrEmpty()) {
             AsyncImage(
                 model = avatarUrl,
-                contentDescription = "Avatar",
+                error = painterResource(R.drawable.ic_navigation_profile),
+                placeholder = painterResource(R.drawable.ic_navigation_profile),
+                contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(80.dp)
@@ -47,7 +49,7 @@ fun ProfileIdentity(
         } else {
             Image(
                 painter = painterResource(id = R.drawable.ic_navigation_profile),
-                contentDescription = "Default Avatar",
+                contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(80.dp)

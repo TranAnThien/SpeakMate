@@ -36,25 +36,31 @@ fun LoadErrorDialog(
     description: String,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
-    titleStyle: TextStyle = DesignTypography.Heading,
-    descriptionStyle: TextStyle = DesignTypography.Body,
-    actionMinHeight: Dp = 56.dp,
-    actionSpacing: Dp = 12.dp
+    titleStyle: TextStyle = DesignTypography.SectionTitle,
+    descriptionStyle: TextStyle = DesignTypography.Detail,
+    actionMinHeight: Dp = 48.dp,
+    actionSpacing: Dp = 16.dp
 ) {
-    Surface(modifier.fillMaxSize(), color = DesignColor.Scrim) {
-        Box(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
-            Column(Modifier.widthIn(max = 348.dp).fillMaxWidth().verticalScroll(rememberScrollState())
-                .background(DesignColor.Surface, RoundedCornerShape(24.dp)).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(48.dp).background(DesignColor.PaleBlue, CircleShape), contentAlignment = Alignment.Center) {
-                    Image(painterResource(R.drawable.ic_load_error), null, Modifier.size(24.dp))
+    FullScreenDialog(onDismissRequest = onRetry, modifier = modifier) {
+        Box(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
+            Surface(
+                Modifier.widthIn(max = 380.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                color = DesignColor.SurfaceContainerHigh,
+                shadowElevation = 4.dp
+            ) {
+                Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(48.dp).background(DesignColor.PaleBlue, CircleShape), contentAlignment = Alignment.Center) {
+                        Image(painterResource(R.drawable.ic_load_error), null, Modifier.size(24.dp))
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(title, style = titleStyle, color = DesignColor.Text, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    Text(description, style = descriptionStyle, color = DesignColor.Muted, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(actionSpacing))
+                    PrimaryButton(stringResource(R.string.content_retry), onRetry, minHeight = actionMinHeight)
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(title, style = titleStyle, color = DesignColor.Text, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
-                Text(description, style = descriptionStyle, color = DesignColor.Muted, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(actionSpacing))
-                PrimaryButton(stringResource(R.string.content_retry), onRetry, minHeight = actionMinHeight)
             }
         }
     }

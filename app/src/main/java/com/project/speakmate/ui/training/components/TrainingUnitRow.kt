@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.theme.DesignColor
@@ -46,7 +48,7 @@ fun TrainingUnitRow(
     }
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
         .background(if (isCurrent) DesignColor.PaleBlue else DesignColor.Surface)
-        .clickable(enabled = unit.canOpen, onClick = onOpen)
+        .heightIn(min = 48.dp).clickable(enabled = unit.destination != null, onClick = onOpen)
         .padding(horizontal = if (isCurrent) 8.dp else 0.dp, vertical = if (isCurrent) 8.dp else 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(32.dp).background(when (unit.status) {
@@ -57,7 +59,7 @@ fun TrainingUnitRow(
             Image(painterResource(iconRes), null, Modifier.size(20.dp), colorFilter = ColorFilter.tint(statusColor))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(unit.title, style = DesignTypography.Title, color = DesignColor.Text)
+            Text(unit.title, style = DesignTypography.Title, color = DesignColor.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(stringResource(when {
                 unit.status == TrainingProgressStatus.COMPLETED -> R.string.training_completed_replay
                 isCurrent -> R.string.training_current

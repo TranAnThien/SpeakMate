@@ -37,18 +37,7 @@ fun PreparationOverviewContent(
     context: String,
     onSelectSection: (PreparationSection) -> Unit
 ) {
-    Box(Modifier.fillMaxWidth().height(142.dp).clip(RoundedCornerShape(12.dp))) {
-        if (overview.imageUrl.isNotBlank()) {
-            AsyncImage(
-                model = overview.imageUrl,
-                contentDescription = null,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Image(painterResource(R.drawable.img_training_preparation_cafe), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-        }
-    }
+    com.project.speakmate.ui.components.ScenarioImage(overview.imageUrl, Modifier.fillMaxWidth().height(180.dp))
     Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.preparation_context), style = DesignTypography.Label, color = DesignColor.Muted)

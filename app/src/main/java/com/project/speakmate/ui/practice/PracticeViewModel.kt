@@ -9,12 +9,13 @@ import com.project.speakmate.ui.practice.state.ScenarioCatalogPresentation
 import com.project.speakmate.ui.practice.state.ScenarioCatalogUiState
 import com.project.speakmate.ui.practice.state.ScenarioItemUiState
 import com.project.speakmate.utils.AppConstant
-import com.project.speakmate.utils.extension.suspendRunCatching
 import com.project.speakmate.utils.extension.default
+import com.project.speakmate.utils.extension.suspendRunCatching
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
@@ -34,6 +35,7 @@ class PracticeViewModel @Inject constructor(
 
     private var catalogItems = emptyList<ScenarioItemUiState>()
     private var catalogJob: Job? = null
+    private var hasLoadedCatalog = false
 
     init {
         loadCatalog()
@@ -42,11 +44,13 @@ class PracticeViewModel @Inject constructor(
     fun loadCatalog() {
         catalogJob?.cancel()
         catalogJob = viewModelScope.launch {
-            _uiState.update { it.copy(presentation = ScenarioCatalogPresentation.LOADING) }
+            _uiState.update { it.copy(presentation = if (hasLoadedCatalog) it.presentation else ScenarioCatalogPresentation.LOADING,
+                isRefreshing = hasLoadedCatalog, hasRefreshError = false) }
             val result = suspendRunCatching { practiceRepository.getScenarioCatalog().getOrThrow() }
             ensureActive()
             val practices = result.getOrElse {
-                _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
+                _uiState.update { state -> state.copy(presentation = if (hasLoadedCatalog) state.presentation else ScenarioCatalogPresentation.LOAD_ERROR,
+                    isRefreshing = false, hasRefreshError = hasLoadedCatalog) }
                 return@launch
             }
 
@@ -59,11 +63,13 @@ class PracticeViewModel @Inject constructor(
             val mapped = mapToUiState(practices)
             ensureActive()
             val scenarioItems = mapped.getOrElse {
-                _uiState.update { state -> state.copy(presentation = ScenarioCatalogPresentation.LOAD_ERROR) }
+                _uiState.update { state -> state.copy(presentation = if (hasLoadedCatalog) state.presentation else ScenarioCatalogPresentation.LOAD_ERROR,
+                    isRefreshing = false, hasRefreshError = hasLoadedCatalog) }
                 return@launch
             }
 
-            catalogItems = scenarioItems.toList()
+            catalogItems = scenarioItems.distinctBy { it.id }
+            hasLoadedCatalog = true
             _uiState.update { state ->
                 val selectedId = state.selectedCategoryId.takeIf { id -> filters.any { it.id == id } }
                     .default(AppConstant.PRACTICE_CATEGORY_ALL)
@@ -72,7 +78,9 @@ class PracticeViewModel @Inject constructor(
                     presentation = getPresentation(filtered),
                     categories = filters,
                     selectedCategoryId = selectedId,
-                    scenarios = filtered
+                    scenarios = filtered,
+                    isRefreshing = false,
+                    hasRefreshError = false
                 )
             }
         }
@@ -90,6 +98,13 @@ class PracticeViewModel @Inject constructor(
         }
     }
 
+    fun dismissError() {
+        _uiState.update { state ->
+            if (state.presentation == ScenarioCatalogPresentation.ERROR_DIALOG) state.copy(presentation = if (hasLoadedCatalog) getPresentation(state
+                .scenarios) else ScenarioCatalogPresentation.LOAD_ERROR) else state
+        }
+    }
+
     private fun filterItems(categoryId: String): List<ScenarioItemUiState> =
         if (categoryId == AppConstant.PRACTICE_CATEGORY_ALL) catalogItems else catalogItems.filter { it.categoryLabel == categoryId }
 
@@ -102,15 +117,18 @@ class PracticeViewModel @Inject constructor(
     private suspend fun mapToUiState(practices: List<FreePractice>): Result<List<ScenarioItemUiState>> = suspendRunCatching {
         coroutineScope { practices.map { fp -> async {
             val scenario = practiceRepository.getScenario(fp.scenarioId).getOrThrow()
-            val metadata = practiceRepository.getScenarioPreparationMetadata(scenario.scenarioId).getOrNull()
+            val metadataResult = practiceRepository.getScenarioPreparationMetadata(scenario.scenarioId)
+            metadataResult.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+            val metadata = metadataResult.getOrNull()
             ScenarioItemUiState(
                 id = fp.practiceId,
                 title = scenario.name,
                 categoryLabel = fp.category,
-                roleLabel = metadata?.aiRole,
                 description = scenario.description,
                 imageUrl = metadata?.imageUrl,
-                imageRes = null
+                imageRes = null,
+                suggestedLevel = metadata?.suggestedLevel,
+                estimatedDurationMinutes = metadata?.estimatedDurationMinutes
             )
         } }.awaitAll() }
     }

@@ -1,5 +1,9 @@
 package com.project.speakmate.ui.savedvocab
 
+import com.project.speakmate.domain.model.PronunciationPlaybackState
+import com.project.speakmate.domain.rules.SavedVocabularyRules
+import com.project.speakmate.test.FakeAuthRepository
+import java.time.Clock
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.repository.PronunciationRepository
@@ -29,6 +33,8 @@ class SavedVocabViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
+    private val authRepository = FakeAuthRepository()
+    private val clock = Clock.systemUTC()
     private val fakeVocabFlow = MutableStateFlow<List<VocabularyItem>>(emptyList())
     private lateinit var repository: SavedVocabularyRepository
     private lateinit var pronunciationRepository: PronunciationRepository
@@ -47,15 +53,14 @@ class SavedVocabViewModelTest {
         repository = mockk(relaxed = true)
         io.mockk.every { repository.observeSavedVocabularies() } returns fakeVocabFlow
         pronunciationRepository = mockk(relaxed = true)
-        viewModel = SavedVocabViewModel(repository, pronunciationRepository)
+        io.mockk.every { pronunciationRepository.playback } returns MutableStateFlow(PronunciationPlaybackState())
+        viewModel = SavedVocabViewModel(repository, pronunciationRepository, authRepository)
     }
-
-
 
     @Test
     fun initialUiStateHasIsLoadingTrueBeforeFirstEmission() {
         io.mockk.every { repository.observeSavedVocabularies() } returns kotlinx.coroutines.flow.emptyFlow()
-        val pending = SavedVocabViewModel(repository, pronunciationRepository)
+        val pending = SavedVocabViewModel(repository, pronunciationRepository, authRepository)
         assertTrue(pending.uiState.value.isLoading)
     }
 
@@ -74,8 +79,6 @@ class SavedVocabViewModelTest {
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isEmpty)
     }
-
-
 
     @Test
     fun updateSearchQueryFiltersByWordCaseInsensitive() = runTest {
@@ -143,23 +146,25 @@ class SavedVocabViewModelTest {
         assertTrue(viewModel.uiState.value.filteredVocabularies.isEmpty())
     }
 
-
-
     @Test
     fun removeVocabularyCallsRepositoryWithCorrectKeyPair() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-        coEvery { repository.removeVocabulary("test", "noun") } returns Result.success(Unit)
+        fakeVocabFlow.value = listOf(makeItem("test", "meaning"))
+        advanceUntilIdle()
+        coEvery { repository.removeVocabularies("user-1", listOf(SavedVocabularyRules.getIdentity("test", "noun"))) } returns Result.success(Unit)
 
         viewModel.removeVocabulary("test", "noun")
         advanceUntilIdle()
 
-        io.mockk.coVerify(exactly = 1) { repository.removeVocabulary("test", "noun") }
+        io.mockk.coVerify(exactly = 1) { repository.removeVocabularies("user-1", listOf(SavedVocabularyRules.getIdentity("test", "noun"))) }
     }
 
     @Test
     fun removeVocabularySetsErrorMessageOnFailure() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-        coEvery { repository.removeVocabulary(any(), any()) } returns
+        fakeVocabFlow.value = listOf(makeItem("test", "meaning"), makeItem("x", "meaning", "y"))
+        advanceUntilIdle()
+        coEvery { repository.removeVocabularies(any(), any()) } returns
                 Result.failure(Exception("Firestore error"))
 
         viewModel.removeVocabulary("test", "noun")
@@ -171,7 +176,9 @@ class SavedVocabViewModelTest {
     @Test
     fun clearErrorResetsErrorToNull() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-        coEvery { repository.removeVocabulary(any(), any()) } returns
+        fakeVocabFlow.value = listOf(makeItem("test", "meaning"), makeItem("x", "meaning", "y"))
+        advanceUntilIdle()
+        coEvery { repository.removeVocabularies(any(), any()) } returns
                 Result.failure(Exception("err"))
 
         viewModel.removeVocabulary("x", "y")

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -58,6 +59,11 @@ fun ScenarioCatalogScreen(
                         }
                     }
                 }
+                if (state.presentation == ScenarioCatalogPresentation.POPULATED) item(key = "catalog-refresh", contentType = ScenarioCatalogUiState::class) {
+                    if (state.isRefreshing) com.project.speakmate.ui.components.SpeakMateLoadingIndicator()
+                    if (state.hasRefreshError) Text(stringResource(R.string.preparation_refresh_error), style = DesignTypography.Detail, color = DesignColor.Error)
+                    com.project.speakmate.ui.components.SecondaryButton(stringResource(R.string.content_reload), onRetry, enabled = !state.isRefreshing)
+                }
                 when (state.presentation) {
                     ScenarioCatalogPresentation.POPULATED -> itemsIndexed(state.scenarios.distinctBy { it.id },
                         key = { _, scenario -> "scenario:${scenario.id}" },
@@ -68,30 +74,29 @@ fun ScenarioCatalogScreen(
                     ScenarioCatalogPresentation.LOADING -> item(key = "catalog-loading", contentType = ScenarioCatalogPresentation.LOADING) {
                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                             Text(stringResource(R.string.practice_loading), style = DesignTypography.Detail, color = DesignColor.Primary)
-                            ContentSkeletonCards(3)
+                            com.project.speakmate.ui.components.SpeakMateLoadingIndicator()
                         }
                     }
                     ScenarioCatalogPresentation.EMPTY, ScenarioCatalogPresentation.UNCONFIGURED,
                     ScenarioCatalogPresentation.LOAD_ERROR -> item(key = "catalog-status", contentType = state.presentation) {
-                        ContentStatusPanel(
-                            iconRes = if (state.presentation == ScenarioCatalogPresentation.LOAD_ERROR) R.drawable.ic_load_error else R.drawable.ic_practice_empty_catalog,
-                            title = stringResource(when (state.presentation) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            com.project.speakmate.ui.components.AnimatedMascot(
+                                if (state.presentation == ScenarioCatalogPresentation.LOAD_ERROR) R.raw.lottie_network_error else R.raw.lottie_empty_state,
+                                if (state.presentation == ScenarioCatalogPresentation.LOAD_ERROR) R.drawable.img_call_error else R.drawable.img_placement_mascot,
+                                Modifier.fillMaxWidth().height(120.dp))
+                            Text(stringResource(when (state.presentation) {
                                 ScenarioCatalogPresentation.EMPTY -> R.string.practice_empty_title
                                 ScenarioCatalogPresentation.UNCONFIGURED -> R.string.practice_unconfigured_title
                                 else -> R.string.practice_error_title
-                            }),
-                            description = stringResource(when (state.presentation) {
+                            }), style = DesignTypography.Heading, color = DesignColor.Text)
+                            Text(stringResource(when (state.presentation) {
                                 ScenarioCatalogPresentation.EMPTY -> R.string.practice_empty_description
                                 ScenarioCatalogPresentation.UNCONFIGURED -> R.string.practice_unconfigured_description
                                 else -> R.string.practice_error_description
-                            }),
-                            primaryText = stringResource(if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED)
-                                R.string.goal_assessment_return_to_path else R.string.content_reload),
-                            secondaryText = stringResource(if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED)
-                                R.string.content_reload else R.string.goal_assessment_return_to_path),
-                            onPrimaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onReturnToPath else onRetry,
-                            onSecondaryAction = if (state.presentation == ScenarioCatalogPresentation.UNCONFIGURED) onRetry else onReturnToPath
-                        )
+                            }), style = DesignTypography.Body, color = DesignColor.Muted)
+                            com.project.speakmate.ui.components.PrimaryButton(stringResource(R.string.content_reload), onRetry)
+                            com.project.speakmate.ui.components.SecondaryButton(stringResource(R.string.goal_assessment_return_to_path), onReturnToPath)
+                        }
                     }
                     ScenarioCatalogPresentation.ERROR_DIALOG -> Unit
                 }

@@ -6,7 +6,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -15,11 +14,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
+import com.project.speakmate.domain.model.PlacementRole
 import com.project.speakmate.domain.model.Scenario
+import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.call.components.CallAudioVisualizer
 import com.project.speakmate.ui.call.components.CallDurationLabel
 import com.project.speakmate.ui.call.state.CallPresentation
+import com.project.speakmate.utils.extension.default
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
@@ -31,7 +34,10 @@ fun CallRoute(
     communicativeGoal: String = "",
     onCallFinished: ((CallSessionState) -> Unit)? = null,
     activityContext: CallActivityContext? = null,
-    onPracticeCompleted: ((String) -> Unit)? = null
+    onPracticeCompleted: ((String) -> Unit)? = null,
+    activityStep: Int? = null,
+    activityLevel: SpeakingLevel? = null,
+    activityRole: PlacementRole? = null
 ) {
     val viewModel: CallViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -41,28 +47,39 @@ fun CallRoute(
     val lifecycleOwner = LocalLifecycleOwner.current
     val finishedSession = state.finishedSession
     val permissionController = rememberCallPermissionController(viewModel, scenario, activityType, communicativeGoal, activityContext)
-    if (state.isExitReady) {
-        LaunchedEffect(Unit) { onExitRequested() }
+    LaunchedEffect(viewModel, scenario.scenarioId, activityType) {
+        if (viewModel.consumeStartReady()) permissionController.onRequestStart()
     }
-    if (onCallFinished != null && finishedSession != null && !state.isExiting) {
+    if (state.isExitReady) {
+        LaunchedEffect(viewModel, lifecycleOwner) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                if (viewModel.consumeExit()) onExitRequested()
+            }
+        }
+    }
+    if (finishedSession != null && !state.isExiting && (onCallFinished != null && onPracticeCompleted == null ||
+        finishedSession.outcome == CallOutcome.CANCELLED ||
+        onCallFinished == null && onPracticeCompleted == null && finishedSession.outcome == CallOutcome.COMPLETED)) {
         LaunchedEffect(finishedSession, lifecycleOwner) {
-            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                onFinished?.invoke(finishedSession)
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                if (viewModel.consumeFinishedSession()) {
+                    if (onFinished != null) onFinished?.invoke(finishedSession) else onExitRequested()
+                }
             }
         }
     }
     val completionAttemptId = state.completionAttemptId
     if (onPracticeCompleted != null && completionAttemptId != null && !state.isExiting) {
         LaunchedEffect(completionAttemptId, lifecycleOwner) {
-            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.handoffCompletion()
-                onCompleted?.invoke(completionAttemptId)
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                if (viewModel.handoffCompletion()) onCompleted?.invoke(completionAttemptId)
             }
         }
     }
     BackHandler {
         when {
             state.microphonePermission != null -> permissionController.onDismissPermission()
+            state.isTitleVisible -> viewModel.hideTitle()
             state.isEndConfirmationVisible -> viewModel.dismissEndConfirmation()
             state.dictionary != null -> viewModel.closeDictionary()
             state.isTranscriptVisible -> viewModel.closeTranscript()
@@ -85,14 +102,18 @@ fun CallRoute(
     } else {
         val shouldShowDuration = state.presentation != CallPresentation.READY
         CallScreen(
-            state = remember(state, scenario.name) { state.copy(title = scenario.name, finishedSession = null) },
+            state = state,
+            title = scenario.name,
+            activityIndex = activityStep.default(state.activityIndex),
+            activityLevel = activityLevel,
+            activityRole = activityRole,
             onStartCall = permissionController.onRequestStart,
             onReturnToPreparation = viewModel::exitCall,
             onToggleMute = viewModel::toggleMute,
             onEndCall = viewModel::requestEndCall,
             onConfirmEndCall = viewModel::confirmEndCall,
             onContinueCall = viewModel::dismissEndConfirmation,
-            onRetry = permissionController.onRequestStart,
+            onRetry = if (state.hasCompletionError) viewModel::retryCompletion else permissionController.onRequestStart,
             onExit = viewModel::exitCall,
             onOpenTranscript = viewModel::openTranscript,
             onCloseTranscript = viewModel::closeTranscript,
@@ -108,7 +129,10 @@ fun CallRoute(
                     CallLiveDuration(viewModel.durationLabel)
                 }
             },
-            audioMeter = { meterModifier -> CallLiveAudioMeter(viewModel.audioLevel, meterModifier) }
+            audioMeter = { meterModifier -> CallLiveAudioMeter(viewModel.audioLevel, meterModifier) },
+            onShowTitle = viewModel::showTitle,
+            onHideTitle = viewModel::hideTitle,
+            onStopDictionaryWord = viewModel::stopDictionaryWord
         )
     }
 }

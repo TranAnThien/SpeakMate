@@ -3,8 +3,8 @@ package com.project.speakmate.ui.placement
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -15,14 +15,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.R
-import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.AssessmentResult
+import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.PlacementResult
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.call.CallRoute
+import com.project.speakmate.ui.components.AssessmentPendingContent
+import com.project.speakmate.ui.placement.components.AssessmentRecoveryContent
 import com.project.speakmate.ui.placement.components.PlacementResumeDialog
 import com.project.speakmate.ui.placement.state.PlacementEffect
-import com.project.speakmate.ui.placement.state.PlacementNextTask
 import com.project.speakmate.ui.placement.state.PlacementPhase
 import com.project.speakmate.ui.placement.state.PlacementResultUiState
 import com.project.speakmate.ui.placement.state.PlacementSkillUiState
@@ -43,6 +44,14 @@ fun PlacementRoute(
     val goHome by rememberUpdatedState(onHome)
     val changeCallDestination by rememberUpdatedState(onChangeCallDestination)
     val shouldShowCall = state.phase == PlacementPhase.CALLING
+    if (state.phase == PlacementPhase.ALREADY_ASSESSED) {
+        LaunchedEffect(viewModel, lifecycleOwner) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { goHome() }
+        }
+        PlacementStatusScreen(PlacementStatusUiState(status = PlacementStatus.LOADING), viewModel::exit, viewModel::continueAssessment,
+            viewModel::retry, viewModel::exit, viewModel::exit, modifier)
+        return
+    }
     LaunchedEffect(shouldShowCall, isCallDestination, lifecycleOwner) {
         if (shouldShowCall != isCallDestination) {
             lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -64,18 +73,28 @@ fun PlacementRoute(
     }
 
     if (shouldShowCall != isCallDestination) {
-        PlacementStatusScreen(PlacementStatusUiState(), viewModel::exit, viewModel::continueAssessment,
+        PlacementStatusScreen(PlacementStatusUiState(status = PlacementStatus.LOADING), viewModel::exit, viewModel::continueAssessment,
             viewModel::retry, viewModel::exit, viewModel::exit, modifier)
         return
     }
 
-    when (state.phase) {
-        PlacementPhase.INTRODUCTION -> PlacementIntroductionScreen(viewModel::exit, viewModel::start, viewModel::skip, modifier, state.saveFailed)
-        PlacementPhase.RESUME_PROMPT -> Box(modifier) {
+    if (state.pendingGradingReason != null) {
+        AssessmentPendingContent(viewModel::exit, viewModel::retryGrading, null, stringResource(R.string.placement_title), modifier)
+        return
+    }
+    if (state.recoveryProblem != null) {
+        AssessmentRecoveryContent(stringResource(R.string.placement_title), stringResource(R.string.recovery_assessment_expired),
+            viewModel::restartExpiredAssessment, viewModel::exit, modifier)
+        return
+    }
+    when {
+        state.phase == PlacementPhase.INTRODUCTION -> PlacementIntroductionScreen(viewModel::exit, viewModel::start, viewModel::skip, modifier,
+            state.saveFailed, state.isSavingResult)
+        state.phase == PlacementPhase.RESUME_PROMPT -> Box(modifier) {
             PlacementIntroductionScreen(viewModel::exit, viewModel::start, viewModel::skip, Modifier.clearAndSetSemantics {})
-            PlacementResumeDialog(viewModel::resume, viewModel::restart)
+            PlacementResumeDialog(viewModel::resume, viewModel::restart, onDismiss = viewModel::exit)
         }
-        PlacementPhase.CALLING -> {
+        state.phase == PlacementPhase.CALLING -> {
             val task = state.currentTask
             val scenario = state.scenario
             if (task != null && scenario != null) {
@@ -85,33 +104,36 @@ fun PlacementRoute(
                     onExit = viewModel::exit,
                     modifier = modifier,
                     communicativeGoal = task.communicativeGoal,
-                    onCallFinished = viewModel::submitCallResult
+                    onCallFinished = viewModel::submitCallResult,
+                    activityStep = state.currentTaskNumber.takeIf { it > 0 },
+                    activityLevel = task.targetLevel,
+                    activityRole = state.taskRole
                 )
             }
         }
-        PlacementPhase.NEXT_TASK -> when (state.nextTask) {
-            PlacementNextTask.SAME_LEVEL -> PlacementAdditionalTaskScreen(viewModel::exit, viewModel::continueAssessment, modifier)
-            PlacementNextTask.HIGHER_LEVEL, PlacementNextTask.LOWER_LEVEL, null -> PlacementStatusScreen(
-                PlacementStatusUiState(PlacementStatus.CONFIRMATION, state.hasReachedAudioLimit),
-                viewModel::exit, viewModel::continueAssessment, viewModel::retry, viewModel::exit, viewModel::exit, modifier
-            )
-        }
-        PlacementPhase.GRADING, PlacementPhase.INSUFFICIENT_EVIDENCE, PlacementPhase.UNDETERMINED -> {
+        state.phase == PlacementPhase.NEXT_TASK -> PlacementStatusScreen(
+            PlacementStatusUiState(status = PlacementStatus.CONFIRMATION, isTimeLimitReached = state.hasReachedAudioLimit,
+                nextTask = state.nextTask, taskNumber = state.currentTaskNumber, taskRole = state.taskRole,
+                assessmentLevel = state.currentTask?.targetLevel.default(SpeakingLevel.NOT_ASSESSED)),
+            viewModel::exit, viewModel::continueAssessment, viewModel::retry, viewModel::exit, viewModel::exit, modifier
+        )
+        state.phase == PlacementPhase.GRADING || state.phase == PlacementPhase.INSUFFICIENT_EVIDENCE || state.phase == PlacementPhase.UNDETERMINED -> {
             val status = when (state.phase) {
                 PlacementPhase.GRADING -> PlacementStatus.PROCESSING
                 PlacementPhase.INSUFFICIENT_EVIDENCE -> PlacementStatus.INSUFFICIENT_EVIDENCE
                 else -> PlacementStatus.UNDETERMINED
             }
-            PlacementStatusScreen(PlacementStatusUiState(status, state.hasReachedAudioLimit), viewModel::exit,
-                viewModel::continueAssessment, viewModel::retry, viewModel::exit, viewModel::exit, modifier)
+            PlacementStatusScreen(PlacementStatusUiState(status, state.hasReachedAudioLimit,
+                insufficientReason = state.insufficientReason, stopReason = state.stopReason, canRetryLoad = state.canRetryLoad), viewModel::exit,
+                viewModel::continueAssessment, if (state.canRetryLoad) viewModel::retryLoad else viewModel::retry, viewModel::exit, viewModel::exit, modifier)
         }
-        PlacementPhase.RESULT -> {
+        state.phase == PlacementPhase.RESULT -> {
             val result = state.result
             if (result != null) PlacementCompletedResult(
-                result, state.isSavingResult, state.saveFailed, viewModel::exit, viewModel::confirmResultSaved, modifier
+                result, state.isSavingResult, state.saveFailed, state.isResultSaved, viewModel::exit, viewModel::confirmResultSaved, modifier
             )
         }
-        PlacementPhase.LOADING -> PlacementStatusScreen(PlacementStatusUiState(), viewModel::exit, viewModel::continueAssessment,
+        state.phase == PlacementPhase.LOADING -> PlacementStatusScreen(PlacementStatusUiState(status = PlacementStatus.LOADING), viewModel::exit, viewModel::continueAssessment,
             viewModel::retry, viewModel::exit, viewModel::exit, modifier)
     }
 }
@@ -121,6 +143,7 @@ private fun PlacementCompletedResult(
     result: PlacementResult,
     isSavingResult: Boolean,
     saveFailed: Boolean,
+    isResultSaved: Boolean,
     onBack: () -> Unit,
     onSaveOrHome: () -> Unit,
     modifier: Modifier
@@ -134,7 +157,7 @@ private fun PlacementCompletedResult(
     }
     val passedFeedback = stringResource(R.string.placement_criterion_met_feedback)
     val failedFeedback = stringResource(R.string.placement_criterion_unmet_feedback)
-    val state = remember(result, levelLabel, isSavingResult, saveFailed, passedFeedback, failedFeedback) {
+    val state = remember(result, levelLabel, isSavingResult, saveFailed, isResultSaved, passedFeedback, failedFeedback) {
         PlacementResultUiState(
             level = result.level.name,
             levelLabel = levelLabel,
@@ -161,7 +184,8 @@ private fun PlacementCompletedResult(
             isLowestLevelAssigned = result.level == SpeakingLevel.A1 &&
                 result.taskResult in listOf(AssessmentResult.PARTIAL, AssessmentResult.FAIL),
             isSavingResult = isSavingResult,
-            saveFailed = saveFailed
+            saveFailed = saveFailed,
+            isResultSaved = isResultSaved
         )
     }
     PlacementResultScreen(state, onBack, onSaveOrHome, modifier)

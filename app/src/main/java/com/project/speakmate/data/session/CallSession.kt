@@ -20,6 +20,7 @@ class CallSession(
     var resumeJob: Job? = null
     var reconnectJob: Job? = null
     var microphoneJob: Job? = null
+    var pronunciationJob: Job? = null
     var audioGeneration = 0L
     @Volatile
     var connectionGeneration = 0L

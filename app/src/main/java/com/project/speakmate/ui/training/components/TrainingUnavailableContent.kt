@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.SpeakMateLoadingIndicator
-import com.project.speakmate.ui.components.StateIllustration
+import com.project.speakmate.ui.components.AnimatedMascot
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -49,7 +49,7 @@ fun TrainingUnavailableContent(
                     Box(Modifier.size(64.dp).background(DesignColor.PaleBlue, CircleShape), contentAlignment = Alignment.Center) {
                         SpeakMateLoadingIndicator(size = 32.dp)
                     }
-                } else StateIllustration(R.drawable.ic_training_empty_path)
+                } else AnimatedMascot(R.raw.lottie_network_error, R.drawable.img_call_error, Modifier.size(140.dp))
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(if (isLoading) loadingTitleRes else errorTitleRes),
                     style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)

@@ -13,5 +13,6 @@ data class PlacementResultUiState(
     val coherence: PlacementSkillUiState = PlacementSkillUiState(),
     val isLowestLevelAssigned: Boolean = false,
     val isSavingResult: Boolean = false,
-    val saveFailed: Boolean = false
+    val saveFailed: Boolean = false,
+    val isResultSaved: Boolean = false
 )

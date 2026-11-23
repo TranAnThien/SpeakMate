@@ -18,11 +18,14 @@ import com.project.speakmate.domain.rules.VariantRules
 import com.project.speakmate.ui.training.state.GoalAssessmentActionUiState
 import com.project.speakmate.ui.training.state.GoalAssessmentUiState
 import com.project.speakmate.ui.training.state.TrainingContentStatus
+import com.project.speakmate.utils.extension.defaultEmpty
+import com.project.speakmate.utils.extension.defaultFalse
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,10 +41,13 @@ class GoalAssessmentViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
 ) : ViewModel() {
-    private val goalId = try { savedStateHandle.toRoute<AppRoute.GoalAssessment>().goalId } catch (_: IllegalArgumentException) { "" }
+    private val route = try { savedStateHandle.toRoute<AppRoute.GoalAssessment>() } catch (_: IllegalArgumentException) { null }
+    private val goalId = route?.goalId.defaultEmpty()
+    private val shouldRequireServer = route?.isCalling.defaultFalse()
     private val _uiState = MutableStateFlow(GoalAssessmentUiState())
     val uiState: StateFlow<GoalAssessmentUiState> = _uiState.asStateFlow()
     private var observationJob: Job? = null
+    private var preparedUserId: String? = null
 
     init {
         observeAssessment()
@@ -66,19 +72,41 @@ class GoalAssessmentViewModel @Inject constructor(
         _uiState.update { it.copy(activity = original.copy(scenario = scenario)) }
     }
 
+    fun prepareStart() {
+        val state = _uiState.value
+        val activity = state.activity ?: return
+        val uid = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { return }
+        if (uid != preparedUserId || state.status != TrainingContentStatus.CONTENT || state.isLocked || state.isStarting ||
+            activity.targetLevel == SpeakingLevel.NOT_ASSESSED || activity.scenario.scenarioId.isBlank() ||
+            activity.scenario.name.isBlank() || activity.scenario.promptTemplate.isBlank()) return
+        _uiState.update { it.copy(isStarting = true, isStartReady = true) }
+    }
+
+    fun consumeStartReady(): Boolean {
+        val state = _uiState.value
+        val uid = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { return false }
+        return uid == preparedUserId && state.isStartReady && _uiState.compareAndSet(state, state.copy(isStartReady = false))
+    }
+
+    fun cancelStart() { _uiState.update { it.copy(isStarting = false, isStartReady = false) } }
+
     private fun observeAssessment() {
         observationJob?.cancel()
         observationJob = viewModelScope.launch {
             try {
                 authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
+                    preparedUserId = null
                     _uiState.update { GoalAssessmentUiState() }
                     if (uid == null) return@collectLatest
                     userRepository.observeUser(uid).collectLatest { user ->
+                        preparedUserId = null
                         _uiState.update { GoalAssessmentUiState() }
-                        val profile = checkNotNull(user)
+                        val profile = checkNotNull(if (shouldRequireServer) userRepository.getUser(uid, requireServer = true).getOrThrow() else user)
                         check(profile.level != SpeakingLevel.NOT_ASSESSED)
                         val progress = checkNotNull(profile.trainingProgress)
-                        val path = trainingRepository.getTrainingPath(profile.level).getOrThrow()
+                        val path = trainingRepository.getTrainingPath(profile.level, requireServer = shouldRequireServer).getOrThrow()
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        check(authRepository.requireCurrentUserId() == uid && path.targetLevel == profile.level)
                         val index = path.goals.indexOfFirst { it.goalId == goalId }
                         val location = TrainingActivity.GoalAssessmentActivity(index)
                         if (!TrainingProgressRules.canOpen(path, progress, location)) {
@@ -86,12 +114,17 @@ class GoalAssessmentViewModel @Inject constructor(
                             return@collectLatest
                         }
                         val goal = path.goals[index]
-                        val scenario = trainingRepository.getScenario(goal.goalAssessment.scenarioId).getOrThrow()
+                        val scenario = trainingRepository.getScenario(goal.goalAssessment.scenarioId, requireServer = shouldRequireServer).getOrThrow()
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        check(authRepository.requireCurrentUserId() == uid &&
+                            scenario.scenarioId == goal.goalAssessment.scenarioId &&
+                            scenario.name.isNotBlank() && scenario.promptTemplate.isNotBlank())
                         val activity = TrainingActivityScenario(
                             scenario, location, path.targetLevel, goal.canDoDescription,
                             goal.goalAssessment.requiredActions.toList(), path.targetLevel.name, AssessmentResult.PASS.name
                         )
                         val isReplay = TrainingProgressRules.isReplay(path, progress, location)
+                        preparedUserId = uid
                         _uiState.update {
                             GoalAssessmentUiState(
                                 status = TrainingContentStatus.CONTENT,

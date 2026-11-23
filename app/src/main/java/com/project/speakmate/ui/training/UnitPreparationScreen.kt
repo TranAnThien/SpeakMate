@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import com.project.speakmate.utils.extension.default
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -46,33 +47,31 @@ fun UnitPreparationScreen(
     onPlayPattern: (String) -> Unit,
     onPlayExample: (String) -> Unit,
     modifier: Modifier = Modifier,
-    scrollState: ScrollState = rememberScrollState()
+    scrollState: ScrollState? = null,
+    noticeContent: @Composable () -> Unit = {}
 ) {
-    val onOpenGrammar = remember(onSelectSection) { { onSelectSection(PreparationSection.GRAMMAR) } }
-    val onOpenPatterns = remember(onSelectSection) { { onSelectSection(PreparationSection.SENTENCE_PATTERNS) } }
+    val sectionScrolls = PreparationSection.entries.map { rememberScrollState() }
+    val activeScroll = scrollState.default(sectionScrolls[state.section.ordinal])
 
-    Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
-        BackAppBar(stringResource(when (state.section) {
-            PreparationSection.OVERVIEW -> R.string.preparation_title
-            PreparationSection.VOCABULARY -> R.string.preparation_vocabulary
-            PreparationSection.GRAMMAR -> R.string.preparation_grammar
-            PreparationSection.SENTENCE_PATTERNS -> R.string.preparation_patterns
-        }), onBack)
+    Column(modifier.fillMaxSize().background(DesignColor.Background)) {
+        BackAppBar(stringResource(R.string.preparation_title), onBack)
+        PreparationTabs(state.section, onSelectSection)
+
 
         Column(Modifier.weight(1f).fillMaxWidth().drawWithContent {
             drawContent()
-            val scrollRange = scrollState.maxValue
+            val scrollRange = activeScroll.maxValue
             if (scrollRange > 0 && scrollRange != Int.MAX_VALUE) {
                 val trackHeight = (size.height - 24.dp.toPx()).coerceAtLeast(0f)
                 val contentHeight = (size.height + scrollRange - 36.dp.toPx()).coerceAtLeast(size.height)
                 if (contentHeight > 0f) {
                     val thumbHeight = (trackHeight * size.height / contentHeight).coerceAtMost(trackHeight)
-                    val thumbTop = 12.dp.toPx() + (trackHeight - thumbHeight) * scrollState.value.toFloat() / scrollRange
+                    val thumbTop = 12.dp.toPx() + (trackHeight - thumbHeight) * activeScroll.value.toFloat() / scrollRange
                     drawRoundRect(DesignColor.ScrollIndicator, Offset(size.width - 7.dp.toPx(), thumbTop),
                         Size(3.dp.toPx(), thumbHeight), CornerRadius(2.dp.toPx()))
                 }
             }
-        }.verticalScroll(scrollState).padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
+        }.verticalScroll(activeScroll).padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)) {
 
             Text(state.contextLabel, style = DesignTypography.Label, color = DesignColor.Muted)
@@ -80,7 +79,11 @@ fun UnitPreparationScreen(
             if (state.section != PreparationSection.OVERVIEW) {
                 Text(state.description, style = DesignTypography.Detail, color = DesignColor.Muted)
             }
-            if (state.section != PreparationSection.OVERVIEW) PreparationTabs(state.section, onSelectSection)
+            if (state.hasStartError) Text(
+                stringResource(if (state.isLocked) R.string.preparation_unit_locked else R.string.preparation_refresh_error),
+                style = DesignTypography.Detail,
+                color = DesignColor.Error
+            )
 
             when (state.section) {
                 PreparationSection.OVERVIEW -> PreparationOverviewContent(
@@ -90,43 +93,41 @@ fun UnitPreparationScreen(
                 )
                 PreparationSection.VOCABULARY -> {
                     PreparationNote(stringResource(R.string.preparation_audio_note))
-                    state.vocabulary.forEach { word ->
+                    if (state.vocabulary.isEmpty()) PreparationNote(stringResource(R.string.preparation_empty_vocabulary))
+                    state.vocabulary.distinctBy { it.id }.forEach { word ->
                         key(word.id) {
                             val onPlay = remember(word.word, onPlayWord) { { onPlayWord(word.word) } }
                             val onExample = remember(word.example.sentence, onPlayExample) { { onPlayExample(word.example.sentence) } }
-                            PreparationVocabularyCard(word, onPlay, onExample)
+                            PreparationVocabularyCard(word, onPlay, onExample, playback = state.playback)
                         }
                     }
                 }
                 PreparationSection.GRAMMAR -> {
-                    state.grammar.forEach { grammar ->
+                    if (state.grammar.isEmpty()) PreparationNote(stringResource(R.string.preparation_empty_grammar))
+                    state.grammar.distinctBy { it.id }.forEach { grammar ->
                         key(grammar.id) {
-                            PreparationGrammarCard(grammar, onPlayExample)
+                            PreparationGrammarCard(grammar, onPlayExample, playback = state.playback)
                         }
                     }
                     PreparationNote(stringResource(R.string.preparation_grammar_note))
                 }
                 PreparationSection.SENTENCE_PATTERNS -> {
-                    state.sentencePatterns.forEach { pattern ->
+                    if (state.sentencePatterns.isEmpty()) PreparationNote(stringResource(R.string.preparation_empty_patterns))
+                    state.sentencePatterns.distinctBy { it.id }.forEach { pattern ->
                         key(pattern.id) {
                             val onPlay = remember(pattern.pattern, onPlayPattern) { { onPlayPattern(pattern.pattern) } }
-                            PreparationPatternCard(pattern, onPlay, onPlayExample)
+                            PreparationPatternCard(pattern, onPlay, onPlayExample, playback = state.playback)
                         }
                     }
                     PreparationNote(stringResource(R.string.preparation_patterns_note))
                 }
             }
         }
+        noticeContent()
         Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp, vertical = 16.dp)) {
-            PrimaryButton(stringResource(when (state.section) {
-                PreparationSection.VOCABULARY -> R.string.preparation_next_grammar
-                PreparationSection.GRAMMAR -> R.string.preparation_next_patterns
-                else -> R.string.preparation_start_roleplay
-            }), when (state.section) {
-                PreparationSection.VOCABULARY -> onOpenGrammar
-                PreparationSection.GRAMMAR -> onOpenPatterns
-                else -> onStartRoleplay
-            })
+            PrimaryButton(stringResource(if (state.isStarting) R.string.preparation_start_checking else R.string.preparation_start_roleplay), onStartRoleplay,
+                enabled = state.canStartRoleplay && !state.isStarting && !state.isLocked)
+
         }
     }
 }

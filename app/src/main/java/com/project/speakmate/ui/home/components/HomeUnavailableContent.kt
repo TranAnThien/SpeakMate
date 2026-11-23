@@ -39,7 +39,7 @@ fun HomeUnavailableContent(hasDialog: Boolean, onRetry: () -> Unit) {
                 Text(stringResource(if (hasDialog) R.string.home_empty_description else R.string.home_error_description),
                     style = DesignTypography.EmptyBody, color = DesignColor.Muted, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(52.dp))
-                if (!hasDialog) PrimaryButton(stringResource(R.string.home_retry), onRetry, minHeight = 52.dp)
+                if (!hasDialog) PrimaryButton(stringResource(R.string.home_retry), onRetry)
             }
         }
     }

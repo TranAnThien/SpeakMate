@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -83,14 +84,15 @@ class UnitPreparationViewModelTest {
         val viewModel = createViewModel()
         viewModel.getPreparation(UNIT_ID)
         advanceUntilIdle()
+        val stopsBeforePlayback = pronunciation.stops
         viewModel.playText("A coffee please")
         viewModel.stopPronunciation()
+        assertTrue(pronunciation.stops > stopsBeforePlayback)
         val store = ViewModelStore()
         store.put(VIEW_MODEL_KEY, viewModel)
         store.clear()
 
         assertEquals(listOf("A coffee please"), pronunciation.playedTexts)
-        assertEquals(1, pronunciation.stops)
         assertEquals(1, pronunciation.releases)
     }
 

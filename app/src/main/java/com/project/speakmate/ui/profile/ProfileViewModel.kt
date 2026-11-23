@@ -6,8 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.project.speakmate.ui.components.AssessmentCriterionType
 import com.project.speakmate.ui.profile.state.ProfileUiState
 import com.project.speakmate.ui.profile.state.ProfileSkillUiState
-import com.project.speakmate.utils.extension.default
 import kotlinx.coroutines.flow.update
+import com.project.speakmate.domain.rules.SavedVocabularyRules
+import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.UserRepository
@@ -37,6 +38,7 @@ class ProfileViewModel @Inject constructor(
     private val _uiEffect = MutableSharedFlow<ProfileEffect>(replay = 0)
     val uiEffect: SharedFlow<ProfileEffect> = _uiEffect.asSharedFlow()
 
+    private var observedUserId: String? = null
     private var hasAuthenticatedSession = false
     private var profileObservationJob: Job? = null
 
@@ -49,7 +51,11 @@ class ProfileViewModel @Inject constructor(
         profileObservationJob = viewModelScope.launch {
             try {
                 authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
-                    _uiState.update { ProfileUiState() }
+                    if (uid != observedUserId) {
+                        observedUserId = uid
+                        _uiState.value = ProfileUiState()
+                    }
+                    _uiState.update { it.copy(isLoading = uid != null, isProfileLoadFailed = false) }
                     if (uid == null) {
                         val shouldNavigateToAuth = hasAuthenticatedSession
                         hasAuthenticatedSession = false
@@ -58,19 +64,22 @@ class ProfileViewModel @Inject constructor(
                         hasAuthenticatedSession = true
                         try {
                             userRepository.observeUser(uid).collect { user ->
-                                _uiState.update { user?.let(::toUiState).default(ProfileUiState(isProfileLoadFailed = true)) }
+                                if (authRepository.requireCurrentUserId() == uid && observedUserId == uid) {
+                                    if (user != null && user.userId == uid) _uiState.value = toUiState(user)
+                                    else _uiState.update { it.copy(isLoading = false, isProfileLoadFailed = true) }
+                                }
                             }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
-                            _uiState.update { ProfileUiState(isProfileLoadFailed = true) }
+                            showProfileLoadFailure()
                         }
                     }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _uiState.update { ProfileUiState(isProfileLoadFailed = true) }
+                showProfileLoadFailure()
             }
         }
     }
@@ -84,19 +93,35 @@ class ProfileViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _uiState.update { it.copy(isProfileLoadFailed = true) }
+                showProfileLoadFailure()
             }
+        }
+    }
+
+    private fun showProfileLoadFailure() {
+        val uid = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { null }
+        if (uid != null && uid == observedUserId) {
+            _uiState.update { it.copy(isLoading = false, isProfileLoadFailed = true) }
+        } else {
+            observedUserId = null
+            _uiState.value = ProfileUiState(isLoading = false, isProfileLoadFailed = true)
         }
     }
 
     private fun toUiState(user: User): ProfileUiState {
         val criteria = user.latestAssessmentCriteria
-        val values = criteria?.let { listOf(it.rangeMet, it.accuracyMet, it.fluencyMet, it.interactionMet, it.coherenceMet) }
+        val values = if (user.level == SpeakingLevel.NOT_ASSESSED) null else criteria?.let {
+            listOf(it.rangeMet, it.accuracyMet, it.fluencyMet, it.interactionMet, it.coherenceMet)
+        }
         return ProfileUiState(
             displayName = user.displayName,
             email = user.email,
             avatarUrl = user.photoUrl,
             level = user.level,
+            isLoading = false,
+            hasLoaded = true,
+            lastAssessedAtMillis = user.lastAssessedAt?.time,
+            savedVocabularyCount = user.savedVocabularies.distinctBy(SavedVocabularyRules::getIdentity).size,
             skills = if (values == null) emptyList() else AssessmentCriterionType.entries.mapIndexed { index, type ->
                 ProfileSkillUiState(id = type.name, isPassed = values[index], criterion = type)
             }

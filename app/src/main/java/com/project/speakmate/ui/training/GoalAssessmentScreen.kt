@@ -42,7 +42,8 @@ fun GoalAssessmentScreen(
     onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState(),
-    onRetrySave: () -> Unit = {}
+    onRetrySave: () -> Unit = {},
+    onRetryProgress: () -> Unit = {}
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background).statusBarsPadding()) {
         BackAppBar(stringResource(R.string.goal_assessment_header), onBack)
@@ -56,6 +57,11 @@ fun GoalAssessmentScreen(
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState)
                 .padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                if (state.presentation != GoalAssessmentPresentation.INTRODUCTION && state.presentation != GoalAssessmentPresentation.PROCESSING) Text(
+                    stringResource(if (state.isSaved) R.string.practice_summary_saved_status else R.string.practice_summary_pending_status),
+                    style = DesignTypography.Label,
+                    color = DesignColor.Primary
+                )
                 GoalAssessmentOutcome(state.presentation, state.title, state.description)
                 if (state.presentation == GoalAssessmentPresentation.INTRODUCTION) {
                     GoalAssessmentRequiredActions(state.requiredActions)
@@ -73,6 +79,14 @@ fun GoalAssessmentScreen(
                             R.string.goal_assessment_calculation_description else R.string.goal_assessment_criteria_description),
                         isHighlighted = false
                     )
+                }
+                if (state.resultActions.isNotEmpty()) com.project.speakmate.ui.training.components.UnitResultRequiredActions(state.resultActions)
+                state.criteria.forEach { criterion ->
+                    androidx.compose.runtime.key(criterion.id) { com.project.speakmate.ui.training.components.UnitResultCriterionCard(criterion) }
+                }
+                if (state.hasProgressError) {
+                    Text(stringResource(R.string.assessment_progress_refresh_error), style = DesignTypography.Detail, color = DesignColor.Error)
+                    com.project.speakmate.ui.components.SecondaryButton(stringResource(R.string.content_reload), onRetryProgress)
                 }
                 GoalAssessmentTextCard(state.feedbackTitle, state.feedback, isHighlighted = true)
             }

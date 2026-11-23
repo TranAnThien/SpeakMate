@@ -95,6 +95,42 @@ class SavedVocabularyRulesTest {
         assertEquals(InvalidVocabularyException.Reason.INVALID_CONTENT, rejection { SavedVocabularyRules.normalize(word.copy(word = " ")) })
     }
 
+    @Test
+    fun identityNormalizesWordAndWhitespaceWithoutMergingDifferentPartsOfSpeech() {
+        assertEquals(SavedVocabularyRules.getIdentity("COFFEE", "noun"), SavedVocabularyRules.getIdentity(" coffee ", " noun "))
+        assertFalse(SavedVocabularyRules.getIdentity("run", "noun") == SavedVocabularyRules.getIdentity("run", "verb"))
+        assertFalse(SavedVocabularyRules.getIdentity("run", "noun") == SavedVocabularyRules.getIdentity("run", "Noun"))
+    }
+
+    @Test
+    fun visibleItemsDedupeByIdentityAndSearchBothWordAndMeaning() {
+        val duplicate = word.copy(word = " COFFEE ", mean = "changed")
+        val verb = word.copy(word = "run", partOfSpeech = "verb", mean = "Chạy")
+        val source = listOf(word, duplicate, verb)
+        assertEquals(listOf(word, verb), SavedVocabularyRules.getVisibleItems(source, emptySet(), ""))
+        assertEquals(listOf(word), SavedVocabularyRules.getVisibleItems(source, emptySet(), "COF"))
+        assertEquals(listOf(verb), SavedVocabularyRules.getVisibleItems(source, emptySet(), " CHẠY "))
+    }
+
+    @Test
+    fun removingAnExclusionUsesTheLatestSnapshotOrderAndCurrentQuery() {
+        val next = word.copy(word = "tea", mean = "Trà mới")
+        val updated = word.copy(mean = "Cà phê mới")
+        val latest = listOf(next, updated)
+        val hidden = setOf(SavedVocabularyRules.getIdentity(word))
+        assertTrue(SavedVocabularyRules.getVisibleItems(latest, hidden, "phê").isEmpty())
+        assertEquals(listOf(updated), SavedVocabularyRules.getVisibleItems(latest, emptySet(), "phê"))
+        assertEquals(latest, SavedVocabularyRules.getVisibleItems(latest, emptySet(), ""))
+    }
+
+
+    @Test
+    fun removingTheExclusionDoesNotResurrectItemsDeletedFromTheLatestSnapshot() {
+        val hidden = setOf(SavedVocabularyRules.getIdentity(word))
+        assertTrue(SavedVocabularyRules.getVisibleItems(emptyList(), hidden, "").isEmpty())
+        assertTrue(SavedVocabularyRules.getVisibleItems(emptyList(), emptySet(), "").isEmpty())
+    }
+
     private fun rejection(operation: () -> Unit): InvalidVocabularyException.Reason {
         try { operation() } catch (failure: InvalidVocabularyException) { return failure.reason }
         throw AssertionError()

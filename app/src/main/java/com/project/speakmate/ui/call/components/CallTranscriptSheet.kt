@@ -1,54 +1,47 @@
 package com.project.speakmate.ui.call.components
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -57,8 +50,8 @@ import com.project.speakmate.ui.call.state.CallDictionaryUiState
 import com.project.speakmate.ui.call.state.CallTranscriptMessageUiState
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
-import com.project.speakmate.utils.extension.default
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 @Composable
 fun CallTranscriptSheet(
@@ -72,117 +65,101 @@ fun CallTranscriptSheet(
     onSaveDictionaryWord: () -> Unit,
     onRetryDictionary: () -> Unit,
     modifier: Modifier = Modifier,
-    initialDictionaryAnchorTop: Dp = 0.dp
+    initialDictionaryAnchorTop: Dp = 0.dp,
+    onStopPronunciation: () -> Unit = {}
 ) {
-    Surface(modifier.fillMaxSize(), color = DesignColor.TranscriptScrim) {
+    val visibleMessages = remember(messages) { messages.distinctBy { it.id } }
+    Surface(modifier.fillMaxSize(), shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), color = DesignColor.Surface) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            val sheetHeight = maxHeight.coerceAtMost(623.dp)
+            val sheetMaxHeight = maxHeight
             val density = LocalDensity.current
-            var sheetTopPx by remember { mutableFloatStateOf(0f) }
-            var anchorTopPx by remember { mutableStateOf<Int?>(null) }
-            val selectWord = remember(onSelectWord, density) {
-                { messageId: String, start: Int, word: String, bounds: Rect ->
-                    anchorTopPx = (bounds.bottom - sheetTopPx).roundToInt() + with(density) { 8.dp.roundToPx() }
-                    onSelectWord(messageId, start, word)
+            val scope = rememberCoroutineScope()
+            val latestDictionary by rememberUpdatedState(dictionary)
+            var sheetPosition by remember { mutableStateOf(Offset.Zero) }
+            var anchor by remember { mutableStateOf<Rect?>(null) }
+            var popupHeight by remember { mutableIntStateOf(0) }
+            var isFollowing by remember(listState) { mutableStateOf(listState.layoutInfo.visibleItemsInfo.isEmpty() || !listState.canScrollForward) }
+            var isAutoScrolling by remember(listState) { mutableStateOf(false) }
+            var hasNewMessages by remember(listState) { mutableStateOf(false) }
+            LaunchedEffect(listState) {
+                snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }.collect { (scrolling, canScroll) ->
+                    if (scrolling && !isAutoScrolling) isFollowing = !canScroll
+                    if (!canScroll && latestDictionary == null) { hasNewMessages = false; isFollowing = true }
                 }
             }
-            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(sheetHeight)
-                .onGloballyPositioned { sheetTopPx = it.positionInWindow().y }
-                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(DesignColor.Surface)) {
-                Column(Modifier.fillMaxSize()) {
-                    CallTranscriptHeader(onClose)
-                    CallTranscriptFollowEffect(messages, listState, isDictionaryOpen = dictionary != null)
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f).fillMaxWidth().drawWithContent {
-                            drawContent()
-                            val info = listState.layoutInfo
-                            val visible = info.visibleItemsInfo
-                            val total = info.totalItemsCount
-                            val first = visible.firstOrNull()
-                            if (first != null && total > 0 && size.height > 0f &&
-                                (listState.canScrollForward || listState.canScrollBackward)
-                            ) {
-                                val track = (size.height - 24.dp.toPx()).coerceAtLeast(0f)
-                                val thumb = track * (visible.size.toFloat() / total).coerceAtMost(1f)
-                                val scrolled = first.index - first.offset.toFloat() / first.size.coerceAtLeast(1)
-                                val progress = if (!listState.canScrollForward) 1f
-                                    else (scrolled / (total - visible.size).coerceAtLeast(1)).coerceIn(0f, 1f)
-                                drawRoundRect(DesignColor.ScrollIndicator, Offset(size.width - 7.dp.toPx(), 12.dp.toPx() + (track - thumb) * progress),
-                                    Size(3.dp.toPx(), thumb), CornerRadius(2.dp.toPx()))
-                            }
-                        },
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(messages, key = { it.id }, contentType = { it.isUser }) { message ->
-                            CallTranscriptMessage(message, dictionary?.takeIf { it.messageId == message.id }, selectWord)
+            LaunchedEffect(dictionary != null) { if (dictionary != null) isFollowing = false }
+            val last = visibleMessages.lastOrNull()
+            LaunchedEffect(last?.id, last?.text, last?.isPartial) {
+                if (last != null) {
+                    if (isFollowing && dictionary == null && !listState.isScrollInProgress) {
+                        isAutoScrolling = true
+                        try {
+                            listState.scrollToItem(visibleMessages.lastIndex)
+                            listState.layoutInfo.visibleItemsInfo.lastOrNull()?.let { listState.scrollBy(it.size.toFloat()) }
+                        } finally { isAutoScrolling = false }
+                    } else hasNewMessages = true
+                }
+            }
+            val selectWord = remember(onSelectWord) {
+                { id: String, start: Int, word: String, bounds: Rect ->
+                    anchor = bounds
+                    onSelectWord(id, start, word)
+                }
+            }
+            val updateAnchor = remember {
+                { id: String, start: Int, bounds: Rect ->
+                    val selection = latestDictionary
+                    if (selection != null && selection.messageId == id && selection.selectionStart == start) anchor = bounds
+                }
+            }
+            Column(Modifier.fillMaxSize().onGloballyPositioned { sheetPosition = it.positionInWindow() }) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.call_transcript_title), Modifier.weight(1f), style = DesignTypography.Title, color = DesignColor.Primary)
+                    IconButton(onClick = onClose) { Icon(painterResource(R.drawable.ic_call_close), stringResource(R.string.call_transcript_close)) }
+                }
+                if (sheetMaxHeight > 360.dp) Text(stringResource(R.string.call_transcript_hint), Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = DesignTypography.Detail, color = DesignColor.Muted)
+                if (visibleMessages.isEmpty()) {
+                    Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        Text(stringResource(R.string.call_transcript_empty), style = DesignTypography.Detail, color = DesignColor.Muted)
+                    }
+                } else LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(visibleMessages, key = { it.id }, contentType = { it.isUser }) { message ->
+                        CallTranscriptMessage(message, dictionary?.takeIf { it.messageId == message.id }, selectWord, onSelectionBoundsChanged = updateAnchor)
+                    }
+                }
+                if (hasNewMessages) TextButton(onClick = {
+                    onCloseDictionary()
+                    isFollowing = true
+                    hasNewMessages = false
+                    scope.launch {
+                        if (visibleMessages.isNotEmpty()) {
+                            listState.animateScrollToItem(visibleMessages.lastIndex)
+                            listState.layoutInfo.visibleItemsInfo.lastOrNull()?.let { listState.scrollBy(it.size.toFloat()) }
                         }
                     }
-                    Text(stringResource(R.string.call_transcript_footer), style = DesignTypography.Caption, color = DesignColor.Muted,
-                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
-                            .padding(top = 14.dp, bottom = 28.dp))
-                }
-                if (dictionary != null) {
-                    var popupHeightPx by remember { mutableIntStateOf(0) }
-                    val availableHeightPx = with(density) { sheetHeight.roundToPx() }
-                    val initialAnchorPx = with(density) { initialDictionaryAnchorTop.roundToPx() }
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 40.dp).offset {
-                        IntOffset(0, anchorTopPx.default(initialAnchorPx).coerceIn(0, (availableHeightPx - popupHeightPx).coerceAtLeast(0)))
-                    }, contentAlignment = Alignment.TopCenter) {
-                        CallDictionaryPopup(dictionary, onCloseDictionary, onPlayDictionaryWord, onSaveDictionaryWord, onRetryDictionary,
-                            Modifier.widthIn(max = 316.dp).heightIn(max = sheetHeight).onSizeChanged { popupHeightPx = it.height })
-                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.call_transcript_new_messages)) }
+            }
+            if (dictionary != null) {
+                val width = minOf(316.dp, (maxWidth - 32.dp).coerceAtLeast(0.dp))
+                val widthPx = with(density) { width.roundToPx() }
+                val availableHeight = with(density) { maxHeight.roundToPx() }
+                val availableWidth = with(density) { maxWidth.roundToPx() }
+                val gap = with(density) { 8.dp.roundToPx() }
+                val initialY = with(density) { initialDictionaryAnchorTop.roundToPx() }
+                Box(Modifier.width(width).offset {
+                    val bounds = anchor
+                    val center = bounds?.center?.x?.minus(sheetPosition.x) ?: availableWidth / 2f
+                    val below = bounds?.bottom?.minus(sheetPosition.y)?.roundToInt()?.plus(gap) ?: initialY
+                    val above = bounds?.top?.minus(sheetPosition.y)?.roundToInt()?.minus(popupHeight + gap) ?: initialY
+                    IntOffset((center - widthPx / 2f).roundToInt().coerceIn(0, (availableWidth - widthPx).coerceAtLeast(0)),
+                        (if (below + popupHeight <= availableHeight) below else above).coerceIn(0, (availableHeight - popupHeight).coerceAtLeast(0)))
+                }) {
+                    CallDictionaryPopup(dictionary, onCloseDictionary, onPlayDictionaryWord, onSaveDictionaryWord, onRetryDictionary,
+                        Modifier.heightIn(max = sheetMaxHeight).onSizeChanged { popupHeight = it.height }, onStopPronunciation = onStopPronunciation)
                 }
             }
         }
     }
-}
-
-@Composable
-private fun CallTranscriptFollowEffect(
-    messages: List<CallTranscriptMessageUiState>,
-    listState: LazyListState,
-    isDictionaryOpen: Boolean
-) {
-    var isFollowing by remember(listState) { mutableStateOf(true) }
-    var isAutoScrolling by remember(listState) { mutableStateOf(false) }
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress to !listState.canScrollForward }
-            .collect { (isScrolling, isAtEnd) -> if (isScrolling && !isAutoScrolling) isFollowing = isAtEnd }
-    }
-    val lastIndex = messages.lastIndex
-    val lastLength = messages.lastOrNull()?.text?.length
-    LaunchedEffect(lastIndex, lastLength, isDictionaryOpen) {
-        if (isFollowing && !isDictionaryOpen && lastIndex >= 0) {
-            isAutoScrolling = true
-            try {
-                listState.scrollToItem(lastIndex)
-                listState.layoutInfo.visibleItemsInfo.lastOrNull()?.let { listState.scrollBy(it.size.toFloat()) }
-            } finally {
-                isAutoScrolling = false
-            }
-        }
-    }
-}
-
-@Composable
-private fun CallTranscriptHeader(onClose: () -> Unit) {
-    Box(Modifier.fillMaxWidth()) {
-        Box(Modifier.align(Alignment.TopCenter).padding(top = 10.dp).size(48.dp, 4.dp)
-            .background(DesignColor.ScrollIndicator, RoundedCornerShape(2.dp)))
-        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 92.dp, top = 32.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.call_transcript_title), style = DesignTypography.Title, color = DesignColor.Primary)
-            Text(stringResource(R.string.call_transcript_subtitle), style = DesignTypography.Detail, color = DesignColor.Muted)
-        }
-        Box(Modifier.align(Alignment.TopEnd).padding(end = 24.dp, top = 20.dp).size(48.dp).clickable(onClick = onClose),
-            contentAlignment = Alignment.Center) {
-            Image(painterResource(R.drawable.ic_call_close), null, Modifier.size(24.dp), colorFilter = ColorFilter.tint(DesignColor.Muted))
-        }
-    }
-    Spacer(Modifier.height(4.dp))
-    Text(stringResource(R.string.call_transcript_hint), style = DesignTypography.Detail, color = DesignColor.Primary,
-        modifier = Modifier.padding(horizontal = 24.dp).fillMaxWidth().background(DesignColor.PaleBlue, RoundedCornerShape(16.dp)).padding(12.dp))
-    Spacer(Modifier.height(4.dp))
 }

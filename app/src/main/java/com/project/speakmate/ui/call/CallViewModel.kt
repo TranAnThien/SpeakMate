@@ -5,15 +5,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallInterruption
+import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.CallState
 import com.project.speakmate.domain.model.CompletedPractice
 import com.project.speakmate.domain.model.DictionaryLookupResult
 import com.project.speakmate.domain.model.LearningExample
-import com.project.speakmate.domain.model.PracticeCompletionState
 import com.project.speakmate.domain.model.PronunciationState
 import com.project.speakmate.domain.model.SenderType
+import com.project.speakmate.domain.model.TrainingActivity
 import com.project.speakmate.domain.model.TranscriptMessage
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
@@ -35,6 +37,7 @@ import com.project.speakmate.utils.extension.toDurationLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,7 +45,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -75,6 +77,10 @@ class CallViewModel @Inject constructor(
     private var hasHandedOffCompletion = false
     private var hasProcessedCurrentSession: Boolean = false
     private var dictionarySaveRequest = 0L
+    private var dictionaryLookupRequest = 0L
+    private var dictionaryLookupJob: Job? = null
+    private var hasDeliveredFinishedSession = false
+    private var hasDeliveredExit = false
 
     val durationLabel: StateFlow<String> = combine(
         repository.sessionState,
@@ -105,11 +111,16 @@ class CallViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isTranscriptVisible = it.isTranscriptVisible && isCallOpen,
-                        dictionary = it.dictionary.takeIf { isCallOpen }?.copy(
-                            isPronouncing = session.pronunciation == PronunciationState.PLAYING,
-                            hasPronunciationError = session.pronunciation == PronunciationState.FAILED
-                        ),
-                        presentation = getPresentation(session),
+                        dictionary = it.dictionary.takeIf { isCallOpen }?.let { dictionary ->
+                            val isCurrent = dictionary.word == session.pronunciationText
+                            dictionary.copy(
+                                isPronouncing = isCurrent && (session.pronunciation == PronunciationState.PLAYING || session.pronunciation == PronunciationState.LOADING),
+                                isPronunciationLoading = isCurrent && session.pronunciation == PronunciationState.LOADING,
+                                hasPronunciationError = isCurrent && session.pronunciation == PronunciationState.FAILED
+                            )
+                        },
+                        presentation = if (it.hasCompletionError) CallPresentation.FAILED else getPresentation(session),
+                        hasUserSpeech = session.hasUserSpeech,
                         isMuted = session.isMuted,
                         isResuming = session.isResuming,
                         failure = session.failure,
@@ -146,15 +157,36 @@ class CallViewModel @Inject constructor(
         if (!isForeground) dismissEndConfirmation()
     }
 
+    fun consumeStartReady(): Boolean {
+        val state = _uiState.value
+        if (!state.isStartReady || state.presentation != CallPresentation.READY || state.microphonePermission != null ||
+            state.finishedSession != null || state.isExiting) return false
+        return _uiState.compareAndSet(state, state.copy(isStartReady = false))
+    }
+
     fun startCall(context: CallActivityContext) {
+        if (_uiState.value.isExiting || (_uiState.value.presentation != CallPresentation.READY && _uiState.value.presentation != CallPresentation.FAILED)) return
+        dictionaryLookupJob?.cancel()
+        dictionaryLookupRequest++
+        dictionarySaveRequest++
         if (!hasHandedOffCompletion) _uiState.value.completionAttemptId?.let(completionRepository::releaseCompletion)
         currentContext = context
         hasHandedOffCompletion = false
         hasProcessedCurrentSession = false
+        hasDeliveredFinishedSession = false
+        hasDeliveredExit = false
         val activityType = context.activityType
         _uiState.update {
             it.copy(
                 microphonePermission = null,
+                presentation = CallPresentation.CONNECTING,
+                isStartReady = false,
+                dictionary = null,
+                messages = emptyList(),
+                isTranscriptVisible = false,
+                hasCompletionError = false,
+                activityType = activityType,
+                activityIndex = ((context as? CallActivityContext.Training)?.activityScenario?.activity as? TrainingActivity.UnitActivity)?.unitIndex?.plus(1),
                 isTranscriptAvailable = activityType.isTranscriptAvailable,
                 isStandaloneCall = activityType == CallActivityType.FREE_PRACTICE || activityType == CallActivityType.INITIAL_PLACEMENT,
                 finishedSession = null,
@@ -164,8 +196,34 @@ class CallViewModel @Inject constructor(
         repository.startCall(context)
     }
 
-    fun handoffCompletion() {
+    fun handoffCompletion(): Boolean {
+        if (hasHandedOffCompletion || _uiState.value.completionAttemptId == null || _uiState.value.isExiting) return false
         hasHandedOffCompletion = true
+        return true
+    }
+
+    fun consumeFinishedSession(): Boolean {
+        if (hasDeliveredFinishedSession || _uiState.value.finishedSession == null || _uiState.value.isExiting) return false
+        hasDeliveredFinishedSession = true
+        return true
+    }
+
+    fun consumeExit(): Boolean {
+        if (hasDeliveredExit) return false
+        hasDeliveredExit = true
+        return true
+    }
+
+    fun showTitle() { _uiState.update { it.copy(isTitleVisible = true) } }
+
+    fun hideTitle() { _uiState.update { it.copy(isTitleVisible = false) } }
+
+    fun retryCompletion() {
+        val session = _uiState.value.finishedSession ?: return
+        if (!_uiState.value.hasCompletionError) return
+        _uiState.update { it.copy(hasCompletionError = false, presentation = CallPresentation.FINALIZING) }
+        completePractice(session)
+        if (_uiState.value.hasCompletionError) _uiState.update { it.copy(presentation = CallPresentation.FAILED) }
     }
 
     fun openTranscript() {
@@ -173,13 +231,20 @@ class CallViewModel @Inject constructor(
     }
 
     fun closeTranscript() {
+        dictionaryLookupRequest++
+        dictionaryLookupJob?.cancel()
         repository.stopPronunciation()
         _uiState.update { it.copy(isTranscriptVisible = false, dictionary = null) }
     }
 
     fun selectWord(messageId: String, selectionStart: Int, word: String) {
         val message = _uiState.value.messages.firstOrNull { it.id == messageId } ?: return
-        if (word.isBlank() || selectionStart !in message.text.indices) return
+        val session = repository.sessionState.value
+        if (session.isFinalizing || session.state != CallState.ACTIVE && session.state != CallState.PAUSED) return
+        if (!_uiState.value.isTranscriptAvailable || word.isBlank() || selectionStart !in message.text.indices ||
+            !message.text.regionMatches(selectionStart, word, 0, word.length)) return
+        val request = ++dictionaryLookupRequest
+        dictionaryLookupJob?.cancel()
 
         repository.stopPronunciation()
 
@@ -197,8 +262,11 @@ class CallViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
-            val result = dictionaryRepository.lookUp(word, sentenceContext)
+        dictionaryLookupJob = viewModelScope.launch {
+            val result = try { dictionaryRepository.lookUp(word, sentenceContext) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { DictionaryLookupResult.Error(failure) }
+            if (request != dictionaryLookupRequest) return@launch
 
             _uiState.update { state ->
                 val currentDict = state.dictionary ?: return@update state
@@ -259,7 +327,9 @@ class CallViewModel @Inject constructor(
                 )
             )
 
-            val result = savedVocabularyRepository.saveVocabulary(vocabItem)
+            val result = try { savedVocabularyRepository.saveVocabulary(vocabItem) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { Result.failure(failure) }
 
             _uiState.update { state ->
                 val dict = state.dictionary ?: return@update state
@@ -295,6 +365,8 @@ class CallViewModel @Inject constructor(
     }
 
     fun closeDictionary() {
+        dictionaryLookupRequest++
+        dictionaryLookupJob?.cancel()
         repository.stopPronunciation()
         _uiState.update { it.copy(dictionary = null) }
     }
@@ -316,9 +388,19 @@ class CallViewModel @Inject constructor(
     }
 
     fun playDictionaryWord() {
-        val word = _uiState.value.dictionary?.word ?: return
-        repository.playPronunciation(word)
+        val dictionary = _uiState.value.dictionary ?: return
+        if (dictionary.status != CallDictionaryStatus.SUCCESS || dictionary.isPronouncing) return
+        val session = repository.sessionState.value
+        if (session.isFinalizing || session.state != CallState.ACTIVE && session.state != CallState.PAUSED) return
+        _uiState.update { it.copy(dictionary = it.dictionary?.copy(isPronouncing = true, isPronunciationLoading = true, hasPronunciationError = false)) }
+        repository.playPronunciation(dictionary.word)
     }
+
+    fun showConfigurationError() {
+        _uiState.update { it.copy(presentation = CallPresentation.FAILED, failure = CallFailure.CONFIGURATION) }
+    }
+
+    fun stopDictionaryWord() { repository.stopPronunciation() }
 
     fun showMicrophonePermission(presentation: MicrophonePermissionPresentation) {
         _uiState.update {
@@ -377,27 +459,25 @@ class CallViewModel @Inject constructor(
 
     private fun completePractice(session: CallSessionState) {
         val context = currentContext ?: return
+        if (context is CallActivityContext.Assessment) return
         val attemptId = try {
             completionRepository.completePractice(CompletedPractice(context, session))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             null
-        } ?: return
-        _uiState.update { it.copy(completionAttemptId = attemptId) }
-        if (context is CallActivityContext.FreePractice) {
-            viewModelScope.launch {
-                completionRepository.observeCompletion(attemptId).first {
-                    it is PracticeCompletionState.Saved || it is PracticeCompletionState.Unavailable
-                }
-                completionRepository.releaseCompletion(attemptId)
-            }
         }
+        if (attemptId == null) {
+            if (session.outcome == CallOutcome.COMPLETED) _uiState.update { it.copy(hasCompletionError = true) }
+            return
+        }
+        _uiState.update { it.copy(completionAttemptId = attemptId, hasCompletionError = false) }
     }
 
     private fun getPresentation(session: CallSessionState): CallPresentation =
         when (session.state) {
-            CallState.READY, CallState.ENDED -> CallPresentation.READY
+            CallState.READY -> CallPresentation.READY
+            CallState.ENDED -> if (session.outcome == CallOutcome.COMPLETED) CallPresentation.FINALIZING else CallPresentation.READY
             CallState.CALLING -> CallPresentation.CONNECTING
             CallState.PAUSED -> {
                 if (session.interruption == CallInterruption.NETWORK) {
@@ -409,12 +489,12 @@ class CallViewModel @Inject constructor(
 
             CallState.FAILED -> CallPresentation.FAILED
             CallState.ACTIVE -> when {
-                session.isFinalizing -> CallPresentation.PROCESSING
+                session.isFinalizing -> CallPresentation.FINALIZING
                 session.interruption == CallInterruption.MICROPHONE ->
                     CallPresentation.MICROPHONE_BLOCKED
 
                 session.isPlaying -> CallPresentation.SPEAKING
-                session.isMuted -> CallPresentation.MUTED
+                session.isUserSpeaking && !session.isMuted -> CallPresentation.USER_SPEAKING
                 session.isProcessing -> CallPresentation.PROCESSING
                 session.isAiInterrupted -> CallPresentation.BARGE_IN
                 else -> CallPresentation.LISTENING

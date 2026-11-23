@@ -19,6 +19,17 @@ class PlacementCheckpointDtoTest {
     private val checkpoint = PlacementTestFixtures.getCheckpoint()
 
     @Test
+    fun oldJournalFlowFieldIsIgnoredWithoutChangingCheckpointProgress() {
+        val original = getCompletedJson()
+        val expected = requireNotNull(parse(original))
+        original.put("operationFlowId", "legacy-flow")
+        assertEquals(expected, parse(original))
+        val restored = requireNotNull(parse(original))
+        assertEquals(restored, roundTrip(restored))
+        assertFalse(JSONObject(PlacementCheckpointDto.fromCheckpoint(restored).toJson()).has("operationFlowId"))
+    }
+
+    @Test
     fun roundTripPreservesEveryField() {
         val criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
         val original = checkpoint.copy(

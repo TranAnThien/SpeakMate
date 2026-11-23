@@ -1,5 +1,8 @@
 package com.project.speakmate.data.repository
 
+import com.google.firebase.firestore.Source
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.data.remote.firebase.FirestoreCollection
 import com.project.speakmate.data.remote.firebase.FirestoreField
@@ -21,8 +24,10 @@ class PracticeRepositoryImpl @Inject constructor(
 ) : PracticeRepository {
     private val freePractices get() = firestore.collection(FirestoreCollection.FREE_PRACTICES)
 
-    override suspend fun getScenarioCatalog(): Result<List<FreePractice>> = suspendRunCatching {
-        freePractices.get().await().documents.map { document ->
+    override suspend fun getScenarioCatalog(requireServer: Boolean): Result<List<FreePractice>> = withContext(Dispatchers.IO) { suspendRunCatching {
+        val snapshot = freePractices.get(if (requireServer) Source.SERVER else Source.DEFAULT).await()
+        if (requireServer) check(!snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites())
+        snapshot.documents.map { document ->
             FreePractice(
                 practiceId = document.getString(FirestoreField.PRACTICE_ID)?.takeIf(String::isNotBlank).default(document.id),
                 scenarioId = document.getString(FirestoreField.SCENARIO_ID)?.takeIf(String::isNotBlank)
@@ -31,12 +36,12 @@ class PracticeRepositoryImpl @Inject constructor(
                     ?: error("FreePractice '${document.id}' is missing category.")
             )
         }.sortedBy(FreePractice::category)
+    } }
+
+    override suspend fun getScenario(scenarioId: String, requireServer: Boolean): Result<Scenario> = suspendRunCatching {
+        checkNotNull(scenarioRepository.getScenario(scenarioId, requireServer)) { "Scenario '$scenarioId' is missing or invalid." }
     }
 
-    override suspend fun getScenario(scenarioId: String): Result<Scenario> = suspendRunCatching {
-        checkNotNull(scenarioRepository.getScenario(scenarioId)) { "Scenario '$scenarioId' is missing or invalid." }
-    }
-
-    override suspend fun getScenarioPreparationMetadata(scenarioId: String): Result<ScenarioPreparationMetadata> =
-        suspendRunCatching { scenarioRepository.getScenarioPreparationMetadata(scenarioId) }
+    override suspend fun getScenarioPreparationMetadata(scenarioId: String, requireServer: Boolean): Result<ScenarioPreparationMetadata> =
+        suspendRunCatching { scenarioRepository.getScenarioPreparationMetadata(scenarioId, requireServer) }
 }

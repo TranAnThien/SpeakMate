@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
 import com.project.speakmate.ui.components.BackAppBar
@@ -34,7 +34,6 @@ import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.components.SecondaryButton
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
-import com.project.speakmate.ui.theme.SpeakMateTheme
 
 @Composable
 fun PlacementIntroductionScreen(
@@ -42,58 +41,55 @@ fun PlacementIntroductionScreen(
     onStartAssessment: () -> Unit,
     onSkipAssessment: () -> Unit,
     modifier: Modifier = Modifier,
-    hasSaveFailed: Boolean = false
+    hasSaveFailed: Boolean = false,
+    isSaving: Boolean = false
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        BackAppBar("", onBack)
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(180.dp).border(2.dp, DesignColor.MascotBorder, CircleShape),
-                contentAlignment = Alignment.Center) {
-                Image(painterResource(R.drawable.img_placement_mascot), null, Modifier.size(140.dp))
+        BackAppBar(stringResource(R.string.placement_title), onBack)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(stringResource(R.string.assessment_introduction_eyebrow), style = DesignTypography.Label, color = DesignColor.Muted)
+            Text(stringResource(R.string.placement_introduction_title), style = DesignTypography.Heading, color = DesignColor.Text)
+            Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp))
+                .border(1.dp, DesignColor.Border, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.assessment_conversation_heading), style = DesignTypography.Title, color = DesignColor.Text)
+                Text(stringResource(R.string.placement_introduction_description), style = DesignTypography.Body, color = DesignColor.Muted)
             }
-            Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.placement_introduction_title), style = DesignTypography.Heading,
-                color = DesignColor.Primary, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.placement_introduction_description), style = DesignTypography.Body,
-                color = DesignColor.Muted, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(16.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                PlacementRequirementRow(R.drawable.ic_placement_schedule, stringResource(R.string.placement_duration))
-                PlacementRequirementRow(R.drawable.ic_placement_quiet, stringResource(R.string.placement_quiet_space))
-                PlacementRequirementRow(R.drawable.ic_placement_microphone, stringResource(R.string.placement_microphone))
-                PlacementRequirementRow(R.drawable.ic_placement_history, stringResource(R.string.placement_no_history))
+            Column(Modifier.fillMaxWidth().background(DesignColor.SurfaceContainer, RoundedCornerShape(16.dp)).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.assessment_estimate_heading), style = DesignTypography.Title, color = DesignColor.Text)
+                Text(stringResource(R.string.placement_introduction_disclaimer), style = DesignTypography.Detail, color = DesignColor.Muted)
+                Text(stringResource(R.string.placement_no_history), style = DesignTypography.Detail, color = DesignColor.Muted)
             }
-            Spacer(Modifier.height(16.dp))
-            Text(stringResource(if (hasSaveFailed) R.string.placement_save_failed else R.string.placement_introduction_disclaimer), style = DesignTypography.Caption,
-                color = DesignColor.Muted, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
+            Text(stringResource(R.string.promotion_before_start), style = DesignTypography.Title, color = DesignColor.Text)
+            PlacementRequirementRow(R.drawable.ic_placement_quiet, stringResource(R.string.placement_quiet_space), stringResource(R.string.assessment_quiet_detail))
+            PlacementRequirementRow(R.drawable.ic_placement_microphone, stringResource(R.string.placement_microphone), stringResource(R.string.assessment_microphone_detail))
+            PlacementRequirementRow(
+                R.drawable.ic_navigation_practice,
+                stringResource(R.string.assessment_natural_speech),
+                stringResource(R.string.assessment_natural_speech_detail)
+            )
+            if (hasSaveFailed) Text(stringResource(R.string.placement_save_failed), style = DesignTypography.Detail, color = DesignColor.Error)
         }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 12.dp),
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            PrimaryButton(stringResource(R.string.placement_start), onStartAssessment)
-            SecondaryButton(stringResource(R.string.placement_later), onSkipAssessment, background = DesignColor.Background)
+            PrimaryButton(stringResource(R.string.placement_start), onStartAssessment, enabled = !isSaving)
+            if (isSaving) com.project.speakmate.ui.components.SpeakMateLoadingIndicator()
+            TextButton(onClick = onSkipAssessment, enabled = !isSaving, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(if (isSaving) R.string.placement_saving else R.string.placement_later), style = DesignTypography.Button)
+            }
         }
     }
 }
 
 @Composable
-private fun PlacementRequirementRow(@DrawableRes iconRes: Int, text: String) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp),
+private fun PlacementRequirementRow(@DrawableRes iconRes: Int, text: String, description: String) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(48.dp).background(DesignColor.Surface, RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center) {
-            Image(painterResource(iconRes), null, Modifier.size(24.dp))
+        Image(painterResource(iconRes), null, Modifier.size(24.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(text, style = DesignTypography.Body, color = DesignColor.Text)
+            Text(description, style = DesignTypography.Detail, color = DesignColor.Muted)
         }
-        Text(text, style = DesignTypography.Detail, color = DesignColor.Text, modifier = Modifier.weight(1f))
-    }
-}
-
-@Preview(name = "Placement / Introduction / 17:55", widthDp = 396, heightDp = 819, showBackground = true)
-@Composable
-private fun PlacementIntroductionScreenPreview() {
-    SpeakMateTheme {
-        PlacementIntroductionScreen({}, {}, {})
     }
 }

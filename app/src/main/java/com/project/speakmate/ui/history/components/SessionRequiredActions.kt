@@ -25,7 +25,7 @@ fun SessionRequiredActions(actions: List<SessionActionUiState>, modifier: Modifi
         Text(stringResource(R.string.unit_result_required_actions), style = DesignTypography.Title, color = DesignColor.Text)
         actions.forEachIndexed { index, action ->
             key(index, action.id) {
-                AssessmentActionRow(action.text,
+                AssessmentActionRow(action.text.ifBlank { stringResource(R.string.history_action_unavailable) },
                     stringResource(if (action.isCompleted) R.string.unit_result_action_completed else R.string.unit_result_action_incomplete),
                     if (action.isCompleted) R.drawable.ic_placement_passed else R.drawable.ic_placement_failed,
                     if (action.isCompleted) DesignColor.Success else DesignColor.Error,

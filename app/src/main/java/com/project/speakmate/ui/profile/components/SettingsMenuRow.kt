@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
@@ -30,13 +31,15 @@ fun SettingsMenuRow(
     subtitle: String,
     isDestructive: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
-    Row(modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick).padding(vertical = 4.dp),
+    Row(modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp))
+        .background(DesignColor.Surface).clickable(enabled = enabled, onClick = onClick).padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(40.dp).background(if (isDestructive) DesignColor.ErrorSurface else DesignColor.PaleBlue, RoundedCornerShape(12.dp)),
+        Box(Modifier.size(24.dp),
             contentAlignment = Alignment.Center) {
-            Icon(painterResource(iconRes), null, Modifier.size(24.dp), tint = if (isDestructive) DesignColor.Error else DesignColor.Primary)
+            Icon(painterResource(iconRes), null, Modifier.size(24.dp), tint = if (isDestructive) DesignColor.Error else DesignColor.Muted)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = DesignTypography.Title, color = if (isDestructive) DesignColor.Error else DesignColor.Text)

@@ -26,6 +26,7 @@ import javax.inject.Inject
 import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,24 +50,44 @@ class UnitPreparationViewModel @Inject constructor(
     val uiState: StateFlow<UnitPreparationUiState> = _uiState.asStateFlow()
     private var preparationJob: Job? = null
     private var currentUnitId: String? = null
+    private var preparedUserId: String? = null
+    private var shouldRequireServer = false
+
+    init {
+        viewModelScope.launch { pronunciationRepository.playback.collect { playback -> _uiState.update { it.copy(playback = playback) } } }
+    }
 
     override fun onCleared() {
         pronunciationRepository.release()
         super.onCleared()
     }
 
-    fun getPreparation(unitId: String) {
+    fun getPreparation(unitId: String, requireServer: Boolean = false) {
+        shouldRequireServer = requireServer
+        val selectedSection = _uiState.value.section
+        preparedUserId = null
+        cancelStart()
+        _uiState.update { it.copy(status = TrainingContentStatus.LOADING) }
+        stopPronunciation()
         currentUnitId = unitId
         preparationJob?.cancel()
         preparationJob = viewModelScope.launch {
             try {
                 authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
+                    preparedUserId = null
+                    cancelStart()
+                    stopPronunciation()
                     _uiState.update { UnitPreparationUiState() }
                     if (uid == null) return@collectLatest
                     userRepository.observeUser(uid).collectLatest { user ->
-                        val profile = checkNotNull(user)
+                        cancelStart()
+                        preparedUserId = null
+                        _uiState.update { it.copy(status = TrainingContentStatus.LOADING) }
+                        val profile = checkNotNull(if (requireServer) userRepository.getUser(uid, requireServer = true).getOrThrow() else user)
                         check(profile.level != SpeakingLevel.NOT_ASSESSED)
-                        val path = trainingRepository.getTrainingPath(profile.level).getOrThrow()
+                        val path = trainingRepository.getTrainingPath(profile.level, requireServer).getOrThrow()
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        check(authRepository.requireCurrentUserId() == uid && path.targetLevel == profile.level)
                         val progress = checkNotNull(profile.trainingProgress)
                         val location = path.goals.indices.firstNotNullOfOrNull { goalIndex ->
                             val unitIndex = path.goals[goalIndex].units.indexOfFirst { it.unitId == unitId }
@@ -76,12 +97,13 @@ class UnitPreparationViewModel @Inject constructor(
                             _uiState.update { UnitPreparationUiState(status = TrainingContentStatus.ERROR, isLocked = true) }
                             return@collectLatest
                         }
-                        val unit = trainingRepository.getTrainingUnit(unitId).getOrThrow()
-                        val scenario = trainingRepository.getScenario(unit.scenarioId).getOrThrow()
-                        val imageUrl = trainingRepository.getScenarioImageUrl(unit.scenarioId).getOrThrow()
+                        val unit = path.goals[location.goalIndex].units[location.unitIndex]
+                        val scenario = trainingRepository.getScenario(unit.scenarioId, requireServer).getOrThrow()
+                        check(scenario.scenarioId == unit.scenarioId && scenario.name.isNotBlank() && scenario.promptTemplate.isNotBlank())
+                        val imageUrl = trainingRepository.getScenarioImageUrl(unit.scenarioId).getOrElse { if (it is CancellationException) throw it else "" }
                         val vocabulary = unit.preparation.vocabulary.map { word ->
                             PreparationVocabularyUiState(
-                                id = word.word,
+                                id = word.word + word.partOfSpeech,
                                 word = word.word,
                                 pronunciationLabel = listOf(word.phonetic, word.partOfSpeech).filter(String::isNotBlank).joinToString(PRONUNCIATION_SEPARATOR),
                                 meaning = word.mean,
@@ -107,9 +129,15 @@ class UnitPreparationViewModel @Inject constructor(
                                 examples = pattern.examples.map { PreparationExampleUiState(it.sentence, it.translate) }
                             )
                         }
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        check(authRepository.requireCurrentUserId() == uid)
+                        preparedUserId = uid
                         _uiState.update {
                             UnitPreparationUiState(
                                 status = TrainingContentStatus.CONTENT,
+                                section = if (_uiState.value.status == TrainingContentStatus.CONTENT) _uiState.value.section else selectedSection,
+                                playback = pronunciationRepository.playback.value,
+                                isReplay = TrainingProgressRules.isReplay(path, progress, location),
                                 title = unit.title,
                                 description = scenario.description,
                                 overview = PreparationOverviewUiState(imageUrl, unit.communicativeFocus, requiredActions = unit.requiredActions.map { it.description }),
@@ -133,7 +161,7 @@ class UnitPreparationViewModel @Inject constructor(
     }
 
     fun retry() {
-        currentUnitId?.let(::getPreparation)
+        currentUnitId?.let { getPreparation(it, requireServer = shouldRequireServer) }
     }
 
     fun stopObservingPreparation() {
@@ -141,6 +169,7 @@ class UnitPreparationViewModel @Inject constructor(
     }
 
     fun selectSection(section: PreparationSection) {
+        stopPronunciation()
         _uiState.update { it.copy(section = section) }
     }
 
@@ -158,6 +187,26 @@ class UnitPreparationViewModel @Inject constructor(
     fun playText(text: String) {
         if (_uiState.value.status == TrainingContentStatus.CONTENT) pronunciationRepository.playText(text)
     }
+
+    fun prepareStart() {
+        val state = _uiState.value
+        val activity = state.activity ?: return
+        val uid = preparedUserId ?: return
+        if (state.isStarting || state.isStartReady || state.isLocked || !state.canStartRoleplay) return
+        val currentUid = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { return }
+        if (currentUid != uid || activity.targetLevel == SpeakingLevel.NOT_ASSESSED ||
+            activity.scenario.scenarioId.isBlank() || activity.scenario.name.isBlank() || activity.scenario.promptTemplate.isBlank()) return
+        stopPronunciation()
+        _uiState.update { it.copy(isStarting = true, isStartReady = true, hasStartError = false) }
+    }
+
+    fun consumeStartReady(): Boolean {
+        val state = _uiState.value
+        val uid = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { return false }
+        return uid == preparedUserId && state.isStartReady && _uiState.compareAndSet(state, state.copy(isStartReady = false))
+    }
+
+    fun cancelStart() { _uiState.update { it.copy(isStarting = false, isStartReady = false) } }
 
     fun stopPronunciation() {
         pronunciationRepository.stop()

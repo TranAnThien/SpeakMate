@@ -14,7 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.ui.components.PrimaryButton
 import com.project.speakmate.ui.theme.DesignColor
@@ -33,9 +35,9 @@ fun GoalAssessmentFooter(
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PrimaryButton(primaryText, onPrimaryAction, enabled = isPrimaryEnabled)
         Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(16.dp))
-            .background(DesignColor.SecondaryButton).clickable(onClick = onSecondaryAction)
+            .background(DesignColor.SecondaryButton).clickable(role = Role.Button, onClick = onSecondaryAction)
             .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
-            Text(secondaryText, style = DesignTypography.Button, color = DesignColor.Primary, textAlign = TextAlign.Center)
+            Text(secondaryText, style = DesignTypography.Button, color = DesignColor.Primary, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }

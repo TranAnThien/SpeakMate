@@ -12,5 +12,5 @@ data class HistorySessionUiState(
     val result: HistoryResultPresentation = HistoryResultPresentation.COMPLETED,
     val practiceType: PracticeType? = null,
     val duration: String = "",
-    val performedAt: String = ""
+    val startedAtMillis: Long = 0L
 )

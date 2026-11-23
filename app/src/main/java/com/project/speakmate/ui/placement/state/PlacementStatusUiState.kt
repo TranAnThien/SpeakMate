@@ -10,5 +10,11 @@ data class PlacementStatusUiState(
     val isTimeLimitReached: Boolean = false,
     val flow: PlacementStatusFlow = PlacementStatusFlow.PLACEMENT,
     val reassessmentStep: ReassessmentStep? = null,
-    val assessmentLevel: SpeakingLevel = SpeakingLevel.NOT_ASSESSED
+    val assessmentLevel: SpeakingLevel = SpeakingLevel.NOT_ASSESSED,
+    val nextTask: PlacementNextTask? = null,
+    val taskNumber: Int = 0,
+    val taskRole: com.project.speakmate.domain.model.PlacementRole? = null,
+    val insufficientReason: com.project.speakmate.domain.model.InsufficientEvidenceReason? = null,
+    val stopReason: com.project.speakmate.domain.model.PlacementStopReason? = null,
+    val canRetryLoad: Boolean = false
 )
