@@ -119,5 +119,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.core)
 
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("com.airbnb.android:lottie-compose:6.7.1")
     implementation(libs.androidx.compose.material.icons.extended)
 }

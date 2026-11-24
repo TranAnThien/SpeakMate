@@ -23,7 +23,8 @@ data class CallSessionState(
     val assessmentAudioId: String? = null,
     val assessmentAudioDurationMillis: Long? = null,
     val hasReachedAssessmentAudioLimit: Boolean = false,
-    val startedAtEpochMillis: Long? = null
+    val startedAtEpochMillis: Long? = null,
+    val pronunciationText: String = ""
 ) {
     val endedAtEpochMillis: Long?
         get() {

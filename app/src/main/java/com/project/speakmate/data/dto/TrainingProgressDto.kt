@@ -1,12 +1,16 @@
 package com.project.speakmate.data.dto
 
 import com.project.speakmate.domain.model.TrainingProgress
-import com.project.speakmate.domain.model.TrainingStage
 
 data class TrainingProgressDto(
-    val currentGoalOrder: Int = 0,
-    val currentUnitOrder: Int = 0,
-    val stage: String = TrainingStage.UNIT.name
+    val currentGoalOrder: Int? = null,
+    val currentUnitOrder: Int? = null,
+    val stage: String? = null
 )
 
-fun TrainingProgress.toDto() = TrainingProgressDto(currentGoalOrder, currentUnitOrder, stage.name)
+fun TrainingProgress.toDto() =
+    TrainingProgressDto(
+        currentGoalOrder = currentGoalOrder,
+        currentUnitOrder = currentUnitOrder,
+        stage = stage.name
+    )

@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,50 +22,150 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.PlacementRole
+import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.call.state.CallPresentation
+import com.project.speakmate.ui.components.assessment.rememberSpeakingLevelLabel
+import com.project.speakmate.ui.components.text.BodyText
+import com.project.speakmate.ui.components.text.CaptionText
+import com.project.speakmate.ui.components.text.DetailText
+import com.project.speakmate.ui.components.text.HeadingText
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
+import com.project.speakmate.utils.extension.default
 
 @Composable
 fun CallStatusHeader(
     title: String,
     presentation: CallPresentation,
     modifier: Modifier = Modifier,
-    durationContent: @Composable () -> Unit
+    durationContent: @Composable () -> Unit,
+    isMuted: Boolean = false,
+    activityType: CallActivityType = CallActivityType.FREE_PRACTICE,
+    activityIndex: Int? = null,
+    onShowTitle: () -> Unit = {},
+    isCompact: Boolean = false,
+    activityLevel: SpeakingLevel? = null,
+    activityRole: PlacementRole? = null
 ) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, style = DesignTypography.SectionTitle, color = DesignColor.Primary, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(when (presentation) {
-                CallPresentation.READY -> DesignColor.Placeholder
-                CallPresentation.CONNECTING, CallPresentation.PROCESSING, CallPresentation.RECONNECTING -> DesignColor.CallBusy
-                CallPresentation.MUTED, CallPresentation.PAUSED -> DesignColor.CallMuted
-                CallPresentation.AUDIO_UNCLEAR, CallPresentation.MICROPHONE_BLOCKED -> DesignColor.CallWarning
-                else -> DesignColor.CallActive
-            }, CircleShape))
-            Text(stringResource(when (presentation) {
-                CallPresentation.READY -> R.string.call_ready
-                CallPresentation.CONNECTING -> R.string.call_connecting
-                CallPresentation.PROCESSING -> R.string.call_processing
-                CallPresentation.SPEAKING -> R.string.call_speaking
-                CallPresentation.MUTED -> R.string.call_muted
-                CallPresentation.PAUSED -> R.string.call_paused
-                CallPresentation.BARGE_IN -> R.string.call_barge_in
-                CallPresentation.AUDIO_UNCLEAR -> R.string.call_audio_unclear
-                CallPresentation.RECONNECTING -> R.string.call_reconnecting
-                CallPresentation.MICROPHONE_BLOCKED -> R.string.call_microphone_blocked
-                else -> R.string.call_listening
-            }), style = DesignTypography.CallStatus, color = DesignColor.Muted)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(top = if (isCompact) 4.dp else 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            HeadingText(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = DesignTypography.SectionTitle,
+                color = DesignColor.Primary,
+                textAlign = TextAlign.Center,
+                maxLines = if (isCompact) 1 else 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            IconButton(onClick = onShowTitle) {
+                Icon(painterResource(R.drawable.ic_placement_info), stringResource(R.string.call_show_full_title))
+            }
         }
-        Spacer(Modifier.height(16.dp))
+        if (!isCompact)
+            DetailText(
+                text =
+                    stringResource(
+                        when (activityType) {
+                            CallActivityType.FREE_PRACTICE -> R.string.history_type_free_practice
+                            CallActivityType.TRAINING_UNIT ->
+                                if (activityIndex != null) R.string.call_unit_subtitle
+                                else R.string.history_type_unit
+                            CallActivityType.GOAL_ASSESSMENT -> R.string.goal_assessment_header
+                            CallActivityType.INITIAL_PLACEMENT ->
+                                if (activityIndex != null) R.string.call_placement_subtitle
+                                else R.string.placement_title
+                            CallActivityType.REASSESSMENT ->
+                                if (activityIndex != null) R.string.call_reassessment_subtitle
+                                else R.string.promotion_header
+                        },
+                        activityIndex.default(fallback = 1)
+                    ),
+                textAlign = TextAlign.Center
+            )
+        if (!isCompact && activityLevel != null)
+            DetailText(text = stringResource(R.string.call_target_level, rememberSpeakingLevelLabel(activityLevel)))
+        if (!isCompact && activityRole != null)
+            DetailText(
+                text =
+                    stringResource(
+                        when (activityRole) {
+                            PlacementRole.INITIAL -> R.string.assessment_role_initial
+                            PlacementRole.PROBE -> R.string.assessment_role_probe
+                            PlacementRole.CONFIRMATION -> R.string.assessment_role_confirmation
+                        }
+                    )
+            )
+        Spacer(Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(8.dp)
+                    .background(
+                        when (presentation) {
+                            CallPresentation.READY -> DesignColor.CallBusy
+                            CallPresentation.CONNECTING,
+                            CallPresentation.PROCESSING,
+                            CallPresentation.FINALIZING,
+                            CallPresentation.RECONNECTING -> DesignColor.CallBusy
+                            CallPresentation.PAUSED -> DesignColor.CallMuted
+                            CallPresentation.MICROPHONE_BLOCKED -> DesignColor.CallWarning
+                            else -> DesignColor.CallActive
+                        },
+                        CircleShape
+                    )
+            )
+            Text(
+                text =
+                    stringResource(
+                        when (presentation) {
+                            CallPresentation.READY -> R.string.call_ready
+                            CallPresentation.CONNECTING -> R.string.call_connecting
+                            CallPresentation.USER_SPEAKING -> R.string.call_user_speaking
+                            CallPresentation.FINALIZING -> R.string.call_finalizing
+                            CallPresentation.PROCESSING -> R.string.call_processing
+                            CallPresentation.SPEAKING -> R.string.call_speaking
+                            CallPresentation.PAUSED -> R.string.call_paused
+                            CallPresentation.BARGE_IN -> R.string.call_barge_in
+                            CallPresentation.RECONNECTING -> R.string.call_reconnecting
+                            CallPresentation.MICROPHONE_BLOCKED -> R.string.call_microphone_blocked
+                            else -> R.string.call_listening
+                        }
+                    ),
+                style = DesignTypography.CallStatus,
+                color = DesignColor.Muted
+            )
+        }
+        if (isMuted) DetailText(text = stringResource(R.string.call_muted))
+        Spacer(Modifier.height(8.dp))
         if (presentation == CallPresentation.CONNECTING) {
-            Row(Modifier.background(DesignColor.SecondaryButton, RoundedCornerShape(100.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Image(painterResource(R.drawable.ic_placement_schedule), null, Modifier.size(20.dp))
-                Text(stringResource(R.string.call_timer_after_connection), style = DesignTypography.Navigation, color = DesignColor.Primary)
+            Row(
+                modifier =
+                    Modifier.background(DesignColor.SecondaryButton, RoundedCornerShape(100.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_placement_schedule),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                CaptionText(
+                    text = stringResource(R.string.call_timer_after_connection),
+                    style = DesignTypography.Navigation,
+                    color = DesignColor.Primary
+                )
             }
         } else {
             durationContent()
@@ -73,5 +175,5 @@ fun CallStatusHeader(
 
 @Composable
 fun CallDurationLabel(label: String, modifier: Modifier = Modifier) {
-    Text(label, modifier, style = DesignTypography.CallTimer, color = DesignColor.Primary)
+    BodyText(text = label, modifier = modifier, style = DesignTypography.CallTimer, color = DesignColor.Primary)
 }

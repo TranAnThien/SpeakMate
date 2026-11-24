@@ -3,11 +3,12 @@ package com.project.speakmate.data.remote.dictionary
 import android.util.Log
 import com.project.speakmate.utils.AppConstant
 import com.project.speakmate.utils.extension.defaultEmpty
+import javax.inject.Inject
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-class DictionaryResponseParser {
+class DictionaryResponseParser @Inject constructor() {
     fun readEntry(dictJson: String?): DictionaryEntryResponse {
         var phonetic = ""
         var partOfSpeech = ""
@@ -52,7 +53,11 @@ class DictionaryResponseParser {
                 Log.w(AppConstant.DICTIONARY_LOG_TAG, "Failed to parse Free Dictionary response")
             }
         }
-        return DictionaryEntryResponse(phonetic, partOfSpeech, exampleSentence)
+        return DictionaryEntryResponse(
+            phonetic = phonetic,
+            partOfSpeech = partOfSpeech,
+            exampleSentence = exampleSentence
+        )
     }
 
     fun readMeaning(myMemoryJson: String?): String {
@@ -84,7 +89,8 @@ class DictionaryResponseParser {
     }
 
     private fun cleanHtmlEntities(text: String): String {
-        return text.replace("&quot;", "\"")
+        return text
+            .replace("&quot;", "\"")
             .replace("&#39;", "'")
             .replace("&amp;", "&")
             .replace("&lt;", "<")

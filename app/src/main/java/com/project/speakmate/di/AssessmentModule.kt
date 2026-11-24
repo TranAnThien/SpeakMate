@@ -18,5 +18,5 @@ object AssessmentModule {
     @Provides
     @Singleton
     fun provideAssessmentAudioFiles(@ApplicationContext context: Context): AssessmentAudioFileProvider =
-        AssessmentAudioFileProvider(File(context.cacheDir, ASSESSMENT_DIRECTORY))
+        AssessmentAudioFileProvider(File(context.noBackupFilesDir, ASSESSMENT_DIRECTORY), File(context.cacheDir, ASSESSMENT_DIRECTORY))
 }

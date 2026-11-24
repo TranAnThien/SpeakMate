@@ -1,19 +1,22 @@
 package com.project.speakmate.ui.training
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.header.BackAppBar
 import com.project.speakmate.ui.training.components.TrainingUnavailableContent
-import com.project.speakmate.ui.training.state.PreparationModuleUiState
-import com.project.speakmate.ui.training.state.PreparationSection
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 
 @Composable
@@ -22,54 +25,49 @@ fun UnitPreparationRoute(
     onBack: () -> Unit,
     onStartRoleplay: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: UnitPreparationViewModel = hiltViewModel()
+    viewModel: UnitPreparationViewModel = hiltViewModel(),
+    noticeContent: @Composable () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val startRoleplay by rememberUpdatedState(onStartRoleplay)
+    LaunchedEffect(state.isStartReady, viewModel, lifecycleOwner) {
+        if (state.isStartReady)
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                if (viewModel.consumeStartReady()) startRoleplay()
+            }
+    }
     LaunchedEffect(unitId, viewModel) { viewModel.getPreparation(unitId) }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.stopPronunciation() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        viewModel.stopPronunciation()
+        viewModel.cancelStart()
+    }
     if (state.status == TrainingContentStatus.CONTENT) {
-        val vocabularyTitle = stringResource(R.string.preparation_vocabulary)
-        val grammarTitle = stringResource(R.string.preparation_grammar)
-        val patternsTitle = stringResource(R.string.preparation_patterns)
-        val vocabularyCount = stringResource(R.string.preparation_vocabulary_count, state.vocabulary.size)
-        val grammarCount = stringResource(R.string.preparation_grammar_count, state.grammar.size)
-        val patternsCount = stringResource(R.string.preparation_patterns_count, state.sentencePatterns.size)
-        val contextLabel = stringResource(R.string.preparation_unit_context)
-        val displayState = remember(state, vocabularyTitle, grammarTitle, patternsTitle, vocabularyCount, grammarCount, patternsCount, contextLabel) {
-            state.copy(
-                contextLabel = contextLabel,
-                overview = state.overview.copy(modules = listOf(
-                    PreparationModuleUiState(PreparationSection.VOCABULARY, vocabularyTitle, vocabularyCount),
-                    PreparationModuleUiState(PreparationSection.GRAMMAR, grammarTitle, grammarCount),
-                    PreparationModuleUiState(PreparationSection.SENTENCE_PATTERNS, patternsTitle, patternsCount)
-                ))
-            )
-        }
         UnitPreparationScreen(
-            state = displayState,
+            state = state,
             onBack = onBack,
             onSelectSection = viewModel::selectSection,
-            onStartRoleplay = {
-                if (viewModel.uiState.value.canStartRoleplay) {
-                    viewModel.stopPronunciation()
-                    onStartRoleplay()
-                }
-            },
+            onStartRoleplay = viewModel::prepareStart,
             onPlayWord = viewModel::playText,
             onPlayPattern = viewModel::playText,
             onPlayExample = viewModel::playText,
-            modifier = modifier
+            modifier = modifier,
+            noticeContent = noticeContent
         )
     } else {
-        TrainingUnavailableContent(
-            isLoading = state.status == TrainingContentStatus.LOADING,
-            onRetry = viewModel::retry,
-            errorMessage = if (state.isLocked) stringResource(R.string.preparation_unit_locked) else "",
-            loadingTitleRes = R.string.preparation_loading_title,
-            loadingDescriptionRes = R.string.preparation_loading_description,
-            errorTitleRes = R.string.preparation_error_title,
-            errorDescriptionRes = R.string.preparation_error_description,
-            modifier = modifier
-        )
+        Column(modifier.fillMaxSize()) {
+            BackAppBar(stringResource(R.string.preparation_title), onBack)
+            TrainingUnavailableContent(
+                isLoading = state.status == TrainingContentStatus.LOADING,
+                onRetry = if (state.isLocked) onBack else viewModel::retry,
+                errorMessage = if (state.isLocked) stringResource(R.string.preparation_unit_locked) else "",
+                loadingTitleRes = R.string.preparation_loading_title,
+                loadingDescriptionRes = R.string.preparation_loading_description,
+                errorTitleRes = R.string.preparation_error_title,
+                errorDescriptionRes = R.string.preparation_error_description,
+                modifier = Modifier.weight(1f)
+            )
+            noticeContent()
+        }
     }
 }

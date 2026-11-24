@@ -1,7 +1,6 @@
 package com.project.speakmate.ui.training.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,25 +15,42 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.PronunciationPlaybackState
+import com.project.speakmate.domain.model.PronunciationState
+import com.project.speakmate.ui.components.text.CaptionText
+import com.project.speakmate.ui.components.text.DetailText
 import com.project.speakmate.ui.theme.DesignColor
-import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.state.PreparationExampleUiState
 
 @Composable
 fun PreparationExampleCard(
     example: PreparationExampleUiState,
     onPlayExample: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playback: PronunciationPlaybackState = PronunciationPlaybackState()
 ) {
-    Column(modifier.fillMaxWidth().background(DesignColor.ExampleSurface, RoundedCornerShape(16.dp)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(example.sentence, style = DesignTypography.Detail, color = DesignColor.Text)
-        Text(example.translation, style = DesignTypography.Detail, color = DesignColor.Muted)
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.preparation_listen_example), style = DesignTypography.Detail, color = DesignColor.Primary,
-                modifier = Modifier.weight(1f).clickable(onClick = onPlayExample).padding(vertical = 14.dp))
-            PreparationAudioButton(onPlayExample)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(DesignColor.ExampleSurface, RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        DetailText(text = example.sentence, color = DesignColor.Text)
+        if (playback.text == example.sentence && playback.status == PronunciationState.FAILED)
+            CaptionText(text = stringResource(R.string.call_pronunciation_unavailable), color = DesignColor.Error)
+        DetailText(text = example.translation)
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DetailText(
+                text = stringResource(R.string.preparation_listen_example),
+                color = DesignColor.Primary,
+                modifier = Modifier.weight(1f).padding(vertical = 14.dp)
+            )
+            PreparationAudioButton(onPlay = onPlayExample, text = example.sentence, playback = playback)
         }
     }
 }

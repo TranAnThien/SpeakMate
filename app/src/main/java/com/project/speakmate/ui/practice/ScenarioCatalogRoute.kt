@@ -19,7 +19,6 @@ fun ScenarioCatalogRoute(
         onSelectCategory = viewModel::selectCategory,
         onSelectScenario = onSelectScenario,
         onRetry = viewModel::loadCatalog,
-        onDismissError = {},
         onReturnToPath = onReturnToPath,
         modifier = modifier
     )

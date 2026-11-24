@@ -29,7 +29,7 @@ class FakeUserRepository(user: User? = null) : UserRepository {
         if (user != null) setUser(user)
     }
 
-    override suspend fun getUser(userId: String): Result<User?> = Result.success(profile(userId).value)
+    override suspend fun getUser(userId: String, requireServer: Boolean): Result<User?> = Result.success(profile(userId).value)
 
     override suspend fun getOrCreateUser(user: User): Result<User> {
         setUser(user)

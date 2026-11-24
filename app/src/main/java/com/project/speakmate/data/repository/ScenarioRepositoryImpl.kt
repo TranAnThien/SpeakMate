@@ -1,52 +1,56 @@
 package com.project.speakmate.data.repository
 
-import com.project.speakmate.data.remote.firebase.FirestoreCollection
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.project.speakmate.data.dto.ScenarioDto
+import com.project.speakmate.data.remote.firebase.FirestoreCollection
+import com.project.speakmate.data.remote.firebase.FirestoreDocumentId
 import com.project.speakmate.data.remote.firebase.FirestoreField
-import com.project.speakmate.data.remote.firebase.requiredPreparationText
+import com.project.speakmate.data.remote.firebase.isServerConfirmed
+import com.project.speakmate.data.remote.firebase.toFirestoreSource
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.ScenarioPreparationMetadata
 import com.project.speakmate.domain.repository.ScenarioRepository
+import com.project.speakmate.utils.extension.default
+import com.project.speakmate.utils.extension.defaultEmpty
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 class ScenarioRepositoryImpl @Inject constructor(private val firestore: FirebaseFirestore) : ScenarioRepository {
-    companion object {
-        private const val PATH_SEPARATOR = '/'
-    }
-
-    override suspend fun getScenario(scenarioId: String): Scenario? = withContext(Dispatchers.IO) {
-        if (scenarioId.isBlank() || PATH_SEPARATOR in scenarioId) return@withContext null
-        val document = getDocument(scenarioId)
-        val scenario = document.toObject(ScenarioDto::class.java)?.withDocumentId(document.id)?.toDomain()
-        scenario?.takeIf { it.scenarioId == scenarioId }
-    }
-    override suspend fun getScenarioPreparationMetadata(scenarioId: String): ScenarioPreparationMetadata =
+    override suspend fun getScenario(scenarioId: String, requireServer: Boolean): Scenario? =
         withContext(Dispatchers.IO) {
-            val document = requireDocument(scenarioId)
-            ScenarioPreparationMetadata(
-                imageUrl = document.requiredPreparationText(FirestoreField.IMAGE_URL),
-                uiContext = document.requiredPreparationText(FirestoreField.UI_CONTEXT),
-                aiRole = document.requiredPreparationText(FirestoreField.AI_ROLE),
-                preCallHint = document.requiredPreparationText(FirestoreField.PRE_CALL_HINT)
-            )
+            if (!FirestoreDocumentId.isValid(scenarioId)) return@withContext null
+            val document = getDocument(scenarioId, requireServer)
+            val scenario = document.toObject(ScenarioDto::class.java)?.withDocumentId(document.id)?.toDomain()
+            scenario?.takeIf { it.scenarioId == scenarioId }
         }
 
-    override suspend fun getScenarioImageUrl(scenarioId: String): String = withContext(Dispatchers.IO) {
-        requireDocument(scenarioId).getString(FirestoreField.IMAGE_URL).orEmpty()
-    }
+    override suspend fun getScenarioPreparationMetadata(
+        scenarioId: String,
+        requireServer: Boolean
+    ): ScenarioPreparationMetadata =
+        withContext(Dispatchers.IO) {
+            val document = requireDocument(scenarioId, requireServer)
+            ScenarioPreparationMapper.toMetadata(document.data.default(emptyMap()))
+        }
 
-    private suspend fun requireDocument(scenarioId: String): DocumentSnapshot {
-        require(scenarioId.isNotBlank() && PATH_SEPARATOR !in scenarioId)
-        val document = getDocument(scenarioId)
+    override suspend fun getScenarioImageUrl(scenarioId: String): String =
+        withContext(Dispatchers.IO) { requireDocument(scenarioId).getString(FirestoreField.IMAGE_URL).defaultEmpty() }
+
+    private suspend fun requireDocument(scenarioId: String, requireServer: Boolean = false): DocumentSnapshot {
+        require(FirestoreDocumentId.isValid(scenarioId))
+        val document = getDocument(scenarioId, requireServer)
         check(document.exists()) { "Scenario '$scenarioId' is missing from Firestore." }
         return document
     }
 
-    private suspend fun getDocument(scenarioId: String): DocumentSnapshot =
-        firestore.collection(FirestoreCollection.SCENARIOS).document(scenarioId).get().await()
+    private suspend fun getDocument(scenarioId: String, requireServer: Boolean): DocumentSnapshot =
+        firestore
+            .collection(FirestoreCollection.SCENARIOS)
+            .document(scenarioId)
+            .get(requireServer.toFirestoreSource())
+            .await()
+            .also { if (requireServer) check(it.metadata.isServerConfirmed()) }
 }

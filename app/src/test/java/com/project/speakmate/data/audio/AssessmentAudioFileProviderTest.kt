@@ -1,7 +1,7 @@
 package com.project.speakmate.data.audio
 
-import java.util.UUID
 import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -9,14 +9,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class AssessmentAudioFileProviderTest {
-    @get:Rule
-    val folder = TemporaryFolder()
+    @get:Rule val folder = TemporaryFolder()
 
     @Test
     fun audioIdsAreOpaqueRandomUuids() {
@@ -45,10 +45,18 @@ class AssessmentAudioFileProviderTest {
         val files = AssessmentAudioFileProvider(folder.newFolder("assessment"))
         val outside = folder.newFile("outside.wav")
         outside.writeText("outside")
-        listOf("", "../outside.wav", "..\\outside.wav", outside.absolutePath, "file:///outside.wav", files.createAudioId()).forEach {
-            assertNull(files.getAudioFile(it))
-            files.deleteAudio(it)
-        }
+        listOf(
+            "",
+            "../outside.wav",
+            "..\\outside.wav",
+            outside.absolutePath,
+            "file:///outside.wav",
+            files.createAudioId()
+        )
+            .forEach {
+                assertNull(files.getAudioFile(it))
+                files.deleteAudio(it)
+            }
         assertEquals("outside", outside.readText())
     }
 
@@ -56,11 +64,17 @@ class AssessmentAudioFileProviderTest {
     fun startupCleanupRemovesPreviousProcessButKeepsNewEvidence() {
         val oldProcess = AssessmentAudioFileProvider(folder.root)
         val oldId = oldProcess.createAudioId()
-        oldProcess.openRecorder(oldId).also { it.append(byteArrayOf(0, 0)); it.close() }
+        oldProcess.openRecorder(oldId).also {
+            it.append(byteArrayOf(0, 0))
+            it.close()
+        }
         val oldFile = checkNotNull(oldProcess.getAudioFile(oldId))
         val newProcess = AssessmentAudioFileProvider(folder.root)
         val newId = newProcess.createAudioId()
-        newProcess.openRecorder(newId).also { it.append(byteArrayOf(0, 0)); it.close() }
+        newProcess.openRecorder(newId).also {
+            it.append(byteArrayOf(0, 0))
+            it.close()
+        }
         newProcess.clearPreviousProcessFiles()
         newProcess.clearPreviousProcessFiles()
         assertFalse(oldFile.exists())
@@ -72,7 +86,10 @@ class AssessmentAudioFileProviderTest {
     fun openingNewRecorderKeepsEvidenceUntilItsOwnerDeletesIt() {
         val files = AssessmentAudioFileProvider(folder.root)
         val orphanId = files.createAudioId()
-        files.openRecorder(orphanId).also { it.append(byteArrayOf(0, 0)); it.close() }
+        files.openRecorder(orphanId).also {
+            it.append(byteArrayOf(0, 0))
+            it.close()
+        }
         val orphan = checkNotNull(files.getAudioFile(orphanId))
         val newId = files.createAudioId()
         val recorder = files.openRecorder(newId)
@@ -93,7 +110,10 @@ class AssessmentAudioFileProviderTest {
     fun gradingReadsTheOriginalWavWhenAnotherRecordingStartsBeforeTheRead() = runTest {
         val files = AssessmentAudioFileProvider(folder.root)
         val firstId = files.createAudioId()
-        files.openRecorder(firstId).also { it.append(byteArrayOf(1, 2, 3, 4)); it.close() }
+        files.openRecorder(firstId).also {
+            it.append(byteArrayOf(1, 2, 3, 4))
+            it.close()
+        }
         val expected = checkNotNull(files.getAudioFile(firstId)).readBytes().toList()
         val readyToRead = CompletableDeferred<Unit>()
         val grading = launch {
@@ -119,22 +139,69 @@ class AssessmentAudioFileProviderTest {
     fun openingRecorderDoesNotDeleteMalformedNamesOrPreviousProcessFiles() {
         val previous = AssessmentAudioFileProvider(folder.root)
         val previousId = previous.createAudioId()
-        previous.openRecorder(previousId).also { it.append(byteArrayOf(0, 0)); it.close() }
+        previous.openRecorder(previousId).also {
+            it.append(byteArrayOf(0, 0))
+            it.close()
+        }
         val previousFile = checkNotNull(previous.getAudioFile(previousId))
         val files = AssessmentAudioFileProvider(folder.root)
         val firstId = files.createAudioId()
-        files.openRecorder(firstId).also { it.append(byteArrayOf(0, 0)); it.close() }
+        files.openRecorder(firstId).also {
+            it.append(byteArrayOf(0, 0))
+            it.close()
+        }
         val processPrefix = checkNotNull(files.getAudioFile(firstId)).name.substringBefore('_')
-        val malformed = listOf(
-            File(folder.root, "${processPrefix}_not-a-uuid.wav"),
-            File(folder.root, "not-a-uuid_${files.createAudioId()}.wav"),
-            File(folder.root, "${processPrefix}_${files.createAudioId()}.txt")
-        )
+        val malformed =
+            listOf(
+                File(folder.root, "${processPrefix}_not-a-uuid.wav"),
+                File(folder.root, "not-a-uuid_${files.createAudioId()}.wav"),
+                File(folder.root, "${processPrefix}_${files.createAudioId()}.txt")
+            )
         malformed.forEach { it.writeText("keep") }
         val newId = files.createAudioId()
-        files.openRecorder(newId).also { it.append(byteArrayOf(0, 0)); it.close() }
+        files.openRecorder(newId).also {
+            it.append(byteArrayOf(0, 0))
+            it.close()
+        }
         malformed.forEach { assertEquals("keep", it.readText()) }
         assertTrue(previousFile.exists())
         assertTrue(files.getAudioFile(newId) != null)
+    }
+
+    @Test
+    fun cleanupContinuesAfterOneFileCannotBeDeleted() {
+        val blockedPath = folder.newFile("${UUID.randomUUID()}_${UUID.randomUUID()}.wav")
+        val blocked =
+            object : File(blockedPath.path) {
+                override fun delete(): Boolean = false
+            }
+        val removable = folder.newFile("${UUID.randomUUID()}_${UUID.randomUUID()}.wav")
+        val directory =
+            object : File(folder.root.path) {
+                override fun listFiles(): Array<File> = arrayOf(blocked, removable)
+            }
+        val failure =
+            assertThrows(IllegalStateException::class.java) {
+                AssessmentAudioFileProvider(directory).clearPreviousProcessFiles()
+            }
+        assertFalse(removable.exists())
+        assertEquals(1, failure.suppressed.size)
+    }
+
+    @Test
+    fun cleanupRemovesLegacyAudioAndKeepsUnrelatedFiles() {
+        val legacyDirectory = folder.newFolder("legacy")
+        val legacy = AssessmentAudioFileProvider(legacyDirectory)
+        val audioId = legacy.createAudioId()
+        legacy.openRecorder(audioId).also { recorder ->
+            recorder.append(byteArrayOf(0, 0))
+            recorder.close()
+        }
+        val previousFile = checkNotNull(legacy.getAudioFile(audioId))
+        val unrelated = File(legacyDirectory, "unrelated.wav").also { it.writeText("keep") }
+        AssessmentAudioFileProvider(directory = folder.newFolder("current"), legacyDirectory = legacyDirectory)
+            .clearPreviousProcessFiles()
+        assertFalse(previousFile.exists())
+        assertTrue(unrelated.exists())
     }
 }

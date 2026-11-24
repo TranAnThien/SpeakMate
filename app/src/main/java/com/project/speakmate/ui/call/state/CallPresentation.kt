@@ -4,13 +4,13 @@ enum class CallPresentation {
     READY,
     CONNECTING,
     LISTENING,
+    USER_SPEAKING,
+    FINALIZING,
     PROCESSING,
     SPEAKING,
-    MUTED,
     PAUSED,
     RECONNECTING,
     MICROPHONE_BLOCKED,
     BARGE_IN,
-    AUDIO_UNCLEAR,
     FAILED
 }

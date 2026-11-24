@@ -21,26 +21,35 @@ class UserDtoMappingTest {
 
     @Test
     fun toDtoMapsAllFieldsCorrectly() {
-        val user = User(
-            userId = "uid-123",
-            displayName = "Quân",
-            email = "quan@example.com",
-            photoUrl = "https://photo.url/avatar.jpg",
-            level = SpeakingLevel.A2,
-            latestAssessmentCriteria = SpeakingCriteriaResult(
-                rangeMet = true,
-                accuracyMet = false,
-                fluencyMet = true,
-                interactionMet = true,
-                coherenceMet = false
-            ),
-            lastAssessedAt = Date(1700000000000L),
-            trainingProgress = TrainingProgress(2, 3, TrainingStage.GOAL_ASSESSMENT),
-            savedVocabularies = listOf(
-                VocabularyItem("hello", "xin chào", "/həˈloʊ/", "interjection",
-                    LearningExample("Hello, how are you?", "Xin chào, bạn khỏe không?"))
+        val user =
+            User(
+                userId = "uid-123",
+                displayName = "Quân",
+                email = "quan@example.com",
+                photoUrl = "https://photo.url/avatar.jpg",
+                level = SpeakingLevel.A2,
+                latestAssessmentCriteria =
+                    SpeakingCriteriaResult(
+                        rangeMet = true,
+                        accuracyMet = false,
+                        fluencyMet = true,
+                        interactionMet = true,
+                        coherenceMet = false
+                    ),
+                lastAssessedAt = Date(1700000000000L),
+                trainingProgress =
+                    TrainingProgress(currentGoalOrder = 2, currentUnitOrder = 3, stage = TrainingStage.GOAL_ASSESSMENT),
+                savedVocabularies =
+                    listOf(
+                        VocabularyItem(
+                            word = "hello",
+                            mean = "xin chào",
+                            phonetic = "/həˈloʊ/",
+                            partOfSpeech = "interjection",
+                            example = LearningExample("Hello, how are you?", "Xin chào, bạn khỏe không?")
+                        )
+                    )
             )
-        )
 
         val dto = user.toDto()
 
@@ -52,34 +61,21 @@ class UserDtoMappingTest {
         assertEquals(Date(1700000000000L), dto.lastAssessedAt)
 
         assertNotNull(dto.latestAssessmentCriteria)
-        assertTrue(dto.latestAssessmentCriteria!!.rangeMet)
-        assertFalse(dto.latestAssessmentCriteria!!.accuracyMet)
-        assertTrue(dto.latestAssessmentCriteria!!.fluencyMet)
-        assertTrue(dto.latestAssessmentCriteria!!.interactionMet)
-        assertFalse(dto.latestAssessmentCriteria!!.coherenceMet)
+        assertEquals(true, dto.latestAssessmentCriteria?.rangeMet)
+        assertEquals(false, dto.latestAssessmentCriteria?.accuracyMet)
+        assertEquals(true, dto.latestAssessmentCriteria?.fluencyMet)
+        assertEquals(true, dto.latestAssessmentCriteria?.interactionMet)
+        assertEquals(false, dto.latestAssessmentCriteria?.coherenceMet)
 
         assertNotNull(dto.trainingProgress)
         assertEquals(2, dto.trainingProgress!!.currentGoalOrder)
         assertEquals(3, dto.trainingProgress!!.currentUnitOrder)
         assertEquals("GOAL_ASSESSMENT", dto.trainingProgress!!.stage)
-
-        assertEquals(1, dto.savedVocabularies.size)
-        assertEquals("hello", dto.savedVocabularies[0].word)
-        assertEquals("xin chào", dto.savedVocabularies[0].mean)
-        assertEquals("/həˈloʊ/", dto.savedVocabularies[0].phonetic)
-        assertEquals("interjection", dto.savedVocabularies[0].partOfSpeech)
-        assertEquals("Hello, how are you?", dto.savedVocabularies[0].example.sentence)
-        assertEquals("Xin chào, bạn khỏe không?", dto.savedVocabularies[0].example.translate)
     }
 
     @Test
     fun toDtoHandlesNullOptionalFields() {
-        val user = User(
-            userId = "uid-456",
-            displayName = "Test",
-            email = "test@mail.com",
-            photoUrl = ""
-        )
+        val user = User(userId = "uid-456", displayName = "Test", email = "test@mail.com", photoUrl = "")
 
         val dto = user.toDto()
 
@@ -87,31 +83,28 @@ class UserDtoMappingTest {
         assertNull(dto.latestAssessmentCriteria)
         assertNull(dto.lastAssessedAt)
         assertNull(dto.trainingProgress)
-        assertTrue(dto.savedVocabularies.isEmpty())
     }
 
     @Test
     fun toDomainMapsAllFieldsCorrectly() {
-        val dto = UserDto(
-            userId = "uid-789",
-            displayName = "Thiên",
-            email = "thien@example.com",
-            photoUrl = "https://photo.url/thien.jpg",
-            level = "B1",
-            latestAssessmentCriteria = SpeakingCriteriaResultDto(
-                rangeMet = true,
-                accuracyMet = true,
-                fluencyMet = false,
-                interactionMet = true,
-                coherenceMet = true
-            ),
-            lastAssessedAt = Date(1700000000000L),
-            trainingProgress = TrainingProgressDto(1, 2, "UNIT"),
-            savedVocabularies = listOf(
-                VocabularyItemDto("goodbye", "tạm biệt", "/ɡʊdˈbaɪ/", "interjection",
-                    LearningExampleDto("Goodbye, see you later!", "Tạm biệt, hẹn gặp lại!"))
+        val dto =
+            UserDto(
+                userId = "uid-789",
+                displayName = "Thiên",
+                email = "thien@example.com",
+                photoUrl = "https://photo.url/thien.jpg",
+                level = "B1",
+                latestAssessmentCriteria =
+                    SpeakingCriteriaResultDto(
+                        rangeMet = true,
+                        accuracyMet = true,
+                        fluencyMet = false,
+                        interactionMet = true,
+                        coherenceMet = true
+                    ),
+                lastAssessedAt = Date(1700000000000L),
+                trainingProgress = TrainingProgressDto(currentGoalOrder = 1, currentUnitOrder = 2, stage = "UNIT")
             )
-        )
 
         val user = dto.toDomain()
 
@@ -134,18 +127,33 @@ class UserDtoMappingTest {
         assertEquals(2, user.trainingProgress!!.currentUnitOrder)
         assertEquals(TrainingStage.UNIT, user.trainingProgress!!.stage)
 
-        assertEquals(1, user.savedVocabularies.size)
-        assertEquals("goodbye", user.savedVocabularies[0].word)
-        assertEquals("tạm biệt", user.savedVocabularies[0].mean)
+        assertTrue(user.savedVocabularies.isEmpty())
     }
 
     @Test
     fun rejectsAnInvalidProfileLevel() {
+        val dto = UserDto(userId = "uid-invalid", displayName = "Test", email = "test@mail.com", level = "C1_INVALID")
+
+        assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
+    }
+
+    @Test
+    fun legacyInProgressStageMapsToUnitWithoutChangingStoredValue() {
+        val progress = TrainingProgressDto(currentGoalOrder = 1, currentUnitOrder = 1, stage = "IN_PROGRESS")
+        val dto = UserDto(trainingProgress = progress)
+
+        val restored = requireNotNull(dto.toDomain().trainingProgress)
+
+        assertEquals(TrainingStage.UNIT, restored.stage)
+        assertEquals(progress.currentGoalOrder, restored.currentGoalOrder)
+        assertEquals(progress.currentUnitOrder, restored.currentUnitOrder)
+        assertEquals("IN_PROGRESS", progress.stage)
+    }
+
+    @Test
+    fun legacyInProgressStageStillRejectsMissingProgressCoordinates() {
         val dto = UserDto(
-            userId = "uid-invalid",
-            displayName = "Test",
-            email = "test@mail.com",
-            level = "C1_INVALID"
+            trainingProgress = TrainingProgressDto(currentGoalOrder = 1, currentUnitOrder = null, stage = "IN_PROGRESS")
         )
 
         assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
@@ -153,24 +161,54 @@ class UserDtoMappingTest {
 
     @Test
     fun rejectsAnInvalidTrainingStage() {
-        val dto = UserDto(
-            userId = "uid-invalid",
-            displayName = "Test",
-            email = "test@mail.com",
-            trainingProgress = TrainingProgressDto(1, 1, "INVALID_STAGE")
-        )
+        val dto =
+            UserDto(
+                userId = "uid-invalid",
+                displayName = "Test",
+                email = "test@mail.com",
+                trainingProgress =
+                    TrainingProgressDto(currentGoalOrder = 1, currentUnitOrder = 1, stage = "INVALID_STAGE")
+            )
+
+        assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
+    }
+
+    @Test
+    fun rejectsCriteriaWithMissingRequiredField() {
+        val dto =
+            UserDto(
+                userId = "uid-invalid",
+                displayName = "Test",
+                email = "test@mail.com",
+                latestAssessmentCriteria =
+                    SpeakingCriteriaResultDto(
+                        rangeMet = true,
+                        accuracyMet = true,
+                        fluencyMet = null,
+                        interactionMet = true,
+                        coherenceMet = true
+                    )
+            )
+
+        assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
+    }
+
+    @Test
+    fun rejectsTrainingProgressWithMissingRequiredField() {
+        val dto =
+            UserDto(
+                userId = "uid-invalid",
+                displayName = "Test",
+                email = "test@mail.com",
+                trainingProgress = TrainingProgressDto(currentGoalOrder = 1, currentUnitOrder = null, stage = "UNIT")
+            )
 
         assertThrows(InvalidUserProfileException::class.java) { dto.toDomain() }
     }
 
     @Test
     fun toDomainHandlesNullOptionalFields() {
-        val dto = UserDto(
-            userId = "uid-empty",
-            displayName = "",
-            email = "",
-            photoUrl = ""
-        )
+        val dto = UserDto(userId = "uid-empty", displayName = "", email = "", photoUrl = "")
 
         val user = dto.toDomain()
 
@@ -182,25 +220,36 @@ class UserDtoMappingTest {
     }
 
     @Test
-    fun roundTripPreservesAllData() {
-        val original = User(
-            userId = "uid-round",
-            displayName = "Round Trip",
-            email = "round@test.com",
-            photoUrl = "https://img.com/round.jpg",
-            level = SpeakingLevel.B2,
-            latestAssessmentCriteria = SpeakingCriteriaResult(
-                rangeMet = true, accuracyMet = true,
-                fluencyMet = true, interactionMet = true,
-                coherenceMet = false
-            ),
-            lastAssessedAt = Date(1700000000000L),
-            trainingProgress = TrainingProgress(3, 5, TrainingStage.PATH_COMPLETED),
-            savedVocabularies = listOf(
-                VocabularyItem("test", "kiểm tra", "/tɛst/", "noun",
-                    LearningExample("This is a test.", "Đây là bài kiểm tra."))
+    fun roundTripPreservesProfileWhileVocabularyHasItsOwnRepository() {
+        val original =
+            User(
+                userId = "uid-round",
+                displayName = "Round Trip",
+                email = "round@test.com",
+                photoUrl = "https://img.com/round.jpg",
+                level = SpeakingLevel.B2,
+                latestAssessmentCriteria =
+                    SpeakingCriteriaResult(
+                        rangeMet = true,
+                        accuracyMet = true,
+                        fluencyMet = true,
+                        interactionMet = true,
+                        coherenceMet = false
+                    ),
+                lastAssessedAt = Date(1700000000000L),
+                trainingProgress =
+                    TrainingProgress(currentGoalOrder = 3, currentUnitOrder = 5, stage = TrainingStage.PATH_COMPLETED),
+                savedVocabularies =
+                    listOf(
+                        VocabularyItem(
+                            word = "test",
+                            mean = "kiểm tra",
+                            phonetic = "/tɛst/",
+                            partOfSpeech = "noun",
+                            example = LearningExample("This is a test.", "Đây là bài kiểm tra.")
+                        )
+                    )
             )
-        )
 
         val restored = original.toDto().toDomain()
 
@@ -212,6 +261,6 @@ class UserDtoMappingTest {
         assertEquals(original.lastAssessedAt, restored.lastAssessedAt)
         assertEquals(original.latestAssessmentCriteria, restored.latestAssessmentCriteria)
         assertEquals(original.trainingProgress, restored.trainingProgress)
-        assertEquals(original.savedVocabularies, restored.savedVocabularies)
+        assertTrue(restored.savedVocabularies.isEmpty())
     }
 }

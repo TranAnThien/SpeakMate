@@ -11,11 +11,25 @@ import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeCompletion
 import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.TranscriptMessage
+import com.project.speakmate.utils.extension.default
 import java.util.Date
 
 object PracticeCompletionRules {
+    const val AUDIO_RETENTION_MILLIS = 24 * 60 * 60 * 1_000L
+
     private const val MESSAGE_ID_PREFIX = "message_"
+    private const val AUDIO_UNAVAILABLE_FEEDBACK = "Audio evidence is unavailable or expired."
+    private const val UNASSESSED_FEEDBACK = "Session saved without an assessment."
+    private const val TECHNICAL_FAILURE_FEEDBACK = "Assessment could not be completed because of a technical error."
+    private const val INVALID_EVALUATION_FEEDBACK = "The assessment response could not be validated."
+    private const val SPEECH_UNAVAILABLE_FEEDBACK = "There is not enough usable speech evidence for an assessment."
     private const val ASSESSMENT_NOT_HISTORY = "Assessment is not practice history"
+
+    fun canRetryGrading(reason: InsufficientEvidenceReason): Boolean =
+        reason == InsufficientEvidenceReason.EVALUATION_FAILED || reason == InsufficientEvidenceReason.EVALUATION_INVALID
+
+    fun isEvidenceExpired(createdAtMillis: Long, nowMillis: Long): Boolean =
+        nowMillis < createdAtMillis || nowMillis.toULong() - createdAtMillis.toULong() >= AUDIO_RETENTION_MILLIS.toULong()
 
     fun canComplete(practice: CompletedPractice): Boolean {
         val session = practice.session
@@ -62,7 +76,9 @@ object PracticeCompletionRules {
             is CallActivityContext.FreePractice -> PracticeType.FREE_PRACTICE
             is CallActivityContext.Training -> when (practice.context.activityType) {
                 CallActivityType.TRAINING_UNIT -> PracticeType.TRAINING_UNIT
-                else -> PracticeType.GOAL_ASSESSMENT
+                CallActivityType.GOAL_ASSESSMENT -> PracticeType.GOAL_ASSESSMENT
+                CallActivityType.FREE_PRACTICE, CallActivityType.INITIAL_PLACEMENT,
+                CallActivityType.REASSESSMENT -> error(ASSESSMENT_NOT_HISTORY)
             }
             is CallActivityContext.Assessment -> error(ASSESSMENT_NOT_HISTORY)
         }
@@ -76,8 +92,18 @@ object PracticeCompletionRules {
             criteriaResult = evaluated?.criteria,
             requiredActionResults = evaluated?.requiredActionResults.orEmpty().toMap(),
             transcripts = getFinalTranscripts(practice.session.transcript),
-            feedbackSummary = feedback,
-            requiredActionDescriptions = training?.requiredActions?.associate { it.requiredActionId to it.description }.orEmpty()
+            requiredActionDescriptions = training?.requiredActions
+                ?.associate { it.requiredActionId to it.description }.orEmpty(),
+            feedbackSummary = feedback.default((normalizedOutcome as? AssessmentOutcome.InsufficientEvidence)?.reason?.let {
+                when (it) {
+                    InsufficientEvidenceReason.AUDIO_UNAVAILABLE -> AUDIO_UNAVAILABLE_FEEDBACK
+                    InsufficientEvidenceReason.EVALUATION_FAILED -> TECHNICAL_FAILURE_FEEDBACK
+                    InsufficientEvidenceReason.EVALUATION_INVALID -> INVALID_EVALUATION_FEEDBACK
+                    InsufficientEvidenceReason.NOT_ENOUGH_SPEECH, InsufficientEvidenceReason.NO_USER_SPEECH,
+                    InsufficientEvidenceReason.TRANSCRIPT_UNAVAILABLE -> SPEECH_UNAVAILABLE_FEEDBACK
+                    InsufficientEvidenceReason.CALL_FAILED -> UNASSESSED_FEEDBACK
+                }
+            })
         )
         return PracticeCompletion(attempt, training, normalizedOutcome)
     }

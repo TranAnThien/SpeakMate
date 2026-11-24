@@ -1,11 +1,11 @@
 package com.project.speakmate.data.session
 
-import com.project.speakmate.data.audio.PlaybackProgress
 import com.project.speakmate.data.audio.AssessmentAudioFileProvider
 import com.project.speakmate.data.audio.AssessmentAudioRecorder
+import com.project.speakmate.data.audio.PlaybackProgress
 import com.project.speakmate.data.remote.ai.GeminiLiveEvent
-import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallActivityType
+import com.project.speakmate.domain.model.CallFailure
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.Scenario
 import java.io.IOException
@@ -17,19 +17,26 @@ class FakeCallSessionMedia : CallSessionMedia {
     var audioFiles: AssessmentAudioFileProvider? = null
     var recorder: AssessmentAudioRecorder? = null
         private set
+
     var recordingAudioId: String? = null
         private set
+
     var recordingFinishCount = 0
         private set
+
     var activityType = CallActivityType.FREE_PRACTICE
         private set
+
     var connectedScenario: Scenario? = null
         private set
+
     private var onAudioLimit: (() -> Unit)? = null
     override var assessmentAudioId: String? = null
         private set
+
     override var assessmentAudioDurationMillis: Long? = null
         private set
+
     private var onEvent: ((GeminiLiveEvent) -> Unit)? = null
     private var onFailure: ((CallFailure) -> Unit)? = null
     private var onInterrupted: (() -> Unit)? = null
@@ -37,22 +44,32 @@ class FakeCallSessionMedia : CallSessionMedia {
     val reconnectHandles = mutableListOf<String>()
     var isUplinkBlocked = false
         private set
+
     var shouldFailReconnect = false
     var shouldFailPronunciation = false
+    var shouldDelayPronunciationStart = false
+    private var onPronunciationStarted: (() -> Unit)? = null
     val pronouncedTexts = mutableListOf<String>()
     var isPlaybackPaused = false
         private set
+
     var pronunciationStops = 0
         private set
+
     private var onPronunciationFinished: ((Boolean) -> Unit)? = null
     val isTurnIdle = MutableStateFlow(true)
     var hasConnection = false
         private set
+
     var isAudioOpen = false
         private set
+
     private var isUplinkCurrent: (() -> Boolean)? = null
-    val isUplinkEnabled: Boolean get() = isUplinkCurrent?.invoke() == true
+    val isUplinkEnabled: Boolean
+        get() = isUplinkCurrent?.invoke() == true
+
     var hasPermission = true
+    var isMicrophoneBlocked = false
     var shouldFailAudioOpen = false
     var shouldFailClose = false
     var shouldFailRecordingAppend = false
@@ -64,20 +81,27 @@ class FakeCallSessionMedia : CallSessionMedia {
     var terminalFailure: CallFailure? = null
     var playbackStarts = 0
         private set
+
     var closeCount = 0
         private set
+
     var audioCloseCount = 0
         private set
+
     var playbackGeneration: Long? = null
         private set
+
     var playbackChunks = 0
         private set
 
-    var playbackProgress = PlaybackProgress(0L, 0L)
+    var playbackProgress = PlaybackProgress(playedFrames = 0L, enqueuedFrames = 0L)
     var clearCount = 0
         private set
+
     var turnMarks = 0
         private set
+
+    override fun isMicrophoneSilenced(): Boolean = isMicrophoneBlocked
 
     override fun hasMicrophonePermission(): Boolean = hasPermission
 
@@ -135,14 +159,20 @@ class FakeCallSessionMedia : CallSessionMedia {
         isPlaybackPaused = isPaused
     }
 
-    override fun speakPronunciation(text: String, onFinished: (Boolean) -> Unit) {
+    override fun speakPronunciation(text: String, onStarted: () -> Unit, onFinished: (Boolean) -> Unit) {
         check(!shouldFailPronunciation)
         pronouncedTexts += text
+        onPronunciationStarted = onStarted
+        if (!shouldDelayPronunciationStart) onStarted()
         onPronunciationFinished = onFinished
     }
 
     override fun stopPronunciation() {
         pronunciationStops++
+    }
+
+    fun startPronunciation() {
+        onPronunciationStarted?.invoke()
     }
 
     fun finishPronunciation(isSuccess: Boolean) {
@@ -199,7 +229,11 @@ class FakeCallSessionMedia : CallSessionMedia {
         return MutableStateFlow(0f)
     }
 
-    override fun startPlayback(scope: CoroutineScope, isMediaCurrent: () -> Boolean, onPlaybackChanged: (Boolean) -> Unit) {
+    override fun startPlayback(
+        scope: CoroutineScope,
+        isMediaCurrent: () -> Boolean,
+        onPlaybackChanged: (Boolean) -> Unit
+    ) {
         if (isMediaCurrent()) playbackStarts++
     }
 
@@ -266,11 +300,12 @@ class FakeCallSessionMedia : CallSessionMedia {
     }
 
     fun silenceMicrophone(isSilenced: Boolean) {
+        isMicrophoneBlocked = isSilenced
         onMicrophoneSilenced?.invoke(isSilenced)
     }
 
     fun emitResumptionHandle(handle: String) {
-        onEvent?.invoke(GeminiLiveEvent.ResumptionUpdate(handle, true))
+        onEvent?.invoke(GeminiLiveEvent.ResumptionUpdate(handle = handle, isResumable = true))
     }
 
     fun interruptAudio() {
@@ -297,11 +332,13 @@ class FakeCallSessionMedia : CallSessionMedia {
     }
 
     fun emitInputTranscription(text: String, isFinished: Boolean = false) {
-        onEvent?.invoke(GeminiLiveEvent.InputTranscription(text, isFinished, playbackGeneration))
+        onEvent?.invoke(GeminiLiveEvent.InputTranscription(text, isFinished))
     }
 
     fun emitOutputTranscription(text: String, generation: Long? = playbackGeneration) {
-        onEvent?.invoke(GeminiLiveEvent.OutputTranscription(text, false, generation))
+        onEvent?.invoke(
+            GeminiLiveEvent.OutputTranscription(text = text, isFinished = false, playbackGeneration = generation)
+        )
     }
 
     fun emitInterrupted() {
@@ -309,10 +346,26 @@ class FakeCallSessionMedia : CallSessionMedia {
     }
 
     fun emitTurnComplete() {
-        onEvent?.invoke(GeminiLiveEvent.Content(emptyList(), playbackGeneration, false, true, false))
+        onEvent?.invoke(
+            GeminiLiveEvent.Content(
+                audio = emptyList(),
+                playbackGeneration = playbackGeneration,
+                hasModelTurn = false,
+                isTurnFinished = true,
+                isWaitingForInput = false
+            )
+        )
     }
 
     fun emitAudio(generation: Long?) {
-        onEvent?.invoke(GeminiLiveEvent.Content(listOf(ByteArray(2)), generation, true, false, false))
+        onEvent?.invoke(
+            GeminiLiveEvent.Content(
+                audio = listOf(ByteArray(2)),
+                playbackGeneration = generation,
+                hasModelTurn = true,
+                isTurnFinished = false,
+                isWaitingForInput = false
+            )
+        )
     }
 }

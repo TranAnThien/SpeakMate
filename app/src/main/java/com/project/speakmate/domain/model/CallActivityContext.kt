@@ -22,7 +22,10 @@ sealed interface CallActivityContext {
     data class Assessment(
         override val scenario: Scenario,
         override val activityType: CallActivityType,
-        override val communicativeGoal: String
+        override val communicativeGoal: String,
+        val step: Int? = null,
+        val targetLevel: SpeakingLevel? = null,
+        val role: PlacementRole? = null
     ) : CallActivityContext {
         init {
             require(activityType == CallActivityType.INITIAL_PLACEMENT || activityType == CallActivityType.REASSESSMENT)

@@ -7,7 +7,7 @@ import com.project.speakmate.domain.model.TrainingProgress
 import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
-    suspend fun getUser(userId: String): Result<User?>
+    suspend fun getUser(userId: String, requireServer: Boolean = false): Result<User?>
     suspend fun getOrCreateUser(user: User): Result<User>
     fun observeUser(userId: String): Flow<User?>
     suspend fun saveAssessedLevel(

@@ -1,16 +1,23 @@
 package com.project.speakmate.ui.savedvocab
 
 import com.project.speakmate.domain.model.LearningExample
+import com.project.speakmate.domain.model.PronunciationPlaybackState
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.repository.PronunciationRepository
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
+import com.project.speakmate.domain.rules.SavedVocabularyRules
+import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.MainDispatcherRule
 import com.project.speakmate.ui.profile.savedvocab.SavedVocabViewModel
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.time.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -26,36 +33,41 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SavedVocabViewModelTest {
 
-    @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    @get:Rule val mainDispatcherRule = MainDispatcherRule()
 
+    private val authRepository = FakeAuthRepository()
+    private val clock = Clock.systemUTC()
     private val fakeVocabFlow = MutableStateFlow<List<VocabularyItem>>(emptyList())
     private lateinit var repository: SavedVocabularyRepository
     private lateinit var pronunciationRepository: PronunciationRepository
     private lateinit var viewModel: SavedVocabViewModel
 
-    private fun makeItem(word: String, mean: String, pos: String = "noun") = VocabularyItem(
-        word = word,
-        mean = mean,
-        phonetic = "",
-        partOfSpeech = pos,
-        example = LearningExample("", "")
-    )
+    private fun makeItem(word: String, mean: String, pos: String = "noun") =
+        VocabularyItem(word = word, mean = mean, phonetic = "", partOfSpeech = pos, example = LearningExample("", ""))
 
     @Before
     fun setUp() {
         repository = mockk(relaxed = true)
-        io.mockk.every { repository.observeSavedVocabularies() } returns fakeVocabFlow
+        every { repository.observeSavedVocabularies() } returns fakeVocabFlow
         pronunciationRepository = mockk(relaxed = true)
-        viewModel = SavedVocabViewModel(repository, pronunciationRepository)
+        every { pronunciationRepository.playback } returns MutableStateFlow(PronunciationPlaybackState())
+        viewModel =
+            SavedVocabViewModel(
+                savedVocabularyRepository = repository,
+                pronunciationRepository = pronunciationRepository,
+                authRepository = authRepository
+            )
     }
-
-
 
     @Test
     fun initialUiStateHasIsLoadingTrueBeforeFirstEmission() {
-        io.mockk.every { repository.observeSavedVocabularies() } returns kotlinx.coroutines.flow.emptyFlow()
-        val pending = SavedVocabViewModel(repository, pronunciationRepository)
+        every { repository.observeSavedVocabularies() } returns emptyFlow()
+        val pending =
+            SavedVocabViewModel(
+                savedVocabularyRepository = repository,
+                pronunciationRepository = pronunciationRepository,
+                authRepository = authRepository
+            )
         assertTrue(pending.uiState.value.isLoading)
     }
 
@@ -72,10 +84,8 @@ class SavedVocabViewModelTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         fakeVocabFlow.emit(emptyList())
         advanceUntilIdle()
-        assertTrue(viewModel.uiState.value.isEmpty)
+        assertTrue(viewModel.uiState.value.filteredVocabularies.isEmpty())
     }
-
-
 
     @Test
     fun updateSearchQueryFiltersByWordCaseInsensitive() = runTest {
@@ -100,12 +110,7 @@ class SavedVocabViewModelTest {
     @Test
     fun updateSearchQueryFiltersByMeanCaseInsensitive() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-        fakeVocabFlow.emit(
-            listOf(
-                makeItem("resilience", "sự kiên cường"),
-                makeItem("ubiquitous", "có mặt khắp nơi")
-            )
-        )
+        fakeVocabFlow.emit(listOf(makeItem("resilience", "sự kiên cường"), makeItem("ubiquitous", "có mặt khắp nơi")))
         advanceUntilIdle()
 
         viewModel.updateSearchQuery("kiên cường")
@@ -143,24 +148,29 @@ class SavedVocabViewModelTest {
         assertTrue(viewModel.uiState.value.filteredVocabularies.isEmpty())
     }
 
-
-
     @Test
     fun removeVocabularyCallsRepositoryWithCorrectKeyPair() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-        coEvery { repository.removeVocabulary("test", "noun") } returns Result.success(Unit)
+        fakeVocabFlow.value = listOf(makeItem("test", "meaning"))
+        advanceUntilIdle()
+        coEvery {
+            repository.removeVocabularies("user-1", listOf(SavedVocabularyRules.getIdentity("test", "noun")))
+        } returns Result.success(Unit)
 
         viewModel.removeVocabulary("test", "noun")
         advanceUntilIdle()
 
-        io.mockk.coVerify(exactly = 1) { repository.removeVocabulary("test", "noun") }
+        coVerify(exactly = 1) {
+            repository.removeVocabularies("user-1", listOf(SavedVocabularyRules.getIdentity("test", "noun")))
+        }
     }
 
     @Test
     fun removeVocabularySetsErrorMessageOnFailure() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-        coEvery { repository.removeVocabulary(any(), any()) } returns
-                Result.failure(Exception("Firestore error"))
+        fakeVocabFlow.value = listOf(makeItem("test", "meaning"), makeItem(word = "x", mean = "meaning", pos = "y"))
+        advanceUntilIdle()
+        coEvery { repository.removeVocabularies(any(), any()) } returns Result.failure(Exception("Firestore error"))
 
         viewModel.removeVocabulary("test", "noun")
         advanceUntilIdle()
@@ -171,8 +181,9 @@ class SavedVocabViewModelTest {
     @Test
     fun clearErrorResetsErrorToNull() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
-        coEvery { repository.removeVocabulary(any(), any()) } returns
-                Result.failure(Exception("err"))
+        fakeVocabFlow.value = listOf(makeItem("test", "meaning"), makeItem(word = "x", mean = "meaning", pos = "y"))
+        advanceUntilIdle()
+        coEvery { repository.removeVocabularies(any(), any()) } returns Result.failure(Exception("err"))
 
         viewModel.removeVocabulary("x", "y")
         advanceUntilIdle()
@@ -188,18 +199,17 @@ class SavedVocabViewModelTest {
         viewModel.playWord("resilience")
         verify(exactly = 2) { pronunciationRepository.playText("resilience") }
     }
+
     @Test
     fun failedListenerShowsErrorAndRetryStartsANewCollection() = runTest {
-        io.mockk.every { repository.observeSavedVocabularies() } returns flow { throw IllegalStateException() }
+        every { repository.observeSavedVocabularies() } returns flow { throw IllegalStateException() }
         viewModel.retry()
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.hasLoadError)
-        assertFalse(viewModel.uiState.value.isEmpty)
-        io.mockk.every { repository.observeSavedVocabularies() } returns fakeVocabFlow
+        every { repository.observeSavedVocabularies() } returns fakeVocabFlow
         viewModel.retry()
         advanceUntilIdle()
         assertFalse(viewModel.uiState.value.hasLoadError)
-        assertTrue(viewModel.uiState.value.isEmpty)
+        assertTrue(viewModel.uiState.value.filteredVocabularies.isEmpty())
     }
-
 }

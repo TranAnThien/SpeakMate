@@ -1,6 +1,8 @@
 package com.project.speakmate.ui.placement
 
 import androidx.lifecycle.ViewModelStore
+import com.project.speakmate.data.repository.AssessmentGradingRepositoryImpl
+import com.project.speakmate.data.session.AssessmentGradingManager
 import com.project.speakmate.domain.model.AssessmentOutcome
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallOutcome
@@ -13,19 +15,23 @@ import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.rules.PlacementTestFixtures
+import com.project.speakmate.domain.rules.PracticeCompletionRules
 import com.project.speakmate.domain.rules.ReassessmentTestFixtures
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.placement.state.ReassessmentNavigation
 import com.project.speakmate.ui.placement.state.ReassessmentPhase
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.Date
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -171,7 +177,8 @@ class ReassessmentViewModelTest {
         val viewModel = start(this)
         val task = viewModel.uiState.value.assessment?.currentTask
         for (attempt in 0..2) {
-            assessments.outcome = AssessmentOutcome.InsufficientEvidence(if (attempt == 1) InsufficientEvidenceReason.EVALUATION_FAILED else InsufficientEvidenceReason.NO_USER_SPEECH)
+            assessments.outcome = AssessmentOutcome.InsufficientEvidence(if (attempt == 1) InsufficientEvidenceReason
+                .EVALUATION_FAILED else InsufficientEvidenceReason.NO_USER_SPEECH)
             viewModel.submitCallResult(session().copy(hasUserSpeech = false, outcome = CallOutcome.CANCELLED))
             runCurrent()
             if (attempt < 2) {
@@ -338,7 +345,8 @@ class ReassessmentViewModelTest {
         runCurrent()
         assertEquals(ReassessmentPhase.RESULT, viewModel.uiState.value.phase)
         assertTrue(viewModel.uiState.value.result is ReassessmentTransition.RetryTask)
-        assertEquals(listOf(AUDIO_ID), assessments.clearedAudioIds)
+        assertEquals(emptyList<String>(), assessments.clearedAudioIds)
+        assertEquals(InsufficientEvidenceReason.EVALUATION_FAILED, viewModel.uiState.value.pendingGradingReason)
     }
 
     @Test
@@ -369,7 +377,60 @@ class ReassessmentViewModelTest {
         assertEquals(0, users.saveCalls)
     }
 
-    private fun createViewModel() = ReassessmentViewModel(auth, users, tasks, scenarios, assessments, training, clock).also {
+    @Test
+    fun exitSetsPendingNavigationSurvivingStopAndBackRemainsActive() = runTest {
+        val viewModel = start(this)
+
+        viewModel.exit()
+        runCurrent()
+
+        assertEquals(ReassessmentPhase.CLOSED, viewModel.uiState.value.phase)
+        assertEquals(ReassessmentNavigation.RETURN_TO_PATH, viewModel.uiState.value.pendingNavigation)
+
+        viewModel.exit()
+        assertEquals(ReassessmentNavigation.RETURN_TO_PATH, viewModel.consumePendingNavigation())
+        assertNull(viewModel.uiState.value.pendingNavigation)
+        assertNull(viewModel.consumePendingNavigation())
+
+        viewModel.exit()
+        assertEquals(ReassessmentNavigation.RETURN_TO_PATH, viewModel.consumePendingNavigation())
+    }
+
+    @Test
+    fun openProfileAndPromotedExitSetMatchingPendingNavigation() = runTest {
+        val promoted = complete(this)
+        promoted.exit()
+        assertEquals(ReassessmentNavigation.OPEN_PROMOTED_PATH, promoted.consumePendingNavigation())
+        assertNull(promoted.consumePendingNavigation())
+
+        promoted.openProfile()
+        assertEquals(ReassessmentNavigation.OPEN_PROFILE, promoted.consumePendingNavigation())
+        assertNull(promoted.consumePendingNavigation())
+    }
+
+    @Test
+    fun gradingUsesTheCurrentTaskOwnerAndAudioRetentionDeadline() = runTest {
+        val viewModel = start(this)
+        val task = requireNotNull(viewModel.uiState.value.assessment?.currentTask)
+        val call = session()
+        viewModel.submitCallResult(call)
+        runCurrent()
+        val evidence = assessments.evidence.single()
+        assertEquals(task.targetLevel, evidence.targetLevel)
+        assertEquals(task.communicativeGoal, evidence.communicativeGoal)
+        assertEquals(task.taskId, evidence.taskId)
+        assertEquals(auth.requireCurrentUserId(), evidence.userId)
+        assertEquals(NOW_MILLIS + PracticeCompletionRules.AUDIO_RETENTION_MILLIS, evidence.expiresAtMillis)
+        assertEquals(call.outcome, evidence.callOutcome)
+        assertEquals(call.assessmentAudioId, evidence.assessmentAudioId)
+        assertEquals(call.assessmentAudioDurationMillis, evidence.audioDurationMillis)
+        assertEquals(call.transcript, evidence.transcript)
+        assertTrue(evidence.requiredActions.isEmpty())
+        assertTrue(!evidence.operationId.isNullOrBlank())
+    }
+
+    private fun createViewModel() = ReassessmentViewModel(auth, users, tasks, scenarios, AssessmentGradingRepositoryImpl(AssessmentGradingManager(
+        CoroutineScope(Dispatchers.Main), assessments, auth, clock)), training, clock).also {
         store.put(VIEW_MODEL_KEY, it)
     }
 

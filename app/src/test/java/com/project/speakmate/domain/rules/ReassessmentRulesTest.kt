@@ -19,6 +19,7 @@ import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.rules.ReassessmentTestFixtures.ASSESSED_AT_MILLIS
 import kotlin.random.Random
+import java.util.Date
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -27,11 +28,55 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReassessmentRulesTest {
+    @Test
+    fun evidenceExpiryKeepsTheExistingRetentionArithmetic() {
+        val startedAtMillis = ASSESSED_AT_MILLIS
+        assertEquals(
+            startedAtMillis + PracticeCompletionRules.AUDIO_RETENTION_MILLIS,
+            ReassessmentRules.getEvidenceExpiryMillis(startedAtMillis)
+        )
+        assertEquals(
+            PracticeCompletionRules.AUDIO_RETENTION_MILLIS,
+            ReassessmentRules.getEvidenceExpiryMillis(0L)
+        )
+    }
+
+    @Test
+    fun saveAllowsAnEligibleCurrentLevelOrAnExactPromotionReceipt() {
+        val profile = ReassessmentTestFixtures.getUser(A2)
+        val criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
+        val result = ReassessmentTransition.Promoted(B1, criteria, ASSESSED_AT_MILLIS)
+        assertTrue(ReassessmentRules.canSaveResult(profile, result, A2))
+        assertFalse(ReassessmentRules.canSaveResult(profile, result, A1))
+        assertFalse(ReassessmentRules.canSaveResult(profile.copy(trainingProgress = null), result, A2))
+        val receipt = profile.copy(
+            level = result.newLevel,
+            lastAssessedAt = Date(result.lastAssessedAtMillis),
+            latestAssessmentCriteria = criteria
+        )
+        assertTrue(ReassessmentRules.canSaveResult(receipt, result, A2))
+        assertFalse(ReassessmentRules.canSaveResult(receipt.copy(lastAssessedAt = Date(0L)), result, A2))
+    }
+
     private val rules = ReassessmentRules
     private val tasks = ReassessmentTestFixtures.getTasks()
     private val pass = PlacementTestFixtures.getOutcome(AssessmentResult.PASS)
     private val confirmationPass = pass.copy(criteria = pass.criteria.copy(rangeMet = false))
     private val random = Random(ReassessmentTestFixtures.RANDOM_SEED)
+
+    @Test
+    fun nullAtB2ConfirmationNeverPromotesOrDropsThePassedTaskRecords() {
+        val initial = start(B1)
+        val probe = (apply(initial, pass) as ReassessmentTransition.NextStep).state
+        val confirmation = (apply(probe, pass) as ReassessmentTransition.NextStep).state
+        InsufficientEvidenceReason.entries.forEach { reason ->
+            val retry = apply(confirmation, AssessmentOutcome.InsufficientEvidence(reason)) as ReassessmentTransition.RetryTask
+            assertEquals(confirmation.copy(technicalRetryCount = 1), retry.state)
+            assertEquals(B1, retry.state.currentLevel)
+            assertEquals(B2, retry.state.nextLevel)
+            assertEquals(confirmation.currentTask, retry.state.currentTask)
+        }
+    }
 
     @Test
     fun mapsEveryLevelToItsImmediateSuccessorOrNoSuccessor() {

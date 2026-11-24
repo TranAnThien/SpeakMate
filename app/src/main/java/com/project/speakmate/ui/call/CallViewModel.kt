@@ -4,30 +4,22 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.CallActivityContext
-import com.project.speakmate.domain.model.CallActivityType
-import com.project.speakmate.domain.model.CallInterruption
+import com.project.speakmate.domain.model.CallFailure
+import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
 import com.project.speakmate.domain.model.CallState
 import com.project.speakmate.domain.model.CompletedPractice
-import com.project.speakmate.domain.model.DictionaryLookupResult
-import com.project.speakmate.domain.model.LearningExample
-import com.project.speakmate.domain.model.PracticeCompletionState
-import com.project.speakmate.domain.model.PronunciationState
 import com.project.speakmate.domain.model.SenderType
+import com.project.speakmate.domain.model.TrainingActivity
 import com.project.speakmate.domain.model.TranscriptMessage
-import com.project.speakmate.domain.model.VocabularyItem
-import com.project.speakmate.domain.model.VocabularySaveResult
 import com.project.speakmate.domain.repository.CallRepository
-import com.project.speakmate.domain.repository.DictionaryRepository
 import com.project.speakmate.domain.repository.PracticeCompletionRepository
-import com.project.speakmate.domain.repository.SavedVocabularyRepository
 import com.project.speakmate.domain.rules.CallTimingRules
-import com.project.speakmate.ui.call.state.CallDictionaryStatus
 import com.project.speakmate.ui.call.state.CallDictionaryUiState
+import com.project.speakmate.ui.call.state.CallDialog
 import com.project.speakmate.ui.call.state.CallPresentation
 import com.project.speakmate.ui.call.state.CallTranscriptMessageUiState
 import com.project.speakmate.ui.call.state.CallUiState
-import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import com.project.speakmate.ui.call.state.MicrophonePermissionPresentation
 import com.project.speakmate.ui.call.state.MicrophonePermissionUiState
 import com.project.speakmate.utils.AppConstant
@@ -42,7 +34,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -50,77 +41,50 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class CallViewModel @Inject constructor(
+class CallViewModel
+@Inject
+constructor(
     private val repository: CallRepository,
-    private val dictionaryRepository: DictionaryRepository,
-    private val savedVocabularyRepository: SavedVocabularyRepository,
+    private val dictionaryManager: CallDictionaryManager,
     private val completionRepository: PracticeCompletionRepository
 ) : ViewModel() {
 
-    companion object {
-        private val SENTENCE_DELIMITERS = charArrayOf('.', '!', '?')
+    private val _uiState = MutableStateFlow(CallUiState(isTranscriptAvailable = false))
+
+    private val currentDictionary = { _uiState.value.dictionary }
+    private val updateDictionary: ((CallDictionaryUiState?) -> CallDictionaryUiState?) -> Unit = { transform ->
+        _uiState.update { it.copy(dictionary = transform(it.dictionary)) }
     }
-
-    private val _uiState = MutableStateFlow(
-        CallUiState(
-            isTranscriptAvailable = false,
-            isStandaloneCall = true
-        )
-    )
-
     val uiState: StateFlow<CallUiState> = _uiState.asStateFlow()
     val audioLevel: StateFlow<Float> = repository.audioLevel
 
     private var currentContext: CallActivityContext? = null
-    private var hasHandedOffCompletion = false
+    private var shouldSavePractice = true
     private var hasProcessedCurrentSession: Boolean = false
-    private var dictionarySaveRequest = 0L
 
-    val durationLabel: StateFlow<String> = combine(
-        repository.sessionState,
-        flow {
-            while (true) {
-                emit(Unit)
-                delay(AppConstant.MILLIS_PER_SECOND.toLong())
+    val durationLabel: StateFlow<String> =
+        combine(
+            repository.sessionState,
+            flow {
+                while (true) {
+                    emit(Unit)
+                    delay(AppConstant.MILLIS_PER_SECOND.toLong())
+                }
             }
+        ) { session, _ ->
+            formatDuration(session)
         }
-    ) { session, _ ->
-        formatDuration(session)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
+            .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(), initialValue = "")
 
     init {
         viewModelScope.launch {
             repository.sessionState.collect { session ->
-                val isCallOpen = session.state == CallState.CALLING ||
-                        session.state == CallState.ACTIVE ||
-                        session.state == CallState.PAUSED
-
-                if ((session.outcome != null || session.state == CallState.ENDED || session.state == CallState.FAILED) &&
-                    !hasProcessedCurrentSession && session.state != CallState.READY && session.state != CallState.CALLING
-                ) {
+                val isCallOpen = CallUiMapper.isCallOpen(session)
+                if (CallUiMapper.shouldComplete(session) && !hasProcessedCurrentSession) {
                     hasProcessedCurrentSession = true
                     completePractice(session)
                 }
-
-                _uiState.update {
-                    it.copy(
-                        isTranscriptVisible = it.isTranscriptVisible && isCallOpen,
-                        dictionary = it.dictionary.takeIf { isCallOpen }?.copy(
-                            isPronouncing = session.pronunciation == PronunciationState.PLAYING,
-                            hasPronunciationError = session.pronunciation == PronunciationState.FAILED
-                        ),
-                        presentation = getPresentation(session),
-                        isMuted = session.isMuted,
-                        isResuming = session.isResuming,
-                        failure = session.failure,
-                        isEndConfirmationVisible = it.isEndConfirmationVisible &&
-                            (session.state == CallState.ACTIVE && !session.isFinalizing ||
-                                session.state == CallState.PAUSED && (it.presentation == CallPresentation.PAUSED ||
-                                    it.presentation == CallPresentation.RECONNECTING)),
-                        isExitReady = it.isExiting && session.isClosed,
-                        finishedSession = if (session.outcome != null) session else it.finishedSession
-                    )
-                }
+                _uiState.update { CallUiMapper.applySession(state = it, session = session, isCallOpen = isCallOpen) }
             }
         }
 
@@ -136,7 +100,8 @@ class CallViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        if (!hasHandedOffCompletion) _uiState.value.completionAttemptId?.let(completionRepository::releaseCompletion)
+        if (!_uiState.value.hasHandedOffCompletion)
+            _uiState.value.completionAttemptId?.let(completionRepository::releaseCompletion)
         repository.close()
         super.onCleared()
     }
@@ -146,17 +111,49 @@ class CallViewModel @Inject constructor(
         if (!isForeground) dismissEndConfirmation()
     }
 
-    fun startCall(context: CallActivityContext) {
-        if (!hasHandedOffCompletion) _uiState.value.completionAttemptId?.let(completionRepository::releaseCompletion)
+    fun consumeStartReady(): Boolean {
+        val state = _uiState.value
+        if (!state.isStartReady ||
+            state.presentation != CallPresentation.READY ||
+            state.microphonePermission != null ||
+            state.finishedSession != null ||
+            state.isExiting)
+            return false
+        return _uiState.compareAndSet(state, state.copy(isStartReady = false))
+    }
+
+    fun startCall(context: CallActivityContext, shouldSavePractice: Boolean = true) {
+        if (_uiState.value.isExiting ||
+            (_uiState.value.presentation != CallPresentation.READY &&
+                _uiState.value.presentation != CallPresentation.FAILED))
+            return
+        dictionaryManager.reset()
+        if (!_uiState.value.hasHandedOffCompletion)
+            _uiState.value.completionAttemptId?.let(completionRepository::releaseCompletion)
         currentContext = context
-        hasHandedOffCompletion = false
+        this.shouldSavePractice = shouldSavePractice
         hasProcessedCurrentSession = false
         val activityType = context.activityType
         _uiState.update {
             it.copy(
                 microphonePermission = null,
+                presentation = CallUiMapper.getPresentation(repository.sessionState.value),
+                isStartReady = false,
+                dictionary = null,
+                messages = emptyList(),
+                isTranscriptVisible = false,
+                hasCompletionError = false,
+                activityType = activityType,
+                activityIndex =
+                    ((context as? CallActivityContext.Training)?.activityScenario?.activity
+                            as? TrainingActivity.UnitActivity)
+                        ?.unitIndex
+                        ?.plus(1),
                 isTranscriptAvailable = activityType.isTranscriptAvailable,
-                isStandaloneCall = activityType == CallActivityType.FREE_PRACTICE || activityType == CallActivityType.INITIAL_PLACEMENT,
+                activeDialog = null,
+                isFinishedSessionReady = false,
+                hasConsumedExit = false,
+                hasHandedOffCompletion = false,
                 finishedSession = null,
                 completionAttemptId = null
             )
@@ -164,8 +161,46 @@ class CallViewModel @Inject constructor(
         repository.startCall(context)
     }
 
-    fun handoffCompletion() {
-        hasHandedOffCompletion = true
+    fun handoffCompletion(): Boolean {
+        val state = _uiState.value
+        if (state.hasHandedOffCompletion || state.completionAttemptId == null || state.isExiting) return false
+        return _uiState.compareAndSet(state, state.copy(hasHandedOffCompletion = true))
+    }
+
+    fun consumeFinishedSession(
+        hasCallResultConsumer: Boolean = false,
+        hasPracticeResultConsumer: Boolean = false
+    ): Boolean {
+        val state = _uiState.value
+        val session = state.finishedSession ?: return false
+        if (!state.isFinishedSessionReady || state.isExiting) return false
+        val shouldDeliver =
+            hasCallResultConsumer && !hasPracticeResultConsumer ||
+                session.outcome == CallOutcome.CANCELLED ||
+                !hasCallResultConsumer && !hasPracticeResultConsumer && session.outcome == CallOutcome.COMPLETED
+        return shouldDeliver && _uiState.compareAndSet(state, state.copy(isFinishedSessionReady = false))
+    }
+
+    fun consumeExit(): Boolean {
+        val state = _uiState.value
+        if (!state.isExitReady || state.hasConsumedExit) return false
+        return _uiState.compareAndSet(state, state.copy(isExitReady = false, hasConsumedExit = true))
+    }
+
+    fun showTitle() {
+        _uiState.update { it.copy(activeDialog = CallDialog.Title) }
+    }
+
+    fun hideTitle() {
+        _uiState.update { if (it.activeDialog == CallDialog.Title) it.copy(activeDialog = null) else it }
+    }
+
+    fun retryCompletion() {
+        val session = _uiState.value.finishedSession ?: return
+        if (!_uiState.value.hasCompletionError) return
+        _uiState.update { it.copy(hasCompletionError = false, presentation = CallPresentation.FINALIZING) }
+        completePractice(session)
+        if (_uiState.value.hasCompletionError) _uiState.update { it.copy(presentation = CallPresentation.FAILED) }
     }
 
     fun openTranscript() {
@@ -173,157 +208,55 @@ class CallViewModel @Inject constructor(
     }
 
     fun closeTranscript() {
-        repository.stopPronunciation()
+        dictionaryManager.cancelLookup()
         _uiState.update { it.copy(isTranscriptVisible = false, dictionary = null) }
     }
 
     fun selectWord(messageId: String, selectionStart: Int, word: String) {
         val message = _uiState.value.messages.firstOrNull { it.id == messageId } ?: return
-        if (word.isBlank() || selectionStart !in message.text.indices) return
-
-        repository.stopPronunciation()
-
-        val sentenceContext = getSentence(message.text, selectionStart)
-
-        _uiState.update {
-            it.copy(
-                dictionary = CallDictionaryUiState(
-                    word = word,
-                    sentence = sentenceContext,
-                    messageId = messageId,
-                    selectionStart = selectionStart,
-                    status = CallDictionaryStatus.LOADING
-                )
-            )
-        }
-
-        viewModelScope.launch {
-            val result = dictionaryRepository.lookUp(word, sentenceContext)
-
-            _uiState.update { state ->
-                val currentDict = state.dictionary ?: return@update state
-
-                if (
-                    currentDict.messageId != messageId ||
-                    currentDict.selectionStart != selectionStart
-                ) {
-                    return@update state
-                }
-
-                val updatedDict = when (result) {
-                    is DictionaryLookupResult.Found -> currentDict.copy(
-                        status = CallDictionaryStatus.SUCCESS,
-                        phonetic = result.item.phonetic,
-                        partOfSpeech = result.item.partOfSpeech,
-                        meaning = result.item.mean,
-                        exampleSentence = result.item.example.sentence,
-                        exampleTranslation = result.item.example.translate
-                    )
-
-                    is DictionaryLookupResult.NotFound -> currentDict.copy(
-                        status = CallDictionaryStatus.NOT_FOUND
-                    )
-
-                    is DictionaryLookupResult.Error -> currentDict.copy(
-                        status = CallDictionaryStatus.ERROR
-                    )
-                }
-
-                state.copy(dictionary = updatedDict)
-            }
-        }
+        val session = repository.sessionState.value
+        if (session.isFinalizing || session.state != CallState.ACTIVE && session.state != CallState.PAUSED) return
+        if (!_uiState.value.isTranscriptAvailable ||
+            word.isBlank() ||
+            selectionStart !in message.text.indices ||
+            !message.text.regionMatches(selectionStart, word, 0, word.length))
+            return
+        dictionaryManager.selectWord(
+            scope = viewModelScope,
+            message = message,
+            selectionStart = selectionStart,
+            word = word,
+            updateDictionary = updateDictionary
+        )
     }
 
-    fun saveDictionaryWord() {
-        val currentDict = _uiState.value.dictionary ?: return
-        if (!currentDict.canSave || currentDict.saveStatus == CallVocabularySaveStatus.SAVING) return
-        val saveRequest = ++dictionarySaveRequest
+    fun saveDictionaryWord() = dictionaryManager.saveWord(
+        scope = viewModelScope,
+        currentDictionary = currentDictionary,
+        updateDictionary = updateDictionary
+    )
 
-        _uiState.update {
-            it.copy(
-                dictionary = it.dictionary?.copy(
-                    saveStatus = CallVocabularySaveStatus.SAVING
-                )
-            )
-        }
-
-        viewModelScope.launch {
-            val vocabItem = VocabularyItem(
-                word = currentDict.word,
-                mean = currentDict.meaning,
-                phonetic = currentDict.phonetic,
-                partOfSpeech = currentDict.partOfSpeech,
-                example = LearningExample(
-                    sentence = currentDict.exampleSentence,
-                    translate = currentDict.exampleTranslation
-                )
-            )
-
-            val result = savedVocabularyRepository.saveVocabulary(vocabItem)
-
-            _uiState.update { state ->
-                val dict = state.dictionary ?: return@update state
-                if (
-                    saveRequest != dictionarySaveRequest ||
-                    dict.messageId != currentDict.messageId ||
-                    dict.word != currentDict.word ||
-                    dict.selectionStart != currentDict.selectionStart ||
-                    dict.saveStatus != CallVocabularySaveStatus.SAVING
-                ) {
-                    return@update state
-                }
-
-                val updatedSaveStatus = result.fold(
-                    onSuccess = { saveStatusResult ->
-                        when (saveStatusResult) {
-                            VocabularySaveResult.SAVED ->
-                                CallVocabularySaveStatus.SAVED
-
-                            VocabularySaveResult.MOVED_TO_TOP ->
-                                CallVocabularySaveStatus.MOVED_TO_TOP
-
-                            VocabularySaveResult.SAVED_REPLACING_OLDEST ->
-                                CallVocabularySaveStatus.SAVED_REPLACING_OLDEST
-                        }
-                    },
-                    onFailure = { CallVocabularySaveStatus.FAILED }
-                )
-
-                state.copy(dictionary = dict.copy(saveStatus = updatedSaveStatus))
-            }
-        }
-    }
-
-    fun closeDictionary() {
-        repository.stopPronunciation()
-        _uiState.update { it.copy(dictionary = null) }
-    }
+    fun closeDictionary() = dictionaryManager.close(updateDictionary)
 
     fun retryLookup() {
-        _uiState.update { state ->
-            val dictionary = state.dictionary
-            if (dictionary?.status != CallDictionaryStatus.ERROR) {
-                state
-            } else {
-                state.copy(
-                    dictionary = dictionary.copy(status = CallDictionaryStatus.LOADING)
-                )
-            }
-        }
-
-        val currentDict = _uiState.value.dictionary ?: return
-        selectWord(currentDict.messageId, currentDict.selectionStart, currentDict.word)
+        val currentDict = dictionaryManager.retryLookup(currentDictionary, updateDictionary) ?: return
+        selectWord(
+            messageId = currentDict.messageId,
+            selectionStart = currentDict.selectionStart,
+            word = currentDict.word
+        )
     }
 
-    fun playDictionaryWord() {
-        val word = _uiState.value.dictionary?.word ?: return
-        repository.playPronunciation(word)
+    fun playDictionaryWord() = dictionaryManager.playWord(currentDictionary, updateDictionary)
+
+    fun showConfigurationError() {
+        _uiState.update { it.copy(presentation = CallPresentation.FAILED, failure = CallFailure.CONFIGURATION) }
     }
+
+    fun stopDictionaryWord() = dictionaryManager.stopWord()
 
     fun showMicrophonePermission(presentation: MicrophonePermissionPresentation) {
-        _uiState.update {
-            it.copy(microphonePermission = MicrophonePermissionUiState(presentation))
-        }
+        _uiState.update { it.copy(microphonePermission = MicrophonePermissionUiState(presentation)) }
     }
 
     fun dismissMicrophonePermission() {
@@ -339,9 +272,14 @@ class CallViewModel @Inject constructor(
         if (session.isFinalizing) return
 
         when (session.state) {
+            CallState.READY -> {
+                repository.endCall()
+                exitCall()
+            }
             CallState.CALLING -> repository.endCall()
-            CallState.ACTIVE, CallState.PAUSED -> {
-                _uiState.update { it.copy(isEndConfirmationVisible = true) }
+            CallState.ACTIVE,
+            CallState.PAUSED -> {
+                _uiState.update { it.copy(activeDialog = CallDialog.EndConfirmation) }
             }
 
             else -> Unit
@@ -354,7 +292,7 @@ class CallViewModel @Inject constructor(
     }
 
     fun dismissEndConfirmation() {
-        _uiState.update { it.copy(isEndConfirmationVisible = false) }
+        _uiState.update { if (it.activeDialog == CallDialog.EndConfirmation) it.copy(activeDialog = null) else it }
     }
 
     fun resumeCall() {
@@ -365,11 +303,7 @@ class CallViewModel @Inject constructor(
         if (_uiState.value.isExiting) return
 
         _uiState.update {
-            it.copy(
-                microphonePermission = null,
-                isExiting = true,
-                isExitReady = repository.sessionState.value.isClosed
-            )
+            it.copy(microphonePermission = null, isExiting = true, isExitReady = repository.sessionState.value.isClosed)
         }
 
         repository.close()
@@ -377,49 +311,21 @@ class CallViewModel @Inject constructor(
 
     private fun completePractice(session: CallSessionState) {
         val context = currentContext ?: return
-        val attemptId = try {
-            completionRepository.completePractice(CompletedPractice(context, session))
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        } ?: return
-        _uiState.update { it.copy(completionAttemptId = attemptId) }
-        if (context is CallActivityContext.FreePractice) {
-            viewModelScope.launch {
-                completionRepository.observeCompletion(attemptId).first {
-                    it is PracticeCompletionState.Saved || it is PracticeCompletionState.Unavailable
-                }
-                completionRepository.releaseCompletion(attemptId)
+        if (!shouldSavePractice || context is CallActivityContext.Assessment) return
+        val attemptId =
+            try {
+                completionRepository.completePractice(CompletedPractice(context, session))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
             }
+        if (attemptId == null) {
+            if (session.outcome == CallOutcome.COMPLETED) _uiState.update { it.copy(hasCompletionError = true) }
+            return
         }
+        _uiState.update { it.copy(completionAttemptId = attemptId, hasCompletionError = false) }
     }
-
-    private fun getPresentation(session: CallSessionState): CallPresentation =
-        when (session.state) {
-            CallState.READY, CallState.ENDED -> CallPresentation.READY
-            CallState.CALLING -> CallPresentation.CONNECTING
-            CallState.PAUSED -> {
-                if (session.interruption == CallInterruption.NETWORK) {
-                    CallPresentation.RECONNECTING
-                } else {
-                    CallPresentation.PAUSED
-                }
-            }
-
-            CallState.FAILED -> CallPresentation.FAILED
-            CallState.ACTIVE -> when {
-                session.isFinalizing -> CallPresentation.PROCESSING
-                session.interruption == CallInterruption.MICROPHONE ->
-                    CallPresentation.MICROPHONE_BLOCKED
-
-                session.isPlaying -> CallPresentation.SPEAKING
-                session.isMuted -> CallPresentation.MUTED
-                session.isProcessing -> CallPresentation.PROCESSING
-                session.isAiInterrupted -> CallPresentation.BARGE_IN
-                else -> CallPresentation.LISTENING
-            }
-        }
 
     private fun toMessageUiState(message: TranscriptMessage): CallTranscriptMessageUiState =
         CallTranscriptMessageUiState(
@@ -429,21 +335,6 @@ class CallViewModel @Inject constructor(
             isPartial = !message.isFinal,
             isInterrupted = message.isInterrupted
         )
-
-    private fun getSentence(text: String, index: Int): String {
-        val start = text.lastIndexOfAny(
-            SENTENCE_DELIMITERS,
-            (index - 1).coerceAtLeast(0)
-        ).let {
-            if (it < 0 || it >= index) 0 else it + 1
-        }
-
-        val end = text.indexOfAny(SENTENCE_DELIMITERS, index).let {
-            if (it < 0) text.length else it + 1
-        }
-
-        return text.substring(start, end.coerceAtLeast(start)).trim()
-    }
 
     private fun formatDuration(session: CallSessionState): String {
         val durationMillis = CallTimingRules.getDurationMillis(session, SystemClock.elapsedRealtime()) ?: return ""

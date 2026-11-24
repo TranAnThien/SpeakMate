@@ -2,10 +2,8 @@ package com.project.speakmate.data.remote.ai
 
 sealed interface GeminiLiveEvent {
     data object SetupComplete : GeminiLiveEvent
-    data class SpeechActivity(
-        val isSpeaking: Boolean,
-        val playbackGeneration: Long?
-    ) : GeminiLiveEvent
+
+    data class SpeechActivity(val isSpeaking: Boolean, val playbackGeneration: Long?) : GeminiLiveEvent
 
     data class Content(
         val audio: List<ByteArray>,
@@ -15,26 +13,14 @@ sealed interface GeminiLiveEvent {
         val isWaitingForInput: Boolean
     ) : GeminiLiveEvent
 
-    data class InputTranscription(
-        val text: String,
-        val isFinished: Boolean,
-        val playbackGeneration: Long?
-    ) : GeminiLiveEvent
+    data class InputTranscription(val text: String, val isFinished: Boolean) : GeminiLiveEvent
 
-    data class OutputTranscription(
-        val text: String,
-        val isFinished: Boolean,
-        val playbackGeneration: Long?
-    ) : GeminiLiveEvent
+    data class OutputTranscription(val text: String, val isFinished: Boolean, val playbackGeneration: Long?) :
+        GeminiLiveEvent
 
     data class Interrupted(val playbackGeneration: Long?) : GeminiLiveEvent
 
-    data class GenerationComplete(val playbackGeneration: Long?) : GeminiLiveEvent
+    data class ResumptionUpdate(val handle: String, val isResumable: Boolean) : GeminiLiveEvent
 
-    data class ResumptionUpdate(
-        val handle: String,
-        val isResumable: Boolean
-    ) : GeminiLiveEvent
-
-    data class GoAway(val timeLeftMillis: Long?) : GeminiLiveEvent
+    data object GoAway : GeminiLiveEvent
 }

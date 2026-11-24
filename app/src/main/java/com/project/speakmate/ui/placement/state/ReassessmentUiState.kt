@@ -1,9 +1,11 @@
 package com.project.speakmate.ui.placement.state
 
+import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.model.ReassessmentState
 import com.project.speakmate.domain.model.ReassessmentTransition
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.PracticeRecoveryReason
 
 data class ReassessmentUiState(
     val phase: ReassessmentPhase = ReassessmentPhase.LOADING,
@@ -15,5 +17,8 @@ data class ReassessmentUiState(
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
     val isSaveFailed: Boolean = false,
-    val hasReachedAudioLimit: Boolean = false
+    val hasReachedAudioLimit: Boolean = false,
+    val pendingGradingReason: InsufficientEvidenceReason? = null,
+    val recoveryProblem: PracticeRecoveryReason? = null,
+    val pendingNavigation: ReassessmentNavigation? = null
 )

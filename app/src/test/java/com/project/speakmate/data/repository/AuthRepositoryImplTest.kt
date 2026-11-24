@@ -28,7 +28,12 @@ class AuthRepositoryImplTest {
         authDataSource = mockk()
         callMarkers = mockk(relaxed = true)
         every { authDataSource.requireCurrentUserId() } returns "uid-current"
-        repository = AuthRepositoryImpl(authDataSource, callMarkers)
+        repository =
+            AuthRepositoryImpl(
+                authDataSource = authDataSource,
+                callMarkers = callMarkers,
+                networkStatus = mockk(relaxed = true)
+            )
     }
 
     @Test

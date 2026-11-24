@@ -14,6 +14,17 @@ import com.project.speakmate.domain.model.TrainingProgressDecision.AdvanceReason
 import com.project.speakmate.domain.model.TrainingStage
 
 object TrainingProgressRules {
+    fun getTotalActivityCount(path: TrainingPath): Int = path.goals.sumOf { it.units.size + 1 }
+
+    fun getCompletedActivityCount(path: TrainingPath, progress: TrainingProgress): Int {
+        if (validate(path, progress) != null) return 0
+        return path.goals.indices.sumOf { goalIndex ->
+            val goal = path.goals[goalIndex]
+            goal.units.indices.count { getUnitStatus(path, progress, goalIndex, it) == ContentStatus.COMPLETED } +
+                if (getGoalAssessmentStatus(path, progress, goalIndex) == ContentStatus.COMPLETED) 1 else 0
+        }
+    }
+
     fun getGoalStatus(path: TrainingPath, progress: TrainingProgress, goalIndex: Int): ContentStatus {
         if (goalIndex !in path.goals.indices || validate(path, progress) != null) {
             return ContentStatus.LOCKED

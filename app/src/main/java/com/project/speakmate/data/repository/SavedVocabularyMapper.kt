@@ -5,6 +5,7 @@ import com.project.speakmate.data.remote.firebase.FirestoreStorageSize
 import com.project.speakmate.domain.model.LearningExample
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
+import com.project.speakmate.domain.model.SavedVocabularyIdentity
 import com.project.speakmate.domain.rules.SavedVocabularyRules
 import com.project.speakmate.utils.extension.defaultEmpty
 import java.util.Locale
@@ -53,7 +54,12 @@ object SavedVocabularyMapper {
     }
 
     fun prepareRemoval(fields: Map<String, Any?>, word: String, partOfSpeech: String): List<Any?> =
-        getRaw(fields).filterNot { matches(it, word.trim().lowercase(Locale.ROOT), partOfSpeech.trim()) }
+        prepareRemoval(fields, listOf(SavedVocabularyRules.getIdentity(word, partOfSpeech)))
+
+    fun prepareRemoval(fields: Map<String, Any?>, identities: List<SavedVocabularyIdentity>): List<Any?> {
+        val targets = identities.map { SavedVocabularyRules.getIdentity(it.word, it.partOfSpeech) }.toSet()
+        return getRaw(fields).filterNot { raw -> toItem(raw)?.let { SavedVocabularyRules.getIdentity(it) in targets } == true }
+    }
 
     fun getRaw(fields: Map<String, Any?>): List<Any?> {
         if (!fields.containsKey(FirestoreField.SAVED_VOCABULARIES)) return emptyList()

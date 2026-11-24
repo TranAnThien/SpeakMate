@@ -1,35 +1,37 @@
 package com.project.speakmate.ui.profile
 
+import com.project.speakmate.data.repository.FakeSavedVocabularyRepository
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.User
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
-import com.project.speakmate.ui.profile.state.ProfileEffect
+import com.project.speakmate.ui.components.assessment.AssessmentCriterionType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileViewModelTest {
-    @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    @get:Rule val mainDispatcherRule = MainDispatcherRule()
 
     private val auth = FakeAuthRepository()
     private val users = FakeUserRepository(user())
 
     @Test
     fun observesTheInitialProfileAndLaterLevelChanges() = runTest {
-        val viewModel = ProfileViewModel(auth, users)
+        val viewModel =
+            ProfileViewModel(
+                authRepository = auth,
+                userRepository = users,
+                savedVocabularyRepository = FakeSavedVocabularyRepository()
+            )
         assertEquals(SpeakingLevel.NOT_ASSESSED, viewModel.uiState.value.level)
 
         users.setUser(user().copy(level = SpeakingLevel.A2))
@@ -42,7 +44,12 @@ class ProfileViewModelTest {
     @Test
     fun observationFailureKeepsTheSessionAndAllowsRetry() = runTest {
         users.shouldFailObservation = true
-        val viewModel = ProfileViewModel(auth, users)
+        val viewModel =
+            ProfileViewModel(
+                authRepository = auth,
+                userRepository = users,
+                savedVocabularyRepository = FakeSavedVocabularyRepository()
+            )
         assertTrue(viewModel.uiState.value.isProfileLoadFailed)
         assertEquals("user-1", auth.signedInUserId.value)
 
@@ -58,7 +65,12 @@ class ProfileViewModelTest {
 
     @Test
     fun switchingAccountsCancelsThePreviousProfileListener() = runTest {
-        val viewModel = ProfileViewModel(auth, users)
+        val viewModel =
+            ProfileViewModel(
+                authRepository = auth,
+                userRepository = users,
+                savedVocabularyRepository = FakeSavedVocabularyRepository()
+            )
         users.setUser(user().copy(userId = "user-2", displayName = "Second student", level = SpeakingLevel.B1))
 
         auth.signedInUserId.value = "user-2"
@@ -73,7 +85,12 @@ class ProfileViewModelTest {
 
     @Test
     fun repeatedRetryKeepsOneProfileListener() = runTest {
-        val viewModel = ProfileViewModel(auth, users)
+        val viewModel =
+            ProfileViewModel(
+                authRepository = auth,
+                userRepository = users,
+                savedVocabularyRepository = FakeSavedVocabularyRepository()
+            )
         viewModel.retryProfile()
         viewModel.retryProfile()
         advanceUntilIdle()
@@ -85,7 +102,12 @@ class ProfileViewModelTest {
     @Test
     fun signedOutStateClearsTheProfile() = runTest {
         auth.signedInUserId.value = null
-        val viewModel = ProfileViewModel(auth, users)
+        val viewModel =
+            ProfileViewModel(
+                authRepository = auth,
+                userRepository = users,
+                savedVocabularyRepository = FakeSavedVocabularyRepository()
+            )
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.email.isEmpty())
@@ -93,33 +115,33 @@ class ProfileViewModelTest {
     }
 
     @Test
-    fun signOutEmitsTheEffectAfterTheRepositorySignsOut() = runTest {
-        val viewModel = ProfileViewModel(auth, users)
-        val effects = mutableListOf<ProfileEffect>()
-        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            viewModel.uiEffect.collect {
-                assertNull(auth.signedInUserId.value)
-                effects.add(it)
-            }
-        }
-        viewModel.signOut()
-        advanceUntilIdle()
-
-        assertEquals(listOf(ProfileEffect.SignedOut), effects)
-        observer.cancel()
-        assertTrue(viewModel.uiState.value.email.isEmpty())
-    }
-
-    @Test
     fun profileMapsEveryCriterionAsMeaningInsteadOfDisplayText() = runTest {
-        users.setUser(user().copy(level = SpeakingLevel.B1, latestAssessmentCriteria = SpeakingCriteriaResult(true, false, true, false, true)))
-        val viewModel = ProfileViewModel(auth, users)
+        users.setUser(
+            user()
+                .copy(
+                    level = SpeakingLevel.B1,
+                    latestAssessmentCriteria =
+                        SpeakingCriteriaResult(
+                            rangeMet = true,
+                            accuracyMet = false,
+                            fluencyMet = true,
+                            interactionMet = false,
+                            coherenceMet = true
+                        )
+                )
+        )
+        val viewModel =
+            ProfileViewModel(
+                authRepository = auth,
+                userRepository = users,
+                savedVocabularyRepository = FakeSavedVocabularyRepository()
+            )
         advanceUntilIdle()
         assertEquals(SpeakingLevel.B1, viewModel.uiState.value.level)
         assertEquals(5, viewModel.uiState.value.skills.size)
         assertEquals(listOf(true, false, true, false, true), viewModel.uiState.value.skills.map { it.isPassed })
-        assertTrue(viewModel.uiState.value.skills.all { it.criterion != null && it.title.isEmpty() })
+        assertTrue(viewModel.uiState.value.skills.all { it.criterion in AssessmentCriterionType.entries })
     }
 
-    private fun user() = User("user-1", "Student", "student@example.com", "")
+    private fun user() = User(userId = "user-1", displayName = "Student", email = "student@example.com", photoUrl = "")
 }

@@ -13,7 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -27,6 +26,7 @@ import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.ui.call.state.MicrophonePermissionPresentation
+import com.project.speakmate.utils.AppConstant
 
 class CallPermissionController(
     val onRequestStart: () -> Unit,
@@ -41,21 +41,20 @@ fun rememberCallPermissionController(
     scenario: Scenario,
     activityType: CallActivityType,
     communicativeGoal: String,
-    activityContext: CallActivityContext?
+    activityContext: CallActivityContext?,
+    shouldSavePractice: Boolean = true
 ): CallPermissionController {
     val context = LocalContext.current
     val activity = LocalActivity.current
     val settingsUnavailable = stringResource(R.string.call_permission_settings_unavailable)
     val permission = Manifest.permission.RECORD_AUDIO
     var isAwaitingSettings by rememberSaveable { mutableStateOf(false) }
-    var isPermissionRequestInProgress by remember { mutableStateOf(false) }
+    var isPermissionRequestInProgress by rememberSaveable { mutableStateOf(false) }
     var shouldOpenSettings by rememberSaveable { mutableStateOf(false) }
 
-    LifecycleEventEffect(Lifecycle.Event.ON_START) {
-        viewModel.setForeground(true)
-    }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.setForeground(isForeground = true) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (activity?.isChangingConfigurations != true) viewModel.setForeground(false)
+        if (activity?.isChangingConfigurations != true) viewModel.setForeground(isForeground = false)
     }
 
     fun hasMicrophonePermission(): Boolean =
@@ -63,38 +62,53 @@ fun rememberCallPermissionController(
 
     fun startWithPermission() {
         shouldOpenSettings = false
-        val callContext = activityContext ?: when (activityType) {
-            CallActivityType.FREE_PRACTICE -> CallActivityContext.FreePractice(scenario)
-            else -> CallActivityContext.Assessment(scenario, activityType, communicativeGoal)
-        }
-        viewModel.startCall(callContext)
+        val callContext =
+            activityContext
+                ?: when (activityType) {
+                    CallActivityType.FREE_PRACTICE -> CallActivityContext.FreePractice(scenario)
+                    CallActivityType.INITIAL_PLACEMENT,
+                    CallActivityType.REASSESSMENT ->
+                        CallActivityContext.Assessment(
+                            scenario = scenario,
+                            activityType = activityType,
+                            communicativeGoal = communicativeGoal
+                        )
+                    else -> {
+                        viewModel.showConfigurationError()
+                        return
+                    }
+                }
+        viewModel.startCall(context = callContext, shouldSavePractice = shouldSavePractice)
     }
 
     fun requestStart() {
         if (hasMicrophonePermission()) startWithPermission()
-        else viewModel.showMicrophonePermission(
-            if (shouldOpenSettings) MicrophonePermissionPresentation.DENIED else MicrophonePermissionPresentation.RATIONALE
-        )
+        else
+            viewModel.showMicrophonePermission(
+                if (shouldOpenSettings) MicrophonePermissionPresentation.DENIED
+                else MicrophonePermissionPresentation.RATIONALE
+            )
     }
 
     fun dismissPermission() {
         isAwaitingSettings = false
         viewModel.dismissMicrophonePermission()
+        viewModel.exitCall()
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        isPermissionRequestInProgress = false
-        if (viewModel.uiState.value.microphonePermission != null) {
-            if (isGranted && hasMicrophonePermission()) {
-                startWithPermission()
-            } else {
-                shouldOpenSettings = activity?.let {
-                    !ActivityCompat.shouldShowRequestPermissionRationale(it, permission)
-                } == true
-                requestStart()
+    val permissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            isPermissionRequestInProgress = false
+            if (viewModel.uiState.value.microphonePermission != null) {
+                if (isGranted && hasMicrophonePermission()) {
+                    startWithPermission()
+                } else {
+                    shouldOpenSettings =
+                        activity?.let { !ActivityCompat.shouldShowRequestPermissionRationale(it, permission) } == true
+                    requestStart()
+                }
             }
         }
-    }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         if (isAwaitingSettings) {
@@ -111,16 +125,31 @@ fun rememberCallPermissionController(
                     startWithPermission()
                 } else {
                     isPermissionRequestInProgress = true
-                    permissionLauncher.launch(permission)
+                    try {
+                        permissionLauncher.launch(permission)
+                    } catch (_: IllegalStateException) {
+                        isPermissionRequestInProgress = false
+                        viewModel.showMicrophonePermission(MicrophonePermissionPresentation.DENIED)
+                    } catch (_: SecurityException) {
+                        isPermissionRequestInProgress = false
+                        viewModel.showMicrophonePermission(MicrophonePermissionPresentation.DENIED)
+                    }
                 }
             }
         },
         onOpenSettings = {
             isAwaitingSettings = true
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+            val intent =
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts(AppConstant.PACKAGE_URI_SCHEME, context.packageName, null)
+                )
             try {
                 context.startActivity(intent)
             } catch (_: ActivityNotFoundException) {
+                isAwaitingSettings = false
+                Toast.makeText(context, settingsUnavailable, Toast.LENGTH_LONG).show()
+            } catch (_: SecurityException) {
                 isAwaitingSettings = false
                 Toast.makeText(context, settingsUnavailable, Toast.LENGTH_LONG).show()
             }

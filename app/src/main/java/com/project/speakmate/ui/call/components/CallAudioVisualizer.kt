@@ -19,8 +19,13 @@ fun CallAudioVisualizer(readLevel: () -> Float, modifier: Modifier = Modifier) {
         for (bar in -1..1) {
             val x = center.x + bar * 12.dp.toPx()
             val halfHeight = amplitude / (1 + abs(bar))
-            drawLine(DesignColor.IconBlue, Offset(x, center.y - halfHeight),
-                Offset(x, center.y + halfHeight), 2 * radius, StrokeCap.Round)
+            drawLine(
+                color = DesignColor.PrimaryContainer,
+                start = Offset(x, center.y - halfHeight),
+                end = Offset(x, center.y + halfHeight),
+                strokeWidth = 2 * radius,
+                cap = StrokeCap.Round
+            )
         }
     }
 }

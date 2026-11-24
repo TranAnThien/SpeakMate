@@ -1,13 +1,8 @@
 package com.project.speakmate.ui.placement.state
 
-import androidx.compose.runtime.Immutable
+import com.project.speakmate.domain.model.SpeakingLevel
 
-@Immutable
 data class PromotionIntroductionUiState(
-    val title: String = "",
-    val description: String = "",
-    val steps: List<PromotionStepUiState> = emptyList(),
-    val conditionTitle: String = "",
-    val conditionDescription: String = "",
-    val note: String = ""
+    val currentLevel: SpeakingLevel = SpeakingLevel.A1,
+    val nextLevel: SpeakingLevel = SpeakingLevel.A2
 )

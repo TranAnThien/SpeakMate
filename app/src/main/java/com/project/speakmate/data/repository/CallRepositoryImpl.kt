@@ -14,23 +14,30 @@ class CallRepositoryImpl @Inject constructor(private val session: CallSessionMan
         private const val GOAL_ASSESSMENT_INSTRUCTION = "Activity: Goal Assessment."
         private const val TRAINING_INSTRUCTION = "Activity: Guided Roleplay Training Unit."
         private const val GOAL_LABEL = "Communicative goal: "
-        private const val ASSESSMENT_RESTRICTION = "Maintain the scenario role and natural conversation only. Do not correct the learner, provide model answers, suggest how to answer, hint at incomplete required actions, or scaffold their assessed performance."
+        private const val ASSESSMENT_RESTRICTION =
+            "Maintain the scenario role and natural conversation only. Do not correct the learner, " +
+                "provide model answers, suggest how to answer, hint at incomplete required actions, " +
+                "or scaffold their assessed performance."
     }
 
-    override val sessionState get() = session.sessionState
-    override val audioLevel get() = session.audioLevel
+    override val sessionState
+        get() = session.sessionState
+
+    override val audioLevel
+        get() = session.audioLevel
 
     override fun startCall(context: CallActivityContext) {
         val scenario = context.scenario
         val activityType = context.activityType
         val communicativeGoal = context.communicativeGoal
-        val instruction = when (activityType) {
-            CallActivityType.FREE_PRACTICE -> FREE_PRACTICE_INSTRUCTION
-            CallActivityType.INITIAL_PLACEMENT -> PLACEMENT_INSTRUCTION
-            CallActivityType.REASSESSMENT -> REASSESSMENT_INSTRUCTION
-            CallActivityType.GOAL_ASSESSMENT -> GOAL_ASSESSMENT_INSTRUCTION
-            CallActivityType.TRAINING_UNIT -> TRAINING_INSTRUCTION
-        }
+        val instruction =
+            when (activityType) {
+                CallActivityType.FREE_PRACTICE -> FREE_PRACTICE_INSTRUCTION
+                CallActivityType.INITIAL_PLACEMENT -> PLACEMENT_INSTRUCTION
+                CallActivityType.REASSESSMENT -> REASSESSMENT_INSTRUCTION
+                CallActivityType.GOAL_ASSESSMENT -> GOAL_ASSESSMENT_INSTRUCTION
+                CallActivityType.TRAINING_UNIT -> TRAINING_INSTRUCTION
+            }
         val prompt = buildString {
             appendLine(instruction)
             append(scenario.promptTemplate)
@@ -40,13 +47,20 @@ class CallRepositoryImpl @Inject constructor(private val session: CallSessionMan
                 if (activityType != CallActivityType.TRAINING_UNIT) appendLine().append(ASSESSMENT_RESTRICTION)
             }
         }
-        session.startCall(scenario.copy(promptTemplate = prompt), activityType, communicativeGoal)
+        session.startCall(scenario.copy(promptTemplate = prompt), activityType)
     }
+
     override fun toggleMute() = session.toggleMute()
+
     override fun setForeground(isForeground: Boolean) = session.setForeground(isForeground)
+
     override fun resumeCall() = session.resumeCall()
+
     override fun endCall() = session.endCall()
+
     override fun playPronunciation(text: String) = session.playPronunciation(text)
+
     override fun stopPronunciation() = session.stopPronunciation()
+
     override fun close() = session.close()
 }

@@ -49,7 +49,8 @@ class PracticeViewModelTest {
     fun preparationLoadsScenarioAndRequiredMetadataBeforeCall() = runTest {
         val viewModel = ScenarioPreparationViewModel(
             SavedStateHandle(mapOf("practiceId" to "practice-1")),
-            FakePracticeRepository()
+            FakePracticeRepository(),
+            com.project.speakmate.test.FakeAuthRepository()
         )
 
         val state = viewModel.uiState.value
@@ -125,12 +126,16 @@ class PracticeViewModelTest {
         viewModel.loadCatalog()
         viewModel.selectCategory("Cafe")
         viewModel.selectCategory("Travel")
-        assertEquals(ScenarioCatalogPresentation.LOADING, viewModel.uiState.value.presentation)
+        assertEquals(ScenarioCatalogPresentation.POPULATED, viewModel.uiState.value.presentation)
+        assertTrue(viewModel.uiState.value.isRefreshing)
+        assertEquals("Travel", viewModel.uiState.value.selectedCategoryId)
+        assertEquals(listOf("travel"), viewModel.uiState.value.scenarios.map { it.id })
         gate.complete(Unit)
         runCurrent()
 
         assertEquals("Travel", viewModel.uiState.value.selectedCategoryId)
         assertEquals(listOf("travel"), viewModel.uiState.value.scenarios.map { it.id })
+        assertEquals(false, viewModel.uiState.value.isRefreshing)
     }
 
     @Test

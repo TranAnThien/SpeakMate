@@ -33,12 +33,6 @@ fun DocumentSnapshot.requiredActions(): List<RequiredAction> =
             ?: error("Document '$id' has an invalid requiredActions[$index].")
     } ?: error("Document '$id' is missing 'requiredActions'.")
 
-fun Map<*, *>.requiredReferenceIds(field: String): List<String> =
-    (this[field] as? List<*>)?.mapIndexed { index, value ->
-        val reference = value as? Map<*, *> ?: error("Preparation has an invalid '$field[$index]'.")
-        reference[FirestoreField.ID] as? String ?: error("Preparation '$field[$index]' is missing its id.")
-    } ?: error("Preparation is missing '$field'.")
-
 fun DocumentSnapshot.requiredExampleList(field: String, label: String): List<LearningExample> =
     (get(field) as? List<*>)?.mapIndexed { index, value ->
         (value as? Map<*, *>)?.toExample("$label $field[$index]")
@@ -57,7 +51,3 @@ private fun Map<*, *>.toRequiredAction(label: String): RequiredAction = Required
 
 private fun Map<*, *>.requiredText(field: String, label: String): String =
     this[field] as? String ?: error("$label is missing '$field'.")
-
-fun DocumentSnapshot.requiredPreparationText(field: String): String =
-    getString(field)?.takeIf(String::isNotBlank)
-        ?: error("Scenario '$id' is missing preparation field '$field'.")

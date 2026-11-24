@@ -1,6 +1,5 @@
 package com.project.speakmate.ui.training
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.speakmate.domain.model.ContentStatus
@@ -8,6 +7,7 @@ import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.domain.model.TrainingPath
 import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.model.TrainingStage
+import com.project.speakmate.domain.model.User
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.TrainingRepository
 import com.project.speakmate.domain.repository.UserRepository
@@ -15,13 +15,20 @@ import com.project.speakmate.domain.rules.TrainingProgressRules
 import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import com.project.speakmate.ui.training.state.TrainingGoalUiState
+import com.project.speakmate.ui.training.state.TrainingPathDialog
+import com.project.speakmate.ui.training.state.TrainingPathFailure
+import com.project.speakmate.ui.training.state.TrainingPathNotice
+import com.project.speakmate.ui.training.state.TrainingPathNoticeUiState
 import com.project.speakmate.ui.training.state.TrainingPathUiState
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
 import com.project.speakmate.ui.training.state.TrainingUnitUiState
+import com.project.speakmate.utils.extension.defaultEmpty
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +38,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class TrainingPathViewModel @Inject constructor(
+class TrainingPathViewModel
+@Inject
+constructor(
     private val trainingRepository: TrainingRepository,
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
@@ -39,6 +48,9 @@ class TrainingPathViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(TrainingPathUiState())
     val uiState: StateFlow<TrainingPathUiState> = _uiState.asStateFlow()
     private var userObservationJob: Job? = null
+    private var activityJob: Job? = null
+    private var hasShownRequestedGoal = false
+    private var observedUserId: String? = null
 
     init {
         observeCurrentUser()
@@ -50,83 +62,328 @@ class TrainingPathViewModel @Inject constructor(
         }
     }
 
+    fun showRequestedGoal(goalId: String) {
+        if (hasShownRequestedGoal || _uiState.value.goals.none { it.id == goalId }) return
+        hasShownRequestedGoal = true
+        showGoal(goalId)
+    }
+
+    fun showGoal(goalId: String) {
+        _uiState.update { it.copy(activeDialog = TrainingPathDialog.Goal(goalId)) }
+    }
+
+    fun hideGoal() {
+        _uiState.update { it.copy(activeDialog = null, noticeDialog = null) }
+    }
+
+    fun dismissNotice() {
+        _uiState.update { it.copy(noticeDialog = null) }
+    }
+
     fun retry() {
+        if (_uiState.value.isRefreshing) return
         observeCurrentUser()
     }
 
-    private fun observeCurrentUser() {
-        userObservationJob?.cancel()
-        userObservationJob = viewModelScope.launch {
-            try {
-                authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
-                    _uiState.update { TrainingPathUiState() }
-                    if (uid == null) return@collectLatest
-                    try {
-                        userRepository.observeUser(uid).collectLatest { user ->
-                            _uiState.update { TrainingPathUiState() }
-                            val profile = checkNotNull(user)
-                            if (profile.level == SpeakingLevel.NOT_ASSESSED || profile.trainingProgress == null) {
-                                _uiState.update {
-                                    it.copy(
-                                        status = TrainingContentStatus.CONTENT,
-                                        level = profile.level.name,
-                                        goals = emptyList(),
-                                        canContinue = false
-                                    )
-                                }
-                                return@collectLatest
-                            }
-                            val progress = profile.trainingProgress
-                            val path = trainingRepository.getTrainingPath(profile.level).getOrThrow()
-                            val problem = TrainingProgressRules.validate(path, progress)
-                            if (problem != null) {
-                                _uiState.update { it.copy(status = TrainingContentStatus.ERROR, progressProblem = problem) }
-                            } else {
-                                _uiState.update {
-                                    it.copy(
-                                        status = TrainingContentStatus.CONTENT,
-                                        level = profile.level.name,
-                                        goals = path.goals.indices.map { index -> mapGoal(path, progress, index) },
-                                        canContinue = progress.stage != TrainingStage.PATH_COMPLETED
-                                    )
-                                }
-                            }
-                        }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (e: Exception) {
-                        Log.e("TrainingPathViewModel", "Error loading training path", e)
-                        _uiState.update { it.copy(status = TrainingContentStatus.ERROR) }
+    fun showLevelInformation() {
+        _uiState.update { it.copy(activeDialog = TrainingPathDialog.LevelInformation, noticeDialog = null) }
+    }
+
+    fun hideLevelInformation() {
+        _uiState.update { it.copy(activeDialog = null) }
+    }
+
+    fun continuePath() {
+        openActivity(destination = null)
+    }
+
+    fun prepareSelectedGoal() {
+        val goal = _uiState.value.selectedGoalId ?: return
+        val destination =
+            _uiState.value.goals
+                .firstOrNull { it.id == goal }
+                ?.units
+                ?.firstOrNull { it.status == TrainingProgressStatus.CURRENT }
+                ?.destination
+        if (destination == null)
+            _uiState.update { it.copy(noticeDialog = TrainingPathNoticeUiState(TrainingPathNotice.LOCKED)) }
+        else openActivity(destination)
+    }
+
+    fun openActivity(destination: TrainingActivityDestination?) {
+        val uid = observedUserId ?: return
+        val state = _uiState.value
+        if (activityJob?.isActive == true || state.isOpeningActivity || state.pendingNavigation != null) return
+        val preview =
+            state.goals.asSequence().flatMap { it.units.asSequence() }.firstOrNull { it.destination == destination }
+        if (state.isStale || state.isRefreshing) {
+            _uiState.update {
+                it.copy(noticeDialog = TrainingPathNoticeUiState(notice = TrainingPathNotice.STALE, unit = preview))
+            }
+            return
+        }
+        val shownGoal = state.goals.firstOrNull { goal -> goal.units.any { it.destination == destination } }
+        if (shownGoal != null && !shownGoal.isConfigured) {
+            _uiState.update { it.copy(activeDialog = TrainingPathDialog.Goal(shownGoal.id)) }
+            return
+        }
+        val shownUnit =
+            state.goals.asSequence().flatMap { it.units.asSequence() }.firstOrNull { it.destination == destination }
+        if (destination != null && shownUnit?.status == TrainingProgressStatus.LOCKED) {
+            _uiState.update {
+                it.copy(noticeDialog = TrainingPathNoticeUiState(notice = TrainingPathNotice.LOCKED, unit = shownUnit))
+            }
+            return
+        }
+        _uiState.update { it.copy(isOpeningActivity = true) }
+        activityJob =
+            viewModelScope.launch {
+                try {
+                    check(isCurrentUser(uid))
+                    val snapshot = _uiState.value
+                    if (snapshot.status != TrainingContentStatus.CONTENT ||
+                        snapshot.isStale ||
+                        snapshot.isRefreshing ||
+                        snapshot.isUnassessed)
+                        return@launch
+                    val target =
+                        destination
+                            ?: snapshot.goals
+                                .asSequence()
+                                .flatMap { it.units.asSequence() }
+                                .firstOrNull { it.status == TrainingProgressStatus.CURRENT && it.canOpen }
+                                ?.destination
+                    val item =
+                        snapshot.goals
+                            .asSequence()
+                            .filter { it.isConfigured }
+                            .flatMap { it.units.asSequence() }
+                            .firstOrNull { it.destination == target && it.canOpen }
+                    if (item == null) {
+                        _uiState.update { it.copy(noticeDialog = TrainingPathNoticeUiState(TrainingPathNotice.LOCKED)) }
+                        return@launch
                     }
+                    currentCoroutineContext().ensureActive()
+                    if (target != null && isCurrentUser(uid)) {
+                        _uiState.update { it.copy(pendingNavigation = target) }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    if (isCurrentUser(uid)) publishFailure(TrainingPathFailure.PROFILE)
+                } finally {
+                    if (isCurrentUser(uid)) _uiState.update { it.copy(isOpeningActivity = false) }
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (e: Exception) {
-                Log.e("TrainingPathViewModel", "Error in auth observation", e)
-                _uiState.update { it.copy(status = TrainingContentStatus.ERROR) }
+            }
+    }
+
+    fun consumePendingNavigation(): TrainingActivityDestination? {
+        while (true) {
+            val current = _uiState.value
+            val destination = current.pendingNavigation ?: return null
+            if (_uiState.compareAndSet(current, current.copy(pendingNavigation = null))) {
+                return destination
             }
         }
     }
 
-    private fun mapGoal(path: TrainingPath, progress: TrainingProgress, goalIndex: Int): TrainingGoalUiState {
-        val goal = path.goals[goalIndex]
-        val goalStatus = toUiStatus(TrainingProgressRules.getGoalStatus(path, progress, goalIndex))
-        val units = goal.units.mapIndexed { index, unit ->
-            val status = toUiStatus(TrainingProgressRules.getUnitStatus(path, progress, goalIndex, index))
-            TrainingUnitUiState(
-                unit.unitId, unit.title, unit.communicativeFocus, status, false,
-                status != TrainingProgressStatus.LOCKED, TrainingActivityDestination.Unit(unit.unitId)
+    private fun observeCurrentUser() {
+        userObservationJob?.cancel()
+        activityJob?.cancel()
+        _uiState.update {
+            it.copy(
+                isRefreshing = it.status == TrainingContentStatus.CONTENT,
+                isStale = it.status == TrainingContentStatus.CONTENT,
+                isOpeningActivity = false
             )
         }
-        val assessmentStatus = toUiStatus(TrainingProgressRules.getGoalAssessmentStatus(path, progress, goalIndex))
-        val assessment = TrainingUnitUiState(
-            id = goal.goalId,
-            title = goal.goalAssessment.title,
-            status = assessmentStatus,
-            isAssessment = true,
-            canOpen = assessmentStatus != TrainingProgressStatus.LOCKED,
-            destination = TrainingActivityDestination.GoalAssessment(goal.goalId)
-        )
+        userObservationJob =
+            viewModelScope.launch {
+                try {
+                    authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
+                        if (observedUserId != uid) {
+                            observedUserId = uid
+                            _uiState.update { TrainingPathUiState() }
+                        }
+                        if (uid == null) return@collectLatest
+                        try {
+                            userRepository.observeUser(uid).collectLatest { profile ->
+                                activityJob?.cancel()
+                                _uiState.update {
+                                    it.copy(
+                                        isRefreshing = it.status == TrainingContentStatus.CONTENT,
+                                        isStale = it.status == TrainingContentStatus.CONTENT,
+                                        isOpeningActivity = false
+                                    )
+                                }
+                                if (profile == null || profile.userId != uid) {
+                                    publishFailure(TrainingPathFailure.PROFILE)
+                                } else if (profile.level == SpeakingLevel.NOT_ASSESSED) {
+                                    _uiState.update {
+                                        TrainingPathUiState(status = TrainingContentStatus.CONTENT, isUnassessed = true)
+                                    }
+                                } else if (profile.trainingProgress == null) {
+                                    publishFailure(TrainingPathFailure.PROFILE)
+                                } else {
+                                    try {
+                                        val path =
+                                            trainingRepository
+                                                .getTrainingPath(level = profile.level, requireServer = true)
+                                                .getOrThrow()
+                                        currentCoroutineContext().ensureActive()
+                                        if (isCurrentUser(uid))
+                                            publishPath(
+                                                profile = profile,
+                                                path = path,
+                                                progress = profile.trainingProgress
+                                            )
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        if (isCurrentUser(uid))
+                                            publishFailure(
+                                                if (error is IllegalStateException) TrainingPathFailure.UNCONFIGURED
+                                                else TrainingPathFailure.CONTENT
+                                            )
+                                    }
+                                }
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            if (isCurrentUser(uid)) publishFailure(TrainingPathFailure.PROFILE)
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    publishFailure(TrainingPathFailure.PROFILE)
+                }
+            }
+    }
+
+    private fun publishPath(profile: User, path: TrainingPath, progress: TrainingProgress) {
+        val problem = TrainingProgressRules.validate(path, progress)
+        val total = TrainingProgressRules.getTotalActivityCount(path)
+        if (path.targetLevel != profile.level ||
+            total == 0 ||
+            path.goals.map { it.goalId }.distinct().size != path.goals.size ||
+            path.goals.any { goal -> goal.goalId.isBlank() } ||
+            path.goals.flatMap { it.units }.map { it.unitId }.distinct().size != path.goals.sumOf { it.units.size }) {
+            publishFailure(TrainingPathFailure.UNCONFIGURED)
+            return
+        }
+        if (problem != null) {
+            publishFailure(TrainingPathFailure.PROGRESS)
+            return
+        }
+        _uiState.update { previous ->
+            val samePath = previous.level == profile.level.name
+            val goals =
+                path.goals.indices.map { index ->
+                    val goal = mapGoal(path = path, progress = progress, goalIndex = index)
+                    val old = if (samePath) previous.goals.firstOrNull { it.id == goal.id } else null
+                    if (old != null) goal.copy(isExpanded = old.isExpanded) else goal
+                }
+            val current =
+                goals
+                    .asSequence()
+                    .flatMap { it.units.asSequence() }
+                    .firstOrNull { it.status == TrainingProgressStatus.CURRENT }
+            previous.copy(
+                status = TrainingContentStatus.CONTENT,
+                level = profile.level.name,
+                title = path.title,
+                goals = goals,
+                canContinue = progress.stage != TrainingStage.PATH_COMPLETED && current?.canOpen == true,
+                isUnassessed = false,
+                isPathCompleted = progress.stage == TrainingStage.PATH_COMPLETED,
+                completedActivityCount = TrainingProgressRules.getCompletedActivityCount(path, progress),
+                totalActivityCount = total,
+                currentActivityTitle = current?.title.defaultEmpty(),
+                isAssessmentReady = current?.isAssessment == true,
+                isRefreshing = false,
+                isStale = false,
+                failure = null,
+                activeDialog = if (samePath) previous.activeDialog else null,
+                noticeDialog = if (samePath) previous.noticeDialog else null,
+                pendingNavigation =
+                    if (samePath) {
+                        previous.pendingNavigation?.takeIf { destination ->
+                            goals
+                                .asSequence()
+                                .flatMap { goal -> goal.units.asSequence() }
+                                .any { unit -> unit.destination == destination && unit.canOpen }
+                        }
+                    } else null
+            )
+        }
+    }
+
+    private fun publishFailure(failure: TrainingPathFailure) {
+        _uiState.update {
+            val hasContent = it.status == TrainingContentStatus.CONTENT
+            it.copy(
+                status = if (hasContent) TrainingContentStatus.CONTENT else TrainingContentStatus.ERROR,
+                failure = failure,
+                isStale = hasContent,
+                isRefreshing = false,
+                isOpeningActivity = false,
+                canContinue = false,
+                pendingNavigation = null
+            )
+        }
+    }
+
+    private fun isCurrentUser(uid: String): Boolean =
+        try {
+            observedUserId == uid && authRepository.requireCurrentUserId() == uid
+        } catch (_: IllegalStateException) {
+            false
+        }
+
+    private fun mapGoal(path: TrainingPath, progress: TrainingProgress, goalIndex: Int): TrainingGoalUiState {
+        val goal = path.goals[goalIndex]
+        val goalStatus =
+            toUiStatus(TrainingProgressRules.getGoalStatus(path = path, progress = progress, goalIndex = goalIndex))
+        val isConfigured =
+            goal.units.isNotEmpty() &&
+                goal.goalAssessment.scenarioId.isNotBlank() &&
+                goal.units.all { it.unitId.isNotBlank() && it.scenarioId.isNotBlank() }
+        val units =
+            goal.units.mapIndexed { index, unit ->
+                val status =
+                    toUiStatus(
+                        TrainingProgressRules.getUnitStatus(
+                            path = path,
+                            progress = progress,
+                            goalIndex = goalIndex,
+                            unitIndex = index
+                        )
+                    )
+                TrainingUnitUiState(
+                    id = unit.unitId,
+                    title = unit.title,
+                    description = unit.communicativeFocus,
+                    status = status,
+                    isAssessment = false,
+                    canOpen = isConfigured && status != TrainingProgressStatus.LOCKED,
+                    destination = TrainingActivityDestination.Unit(unit.unitId)
+                )
+            }
+        val assessmentStatus =
+            toUiStatus(
+                TrainingProgressRules.getGoalAssessmentStatus(path = path, progress = progress, goalIndex = goalIndex)
+            )
+        val assessment =
+            TrainingUnitUiState(
+                id = goal.goalId,
+                title = goal.goalAssessment.title,
+                status = assessmentStatus,
+                isAssessment = true,
+                canOpen = isConfigured && assessmentStatus != TrainingProgressStatus.LOCKED,
+                destination = TrainingActivityDestination.GoalAssessment(goal.goalId)
+            )
         return TrainingGoalUiState(
             id = goal.goalId,
             title = goal.title,
@@ -134,13 +391,15 @@ class TrainingPathViewModel @Inject constructor(
             status = goalStatus,
             isExpanded = goalStatus == TrainingProgressStatus.CURRENT,
             units = units + assessment,
-            order = goalIndex
+            order = goalIndex,
+            isConfigured = isConfigured
         )
     }
 
-    private fun toUiStatus(status: ContentStatus): TrainingProgressStatus = when (status) {
-        ContentStatus.COMPLETED -> TrainingProgressStatus.COMPLETED
-        ContentStatus.CURRENT -> TrainingProgressStatus.CURRENT
-        ContentStatus.LOCKED -> TrainingProgressStatus.LOCKED
-    }
+    private fun toUiStatus(status: ContentStatus): TrainingProgressStatus =
+        when (status) {
+            ContentStatus.COMPLETED -> TrainingProgressStatus.COMPLETED
+            ContentStatus.CURRENT -> TrainingProgressStatus.CURRENT
+            ContentStatus.LOCKED -> TrainingProgressStatus.LOCKED
+        }
 }

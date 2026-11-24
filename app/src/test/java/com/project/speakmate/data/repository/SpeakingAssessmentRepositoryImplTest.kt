@@ -6,29 +6,35 @@ import com.project.speakmate.data.remote.ai.GeminiAssessmentClient
 import com.project.speakmate.data.remote.ai.SpeakingEvaluationTestFixtures
 import com.project.speakmate.domain.model.AssessmentEvidence
 import com.project.speakmate.domain.model.AssessmentOutcome
+import com.project.speakmate.domain.model.AssessmentOwnershipException
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
-import com.project.speakmate.domain.model.RequiredAction
 import com.project.speakmate.domain.model.PlacementTransition
+import com.project.speakmate.domain.model.RequiredAction
 import com.project.speakmate.domain.rules.AssessmentTestFixtures
 import com.project.speakmate.domain.rules.PlacementRules
 import com.project.speakmate.domain.rules.PlacementTestFixtures
-import kotlin.random.Random
-import org.json.JSONObject
+import com.project.speakmate.test.FakeAuthRepository
+import io.mockk.coEvery
+import io.mockk.mockk
+import java.time.Clock
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
+import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.junit.After
 
 class SpeakingAssessmentRepositoryImplTest {
     companion object {
@@ -37,22 +43,39 @@ class SpeakingAssessmentRepositoryImplTest {
         private const val WAIT_SECONDS = 5L
     }
 
-    @get:Rule
-    val folder = TemporaryFolder()
+    @get:Rule val folder = TemporaryFolder()
 
     private val httpClients = mutableListOf<OkHttpClient>()
 
     @After
     fun closeClients() {
-        httpClients.forEach { it.dispatcher.executorService.shutdownNow(); it.connectionPool.evictAll() }
+        httpClients.forEach {
+            it.dispatcher.executorService.shutdownNow()
+            it.connectionPool.evictAll()
+        }
     }
 
     @Test
-    fun validEvidenceUsesRulesAndDeletesWav() = runBlocking {
+    fun wrongOwnerIsADomainFailureWithoutNetworkOrAudioDeletion() = runBlocking {
+        val (files, evidence) = createEvidence()
+        val fake = FakeAssessmentInterceptor()
+        var failure: Throwable? = null
+        try {
+            createRepository(files, fake).evaluate(evidence.copy(userId = "different-owner"))
+        } catch (exception: Exception) {
+            failure = exception
+        }
+        assertTrue(failure is AssessmentOwnershipException)
+        assertEquals(0, fake.calls.get())
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+    }
+
+    @Test
+    fun validEvidenceUsesRulesAndLeavesDeletionToTheOwner() = runBlocking {
         val (files, evidence) = createEvidence()
         val result = createRepository(files, FakeAssessmentInterceptor()).evaluate(evidence)
         assertEquals(AssessmentResult.PASS, (result as AssessmentOutcome.Evaluated).result)
-        assertNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
     }
 
     @Test
@@ -62,7 +85,7 @@ class SpeakingAssessmentRepositoryImplTest {
         val result = createRepository(files, fake).evaluate(evidence.copy(callOutcome = CallOutcome.FAILED))
         assertEquals(AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.CALL_FAILED), result)
         assertEquals(0, fake.calls.get())
-        assertNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
     }
 
     @Test
@@ -71,9 +94,14 @@ class SpeakingAssessmentRepositoryImplTest {
         val fake = FakeAssessmentInterceptor()
         files.deleteAudio(checkNotNull(evidence.assessmentAudioId))
         val repository = createRepository(files, fake)
-        assertEquals(AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE), repository.evaluate(evidence))
-        assertEquals(AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE),
-            repository.evaluate(evidence.copy(assessmentAudioId = "../outside.wav")))
+        assertEquals(
+            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE),
+            repository.evaluate(evidence)
+        )
+        assertEquals(
+            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE),
+            repository.evaluate(evidence.copy(assessmentAudioId = "../outside.wav"))
+        )
         assertEquals(0, fake.calls.get())
     }
 
@@ -85,8 +113,15 @@ class SpeakingAssessmentRepositoryImplTest {
         val checkpoint = PlacementTestFixtures.getCheckpoint()
         val tasks = PlacementTestFixtures.getTasks()
         val task = tasks.first { it.taskId == checkpoint.currentTaskId }
-        val transition = PlacementRules.applyOutcome(checkpoint, task, outcome, tasks,
-            Random(PlacementTestFixtures.RANDOM_SEED), PlacementTestFixtures.CREATED_AT_MILLIS)
+        val transition =
+            PlacementRules.applyOutcome(
+                checkpoint = checkpoint,
+                task = task,
+                outcome = outcome,
+                tasks = tasks,
+                random = Random(PlacementTestFixtures.RANDOM_SEED),
+                nowMillis = PlacementTestFixtures.CREATED_AT_MILLIS
+            )
         assertEquals(1, (transition as PlacementTransition.RetryTask).checkpoint.technicalRetryCount)
     }
 
@@ -94,43 +129,59 @@ class SpeakingAssessmentRepositoryImplTest {
     fun requiredActionGateRemainsOwnedByRules() = runBlocking {
         val (files, evidence) = createEvidence()
         val json = SpeakingEvaluationTestFixtures.getEvaluationJson()
-        json.getJSONObject("requiredActions").put(AssessmentTestFixtures.REQUIRED_ACTION_ID,
-            JSONObject().put("isCompleted", false).put("userQuote", ""))
-        val fake = FakeAssessmentInterceptor().also { it.responseBody = SpeakingEvaluationTestFixtures.getInteractionResponse(json) }
-        val input = evidence.copy(requiredActions = listOf(RequiredAction(AssessmentTestFixtures.REQUIRED_ACTION_ID, "Order a drink")))
+        json
+            .getJSONObject("requiredActions")
+            .put(AssessmentTestFixtures.REQUIRED_ACTION_ID, JSONObject().put("isCompleted", false).put("userQuote", ""))
+        val fake =
+            FakeAssessmentInterceptor().also {
+                it.responseBody = SpeakingEvaluationTestFixtures.getInteractionResponse(json)
+            }
+        val input =
+            evidence.copy(
+                requiredActions = listOf(RequiredAction(AssessmentTestFixtures.REQUIRED_ACTION_ID, "Order a drink"))
+            )
         val result = createRepository(files, fake).evaluate(input)
         assertEquals(AssessmentResult.FAIL, (result as AssessmentOutcome.Evaluated).result)
     }
 
     @Test
-    fun httpFailureBecomesEvaluationFailedAndDeletesAudio() = runBlocking {
+    fun httpFailureBecomesEvaluationFailedAndRetainsAudio() = runBlocking {
         val (files, evidence) = createEvidence()
         val fake = FakeAssessmentInterceptor().also { it.statusCodes = listOf(403) }
-        assertEquals(AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED),
-            createRepository(files, fake).evaluate(evidence))
+        assertEquals(
+            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED),
+            createRepository(files, fake).evaluate(evidence)
+        )
         assertEquals(1, fake.calls.get())
-        assertNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
     }
 
     @Test
-    fun parseFailureBecomesEvaluationFailedAndDeletesAudio() = runBlocking {
+    fun parseFailureBecomesEvaluationFailedAndRetainsAudio() = runBlocking {
         val (files, evidence) = createEvidence()
         val fake = FakeAssessmentInterceptor().also { it.responseBody = "{" }
-        assertEquals(AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED),
-            createRepository(files, fake).evaluate(evidence))
+        assertEquals(
+            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED),
+            createRepository(files, fake).evaluate(evidence)
+        )
         assertEquals(1, fake.calls.get())
-        assertNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
     }
 
     @Test
-    fun invalidQuoteIsRejectedByRulesAndAudioIsDeleted() = runBlocking {
+    fun invalidQuoteIsRejectedByRulesAndAudioIsRetained() = runBlocking {
         val (files, evidence) = createEvidence()
         val json = SpeakingEvaluationTestFixtures.getEvaluationJson()
         json.getJSONObject("range").put("userQuote", "words never spoken")
-        val fake = FakeAssessmentInterceptor().also { it.responseBody = SpeakingEvaluationTestFixtures.getInteractionResponse(json) }
-        assertEquals(AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_INVALID),
-            createRepository(files, fake).evaluate(evidence))
-        assertNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+        val fake =
+            FakeAssessmentInterceptor().also {
+                it.responseBody = SpeakingEvaluationTestFixtures.getInteractionResponse(json)
+            }
+        assertEquals(
+            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_INVALID),
+            createRepository(files, fake).evaluate(evidence)
+        )
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
     }
 
     @Test
@@ -144,7 +195,7 @@ class SpeakingAssessmentRepositoryImplTest {
     }
 
     @Test
-    fun cancellationPropagatesAndDeletesAudio() = runBlocking {
+    fun cancellationPropagatesAndRetainsAudio() = runBlocking {
         val (files, evidence) = createEvidence()
         val fake = FakeAssessmentInterceptor().also { it.shouldWaitForCancellation = true }
         val repository = createRepository(files, fake)
@@ -153,17 +204,53 @@ class SpeakingAssessmentRepositoryImplTest {
         job.cancelAndJoin()
         assertTrue(job.isCancelled)
         assertTrue(fake.cancelled.await(WAIT_SECONDS, TimeUnit.SECONDS))
-        assertNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
+    }
+
+    @Test
+    fun ownershipFailureDuringEvaluationIsPropagatedAndRetainsAudio() = runBlocking {
+        val (files, evidence) = createEvidence()
+        val client = mockk<GeminiAssessmentClient>()
+        coEvery { client.evaluate(any(), any()) } throws AssessmentOwnershipException()
+        val repository =
+            SpeakingAssessmentRepositoryImpl(
+                audioFiles = files,
+                client = client,
+                authRepository = FakeAuthRepository(),
+                clock = Clock.systemUTC()
+            )
+        var failure: Throwable? = null
+        try {
+            repository.evaluate(evidence)
+        } catch (exception: AssessmentOwnershipException) {
+            failure = exception
+        }
+        assertTrue(failure is AssessmentOwnershipException)
+        assertNotNull(files.getAudioFile(checkNotNull(evidence.assessmentAudioId)))
     }
 
     private fun createEvidence(): Pair<AssessmentAudioFileProvider, AssessmentEvidence> {
         val files = AssessmentAudioFileProvider(folder.root)
         val audioId = files.createAudioId()
-        files.openRecorder(audioId).also { it.append(ByteArray(AUDIO_BYTES)); it.close() }
+        files.openRecorder(audioId).also {
+            it.append(ByteArray(AUDIO_BYTES))
+            it.close()
+        }
         return files to AssessmentTestFixtures.getEvidence().copy(assessmentAudioId = audioId)
     }
 
-    private fun createRepository(files: AssessmentAudioFileProvider, fake: FakeAssessmentInterceptor): SpeakingAssessmentRepositoryImpl =
-        SpeakingAssessmentRepositoryImpl(files, GeminiAssessmentClient(
-            OkHttpClient.Builder().addInterceptor(fake).build().also { httpClients += it }, TEST_KEY))
+    private fun createRepository(
+        files: AssessmentAudioFileProvider,
+        fake: FakeAssessmentInterceptor
+    ): SpeakingAssessmentRepositoryImpl =
+        SpeakingAssessmentRepositoryImpl(
+            audioFiles = files,
+            client =
+                GeminiAssessmentClient(
+                    OkHttpClient.Builder().addInterceptor(fake).build().also { httpClients += it },
+                    TEST_KEY
+                ),
+            authRepository = FakeAuthRepository(),
+            clock = Clock.systemUTC()
+        )
 }

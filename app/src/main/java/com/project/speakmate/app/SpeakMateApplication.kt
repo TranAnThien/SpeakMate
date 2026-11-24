@@ -3,6 +3,10 @@ package com.project.speakmate.app
 import android.app.Application
 import android.util.Log
 import com.project.speakmate.data.audio.AssessmentAudioFileProvider
+import com.project.speakmate.data.local.AppLanguageLocalDataSource
+import com.project.speakmate.data.remote.NetworkStatusProvider
+import com.project.speakmate.di.ApplicationScope
+import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import javax.inject.Provider
@@ -18,12 +22,34 @@ class SpeakMateApplication : Application() {
         private const val CLEANUP_FAILED = "Temporary assessment evidence cleanup failed"
     }
 
-    @Inject
-    lateinit var assessmentAudioFiles: Provider<AssessmentAudioFileProvider>
+    @Inject lateinit var assessmentAudioFiles: Provider<AssessmentAudioFileProvider>
+
+    @Inject lateinit var completionRepository: Provider<PracticeCompletionRepository>
+
+    @Inject lateinit var networkStatus: Provider<NetworkStatusProvider>
+
+    @Inject lateinit var languageLocalDataSource: Provider<AppLanguageLocalDataSource>
+
+    @Inject @field:ApplicationScope lateinit var applicationScope: CoroutineScope
+
+    fun getLanguageLocalDataSource(): AppLanguageLocalDataSource? =
+        if (::languageLocalDataSource.isInitialized) languageLocalDataSource.get() else null
 
     override fun onCreate() {
         super.onCreate()
-        CoroutineScope(Dispatchers.IO).launch {
+        applicationScope.launch {
+            networkStatus
+                .get()
+                .observeConnectedWithRecovery()
+                .collect { completionRepository.get().setNetworkAvailable(it) }
+        }
+        applicationScope.launch(Dispatchers.IO) {
+            try {
+                languageLocalDataSource.get().getLanguage()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+            }
             try {
                 assessmentAudioFiles.get().clearPreviousProcessFiles()
             } catch (cancellation: CancellationException) {

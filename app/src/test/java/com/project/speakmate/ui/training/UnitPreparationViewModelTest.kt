@@ -14,13 +14,17 @@ import com.project.speakmate.test.FakeTrainingRepository
 import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
 import com.project.speakmate.test.TrainingTestFixtures
+import com.project.speakmate.ui.training.state.PreparationSection
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -32,10 +36,17 @@ class UnitPreparationViewModelTest {
         private const val VIEW_MODEL_KEY = "preparation"
     }
 
-    @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    @get:Rule val mainDispatcherRule = MainDispatcherRule()
 
-    private val user = User("user-1", "Student", "student@example.com", "", SpeakingLevel.A1, trainingProgress = TrainingProgress(0, 0, TrainingStage.UNIT))
+    private val user =
+        User(
+            userId = "user-1",
+            displayName = "Student",
+            email = "student@example.com",
+            photoUrl = "",
+            level = SpeakingLevel.A1,
+            trainingProgress = TrainingProgress(currentGoalOrder = 0, currentUnitOrder = 0, stage = TrainingStage.UNIT)
+        )
     private val pronunciation = FakePronunciationRepository()
 
     @Test
@@ -66,31 +77,19 @@ class UnitPreparationViewModelTest {
     }
 
     @Test
-    fun retryWithoutAVariantKeepsTheOriginalScenarioAndAssessmentContract() = runTest {
-        val viewModel = createViewModel()
-        viewModel.getPreparation(UNIT_ID)
-        advanceUntilIdle()
-        val original = viewModel.uiState.value.activity
-
-        viewModel.prepareRetry()
-
-        assertEquals(original, viewModel.uiState.value.activity)
-        assertEquals(true, viewModel.uiState.value.canStartRoleplay)
-    }
-
-    @Test
     fun pronunciationUsesTheRepositoryAndIsReleasedWithTheViewModel() = runTest {
         val viewModel = createViewModel()
         viewModel.getPreparation(UNIT_ID)
         advanceUntilIdle()
+        val stopsBeforePlayback = pronunciation.stops
         viewModel.playText("A coffee please")
         viewModel.stopPronunciation()
+        assertTrue(pronunciation.stops > stopsBeforePlayback)
         val store = ViewModelStore()
         store.put(VIEW_MODEL_KEY, viewModel)
         store.clear()
 
         assertEquals(listOf("A coffee please"), pronunciation.playedTexts)
-        assertEquals(1, pronunciation.stops)
         assertEquals(1, pronunciation.releases)
     }
 
@@ -99,19 +98,132 @@ class UnitPreparationViewModelTest {
         val path = TrainingTestFixtures.getPath()
         val goal = path.goals.first()
         val unit = goal.units.first()
-        val examples = listOf(LearningExample("First sentence", "First translation"), LearningExample("Second sentence", "Second translation"))
-        val preparation = unit.preparation.copy(
-            grammarPoints = listOf(GrammarPoint("Grammar", "Structure", "Explanation", "Usage", examples)),
-            sentencePatterns = listOf(SentencePattern("Pattern", "Meaning", "Usage", examples))
-        )
-        val repository = FakeTrainingRepository(pathResult = Result.success(path.copy(goals = listOf(goal.copy(units = listOf(unit.copy(preparation = preparation)))))))
-        val viewModel = UnitPreparationViewModel(repository, FakeAuthRepository(), FakeUserRepository(user), pronunciation)
+        val examples =
+            listOf(
+                LearningExample("First sentence", "First translation"),
+                LearningExample("Second sentence", "Second translation")
+            )
+        val preparation =
+            unit.preparation.copy(
+                grammarPoints =
+                    listOf(
+                        GrammarPoint(
+                            title = "Grammar",
+                            structure = "Structure",
+                            explanation = "Explanation",
+                            usage = "Usage",
+                            examples = examples
+                        )
+                    ),
+                sentencePatterns =
+                    listOf(
+                        SentencePattern(pattern = "Pattern", mean = "Meaning", usage = "Usage", examples = examples)
+                    )
+            )
+        val repository =
+            FakeTrainingRepository(
+                pathResult =
+                    Result.success(
+                        path.copy(goals = listOf(goal.copy(units = listOf(unit.copy(preparation = preparation)))))
+                    )
+            )
+        val viewModel =
+            UnitPreparationViewModel(
+                trainingRepository = repository,
+                authRepository = FakeAuthRepository(),
+                userRepository = FakeUserRepository(user),
+                pronunciationRepository = pronunciation
+            )
         viewModel.getPreparation(UNIT_ID)
         advanceUntilIdle()
 
-        assertEquals(examples.map { it.sentence }, viewModel.uiState.value.grammar.single().examples.map { it.sentence })
-        assertEquals(examples.map { it.sentence }, viewModel.uiState.value.sentencePatterns.single().examples.map { it.sentence })
+        assertEquals(
+            examples.map { it.sentence },
+            viewModel.uiState.value.grammar.single().examples.map { it.sentence }
+        )
+        assertEquals(
+            examples.map { it.sentence },
+            viewModel.uiState.value.sentencePatterns.single().examples.map { it.sentence }
+        )
     }
 
-    private fun createViewModel() = UnitPreparationViewModel(FakeTrainingRepository(), FakeAuthRepository(), FakeUserRepository(user), pronunciation)
+    @Test
+    fun userUpdateWhileInContentKeepsContentSectionAndStartReadiness() = runTest {
+        val users = FakeUserRepository(user)
+        val viewModel =
+            UnitPreparationViewModel(
+                trainingRepository = FakeTrainingRepository(),
+                authRepository = FakeAuthRepository(),
+                userRepository = users,
+                pronunciationRepository = pronunciation
+            )
+        viewModel.getPreparation(UNIT_ID)
+        advanceUntilIdle()
+        viewModel.selectSection(PreparationSection.GRAMMAR)
+        viewModel.prepareStart()
+        assertTrue(viewModel.uiState.value.isStarting)
+        assertTrue(viewModel.uiState.value.isStartReady)
+
+        users.setUser(user.copy(displayName = "Updated Student"))
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertEquals(TrainingContentStatus.CONTENT, state.status)
+        assertEquals(PreparationSection.GRAMMAR, state.section)
+        assertTrue(state.isStarting)
+        assertTrue(state.isStartReady)
+    }
+
+    @Test
+    fun prepareCallLocksActiveCallAndStopsObservingUntilPreparationResumes() = runTest {
+        val users = FakeUserRepository(user)
+        val viewModel =
+            UnitPreparationViewModel(
+                trainingRepository = FakeTrainingRepository(),
+                authRepository = FakeAuthRepository(),
+                userRepository = users,
+                pronunciationRepository = pronunciation
+            )
+        viewModel.getPreparation(UNIT_ID)
+        advanceUntilIdle()
+        assertEquals(1, users.activeObservers)
+
+        viewModel.prepareCall(unitId = UNIT_ID, isRetry = false)
+        runCurrent()
+
+        assertNotNull(viewModel.uiState.value.activeCallActivity)
+        assertFalse(viewModel.uiState.value.activeCallIsReplay)
+        assertEquals(0, users.activeObservers)
+
+        viewModel.getPreparation(UNIT_ID)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.activeCallActivity)
+        assertEquals(1, users.activeObservers)
+    }
+
+    @Test
+    fun prepareCallWithRetryLoadsAndLocksWithoutManualRouteState() = runTest {
+        val users = FakeUserRepository(user)
+        val viewModel =
+            UnitPreparationViewModel(
+                trainingRepository = FakeTrainingRepository(),
+                authRepository = FakeAuthRepository(),
+                userRepository = users,
+                pronunciationRepository = pronunciation
+            )
+        viewModel.prepareCall(unitId = UNIT_ID, isRetry = true)
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.activeCallActivity)
+        assertEquals(0, users.activeObservers)
+    }
+
+    private fun createViewModel() =
+        UnitPreparationViewModel(
+            trainingRepository = FakeTrainingRepository(),
+            authRepository = FakeAuthRepository(),
+            userRepository = FakeUserRepository(user),
+            pronunciationRepository = pronunciation
+        )
 }

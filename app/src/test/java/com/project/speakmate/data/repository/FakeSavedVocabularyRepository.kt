@@ -1,5 +1,7 @@
 package com.project.speakmate.data.repository
 
+import com.project.speakmate.domain.model.SavedVocabularyIdentity
+import com.project.speakmate.domain.rules.SavedVocabularyRules
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.model.VocabularySaveResult
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
@@ -40,6 +42,11 @@ class FakeSavedVocabularyRepository : SavedVocabularyRepository {
 
     override suspend fun removeVocabulary(word: String, partOfSpeech: String): Result<Unit> {
         list.removeAll { it.word == word.trim().lowercase() && it.partOfSpeech == partOfSpeech.trim() }
+        return Result.success(Unit)
+    }
+    override suspend fun removeVocabularies(userId: String, identities: List<SavedVocabularyIdentity>): Result<Unit> {
+        val targets = identities.map { SavedVocabularyRules.getIdentity(it.word, it.partOfSpeech) }.toSet()
+        list.removeAll { SavedVocabularyRules.getIdentity(it) in targets }
         return Result.success(Unit)
     }
 }

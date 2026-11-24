@@ -16,10 +16,12 @@ fun SessionDetailRoute(
     SessionDetailScreen(
         state = state,
         onBack = onBack,
-        onRetrySession = viewModel::loadSessionDetail,
-        onRetryTranscript = viewModel::loadSessionDetail,
-        onDismissError = onBack,
+        onRetrySession = viewModel::retry,
+        onRetryTranscript = viewModel::retryTranscript,
         onReturnToHistory = onBack,
+        onRetryGrading = viewModel::retryGrading,
+        onSaveUnassessed = viewModel::saveUnassessed,
+        onRetrySave = viewModel::retrySave,
         modifier = modifier
     )
 }

@@ -29,6 +29,7 @@ object FirestoreField {
     const val PATTERN = "pattern"
     const val PHONETIC = "phonetic"
     const val PRACTICE_ID = "practiceId"
+    const val PRACTICE_TYPE = "practiceType"
     const val PRE_CALL_HINT = "preCallHint"
     const val PREPARATION = "preparation"
     const val REQUIRED_ACTION_ID = "requiredActionId"
@@ -49,5 +50,7 @@ object FirestoreField {
     const val UNITS = "units"
     const val USAGE = "usage"
     const val VOCABULARY = "vocabulary"
+    const val SUGGESTED_LEVEL = "suggestedLevel"
+    const val ESTIMATED_DURATION_MINUTES = "estimatedDurationMinutes"
     const val WORD = "word"
 }

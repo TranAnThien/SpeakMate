@@ -1,21 +1,46 @@
 package com.project.speakmate.data.repository
 
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.CollectionReference
+import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SnapshotMetadata
+import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.Transaction
 import com.google.firebase.firestore.util.CustomClassMapper
+import com.project.speakmate.data.dto.SpeakingCriteriaResultDto
+import com.project.speakmate.data.dto.UserDto
 import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.data.dto.toDto
+import com.project.speakmate.data.remote.firebase.FirebaseAuthDataSource
+import com.project.speakmate.data.remote.firebase.FirestoreCollection
 import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.PracticeAttempt
+import com.project.speakmate.domain.model.PracticeCompletion
+import com.project.speakmate.domain.model.PracticeSaveException
+import com.project.speakmate.domain.model.PracticeSaveFailure
 import com.project.speakmate.domain.model.PracticeType
+import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.model.SenderType
 import com.project.speakmate.domain.model.SpeakingCriteriaResult
+import com.project.speakmate.domain.model.SpeakingLevel
+import com.project.speakmate.domain.model.TrainingActivity
+import com.project.speakmate.domain.model.TrainingActivityScenario
 import com.project.speakmate.domain.model.TranscriptMessage
+import com.project.speakmate.domain.rules.PracticeSaveRetryRules
+import com.project.speakmate.test.FakeTrainingRepository
+import io.mockk.every
+import io.mockk.mockk
+import java.util.Date
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Date
 
 class HistoryRepositoryImplTest {
 
@@ -163,5 +188,89 @@ class HistoryRepositoryImplTest {
         val criteria = persisted["criteriaResult"] as Map<*, *>
 
         assertEquals(setOf("rangeMet", "accuracyMet", "fluencyMet", "interactionMet", "coherenceMet"), criteria.keys)
+    }
+
+    @Test
+    fun attemptMappingRejectsCriteriaWithMissingField() {
+        val incompleteCriteria =
+            SpeakingCriteriaResultDto(
+                rangeMet = true,
+                accuracyMet = true,
+                fluencyMet = null,
+                interactionMet = true,
+                coherenceMet = true
+            )
+
+        assertNull(sampleAttempt.toDto().copy(criteriaResult = incompleteCriteria).toDomain(emptyList()))
+    }
+
+    @Test
+    fun saveCompletedPracticeMapsMissingUserProfileInTransactionToInvalidCompletion() = runTest {
+        val failure = saveTrainingCompletionWithUser(userDto = null)
+
+        assertEquals(PracticeSaveFailure.INVALID_COMPLETION, failure.reason)
+        assertFalse(PracticeSaveRetryRules.canRetry(failure.reason))
+    }
+
+    @Test
+    fun saveCompletedPracticeMapsMissingTrainingProgressInTransactionToInvalidCompletion() = runTest {
+        val failure =
+            saveTrainingCompletionWithUser(
+                userDto = UserDto(userId = "user-1", level = SpeakingLevel.A1.name, trainingProgress = null)
+            )
+
+        assertEquals(PracticeSaveFailure.INVALID_COMPLETION, failure.reason)
+        assertFalse(PracticeSaveRetryRules.canRetry(failure.reason))
+    }
+
+    private suspend fun saveTrainingCompletionWithUser(userDto: UserDto?): PracticeSaveException {
+        val firestore = mockk<FirebaseFirestore>()
+        val usersCollection = mockk<CollectionReference>()
+        val userRef = mockk<DocumentReference>()
+        val attemptsCollection = mockk<CollectionReference>()
+        val attemptRef = mockk<DocumentReference>()
+        val attemptSnapshot = mockk<DocumentSnapshot>()
+        val userSnapshot = mockk<DocumentSnapshot>()
+        val serverMetadata = mockk<SnapshotMetadata>()
+        val transaction = mockk<Transaction>(relaxed = true)
+        val authDataSource = mockk<FirebaseAuthDataSource>()
+
+        every { authDataSource.requireCurrentUserId() } returns "user-1"
+        every { firestore.collection(FirestoreCollection.USERS) } returns usersCollection
+        every { usersCollection.document("user-1") } returns userRef
+        every { userRef.collection(FirestoreCollection.PRACTICE_ATTEMPTS) } returns attemptsCollection
+        every { attemptsCollection.document(sampleAttempt.attemptId) } returns attemptRef
+        every { serverMetadata.isFromCache } returns false
+        every { serverMetadata.hasPendingWrites() } returns false
+        every { attemptSnapshot.metadata } returns serverMetadata
+        every { attemptSnapshot.exists() } returns false
+        every { attemptRef.get(Source.SERVER) } returns Tasks.forResult(attemptSnapshot)
+        every { transaction.get(attemptRef) } returns attemptSnapshot
+        every { transaction.get(userRef) } returns userSnapshot
+        every { userSnapshot.toObject(UserDto::class.java) } returns userDto
+        every { firestore.runTransaction(any<Transaction.Function<Unit>>()) } answers {
+            val block = firstArg<Transaction.Function<Unit>>()
+            try {
+                Tasks.forResult(block.apply(transaction))
+            } catch (error: Exception) {
+                Tasks.forException(error)
+            }
+        }
+
+        val repository = HistoryRepositoryImpl(firestore, authDataSource, FakeTrainingRepository())
+        val training =
+            TrainingActivityScenario(
+                scenario = Scenario("cafe_scenario", "Cafe", "Order a drink", "Act as a barista"),
+                activity = TrainingActivity.UnitActivity(goalIndex = 0, unitIndex = 0),
+                targetLevel = SpeakingLevel.A1,
+                communicativeGoal = "Order a drink",
+                requiredActions = emptyList(),
+                difficultyCode = SpeakingLevel.A1.name,
+                passConditionCode = AssessmentResult.PASS.name
+            )
+        val completion = PracticeCompletion(attempt = sampleAttempt, training = training, outcome = null)
+
+        val result = repository.saveCompletedPractice(userId = "user-1", completion = completion)
+        return result.exceptionOrNull() as PracticeSaveException
     }
 }

@@ -14,6 +14,21 @@ import com.project.speakmate.domain.model.User
 import kotlin.random.Random
 
 object ReassessmentRules {
+    fun getEvidenceExpiryMillis(startedAtMillis: Long): Long =
+        startedAtMillis + PracticeCompletionRules.AUDIO_RETENTION_MILLIS
+
+    fun canSaveResult(
+        profile: User,
+        result: ReassessmentTransition.Promoted,
+        currentLevel: SpeakingLevel
+    ): Boolean {
+        val isAlreadySaved =
+            profile.level == result.newLevel &&
+                profile.lastAssessedAt?.time == result.lastAssessedAtMillis &&
+                profile.latestAssessmentCriteria == result.latestAssessmentCriteria
+        return isAlreadySaved || (profile.level == currentLevel && canStart(profile))
+    }
+
     fun canStart(user: User): Boolean = user.canStartReassessment()
 
     fun start(user: User, tasks: List<AssessmentTask>, random: Random): ReassessmentTransition {

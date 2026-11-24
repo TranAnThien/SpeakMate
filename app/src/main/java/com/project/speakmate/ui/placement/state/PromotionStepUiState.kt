@@ -2,12 +2,4 @@ package com.project.speakmate.ui.placement.state
 
 import androidx.compose.runtime.Immutable
 
-@Immutable
-data class PromotionStepUiState(
-    val id: String = "",
-    val number: Int = 1,
-    val text: String = ""
-) {
-    val numberLabel: String
-        get() = number.toString()
-}
+@Immutable data class PromotionStepUiState(val id: String = "", val number: Int = 1, val text: String = "")

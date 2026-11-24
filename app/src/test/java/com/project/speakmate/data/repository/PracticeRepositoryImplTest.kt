@@ -5,16 +5,17 @@ import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.Source
 import com.project.speakmate.domain.model.FreePractice
 import com.project.speakmate.domain.repository.ScenarioRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PracticeRepositoryImplTest {
@@ -27,7 +28,7 @@ class PracticeRepositoryImplTest {
 
     init {
         every { firestore.collection("freePractices") } returns collection
-        every { collection.get() } returns task
+        every { collection.get(any<Source>()) } returns task
         every { task.isComplete } returns true
         every { task.isCanceled } returns false
         every { task.exception } returns null
@@ -36,21 +37,42 @@ class PracticeRepositoryImplTest {
 
     @Test
     fun catalogUsesConfiguredIdsAndSortsByCategoryWithoutDroppingEntries() = runTest {
-        every { snapshot.documents } returns listOf(document("second", "stored", "s2", "Travel"), document("first", "entry", "s1", "Cafe"))
-        assertEquals(listOf(FreePractice("entry", "s1", "Cafe"), FreePractice("stored", "s2", "Travel")), repository.getScenarioCatalog().getOrThrow())
+        every { snapshot.documents } returns
+            listOf(
+                document(id = "second", practiceId = "stored", scenario = "s2", category = "Travel"),
+                document(id = "first", practiceId = "entry", scenario = "s1", category = "Cafe")
+            )
+        assertEquals(
+            listOf(
+                FreePractice(practiceId = "entry", scenarioId = "s1", category = "Cafe"),
+                FreePractice(practiceId = "stored", scenarioId = "s2", category = "Travel")
+            ),
+            repository.getScenarioCatalog().getOrThrow()
+        )
     }
 
     @Test
     fun missingAndBlankPracticeIdsUseTheDocumentId() = runTest {
-        every { snapshot.documents } returns listOf(document("missing", null, "s1", "Cafe"), document("blank", " ", "s2", "Cafe"))
+        every { snapshot.documents } returns
+            listOf(
+                document(id = "missing", practiceId = null, scenario = "s1", category = "Cafe"),
+                document(id = "blank", practiceId = " ", scenario = "s2", category = "Cafe")
+            )
         assertEquals(listOf("missing", "blank"), repository.getScenarioCatalog().getOrThrow().map { it.practiceId })
     }
 
     @Test
-    fun missingScenarioOrCategoryFailsTheCatalogInsteadOfPublishingPartialContent() = runTest {
+    fun missingScenarioOrCategoryIsSkippedWhileValidEntriesRemain() = runTest {
         listOf(null to "Cafe", " " to "Cafe", "scenario" to null, "scenario" to " ").forEach { (scenario, category) ->
-            every { snapshot.documents } returns listOf(document("valid", "valid", "scenario", "Cafe"), document("bad", null, scenario, category))
-            assertTrue(repository.getScenarioCatalog().exceptionOrNull() is IllegalStateException)
+            every { snapshot.documents } returns
+                listOf(
+                    document(id = "valid", practiceId = "valid", scenario = "scenario", category = "Cafe"),
+                    document(id = "bad", practiceId = null, scenario = scenario, category = category)
+                )
+            assertEquals(
+                listOf(FreePractice(practiceId = "valid", scenarioId = "scenario", category = "Cafe")),
+                repository.getScenarioCatalog().getOrThrow()
+            )
         }
     }
 
@@ -58,6 +80,21 @@ class PracticeRepositoryImplTest {
     fun emptyConfiguredCatalogIsAnEmptySuccess() = runTest {
         every { snapshot.documents } returns emptyList()
         assertEquals(emptyList<FreePractice>(), repository.getScenarioCatalog().getOrThrow())
+        verify(exactly = 1) { collection.get(Source.DEFAULT) }
+    }
+
+    @Test
+    fun serverCatalogUsesServerSourceAndConfirmedMetadata() = runTest {
+        every { snapshot.documents } returns emptyList()
+        every { snapshot.metadata } returns
+            mockk {
+                every { isFromCache } returns false
+                every { hasPendingWrites() } returns false
+            }
+
+        assertEquals(emptyList<FreePractice>(), repository.getScenarioCatalog(requireServer = true).getOrThrow())
+        verify(exactly = 1) { collection.get(Source.SERVER) }
+        verify(exactly = 0) { collection.get(Source.DEFAULT) }
     }
 
     @Test

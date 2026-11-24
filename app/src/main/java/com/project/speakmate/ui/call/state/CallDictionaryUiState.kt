@@ -19,7 +19,8 @@ data class CallDictionaryUiState(
     val selectionStart: Int = 0,
     val saveStatus: CallVocabularySaveStatus = CallVocabularySaveStatus.IDLE,
     val isPronouncing: Boolean = false,
-    val hasPronunciationError: Boolean = false
+    val hasPronunciationError: Boolean = false,
+    val isPronunciationLoading: Boolean = false
 ) {
     val canSave: Boolean
         get() = status == CallDictionaryStatus.SUCCESS && SavedVocabularyRules.hasValidFields(

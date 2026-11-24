@@ -9,5 +9,6 @@ enum class PlacementPhase {
     NEXT_TASK,
     INSUFFICIENT_EVIDENCE,
     RESULT,
-    UNDETERMINED
+    UNDETERMINED,
+    ALREADY_ASSESSED
 }

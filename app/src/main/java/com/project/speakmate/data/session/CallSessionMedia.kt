@@ -15,6 +15,7 @@ interface CallSessionMedia {
     fun configureAssessmentRecording(activityType: CallActivityType, onLimitReached: () -> Unit)
     fun finishAssessmentRecording(outcome: CallOutcome)
     fun hasMicrophonePermission(): Boolean
+    fun isMicrophoneSilenced(): Boolean
     fun connect(scenario: Scenario, onEvent: (GeminiLiveEvent) -> Unit, onFailure: (CallFailure) -> Unit)
     fun reconnect(
         scenario: Scenario,
@@ -35,7 +36,7 @@ interface CallSessionMedia {
     fun markPlaybackTurn()
     fun clearPlayback(): PlaybackProgress
     fun setPlaybackPaused(isPaused: Boolean)
-    fun speakPronunciation(text: String, onFinished: (Boolean) -> Unit)
+    fun speakPronunciation(text: String, onStarted: () -> Unit, onFinished: (Boolean) -> Unit)
     fun stopPronunciation()
     fun enableUplink(scope: CoroutineScope, isMediaCurrent: () -> Boolean)
     fun suspendUplink()

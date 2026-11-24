@@ -1,5 +1,8 @@
 package com.project.speakmate.di
 
+import com.project.speakmate.data.repository.AppLanguageRepositoryImpl
+import com.project.speakmate.domain.repository.AppLanguageRepository
+
 import com.project.speakmate.data.repository.AssessmentTaskRepositoryImpl
 import com.project.speakmate.data.repository.AuthRepositoryImpl
 import com.project.speakmate.data.repository.CallRecoveryRepositoryImpl
@@ -35,6 +38,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindAppLanguageRepository(
+        implementation: AppLanguageRepositoryImpl
+    ): AppLanguageRepository
 
     @Binds
     @Singleton

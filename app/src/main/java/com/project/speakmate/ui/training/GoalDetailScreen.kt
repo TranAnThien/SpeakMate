@@ -2,39 +2,39 @@ package com.project.speakmate.ui.training
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.safeContent
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.components.StateIllustration
-import com.project.speakmate.ui.training.components.GoalDetailHeader
+import com.project.speakmate.ui.components.button.PrimaryButton
+import com.project.speakmate.ui.components.button.SecondaryButton
+import com.project.speakmate.ui.components.text.BodyText
+import com.project.speakmate.ui.components.text.DetailText
+import com.project.speakmate.ui.components.text.HeadingText
+import com.project.speakmate.ui.components.text.TitleText
+import com.project.speakmate.ui.theme.DesignColor
+import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.components.TrainingUnitRow
 import com.project.speakmate.ui.training.state.GoalDetailUiState
 import com.project.speakmate.ui.training.state.TrainingActivityDestination
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
-import com.project.speakmate.ui.theme.DesignColor
-import com.project.speakmate.ui.theme.DesignTypography
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GoalDetailScreen(
     state: GoalDetailUiState,
@@ -44,65 +44,89 @@ fun GoalDetailScreen(
     onReturnToPath: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier.fillMaxSize().background(DesignColor.Background)) {
-        GoalDetailHeader(onBack)
-        Box(Modifier.weight(1f)) {
-            if (state.hasUnits) {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(state.title, style = DesignTypography.Heading, color = DesignColor.Primary,
-                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                    Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(stringResource(R.string.training_goal_outcome), style = DesignTypography.Badge, color = DesignColor.Primary)
-                        Text(state.description, style = DesignTypography.Detail, color = DesignColor.Muted)
-                    }
-                    Text(stringResource(R.string.training_units_heading), style = DesignTypography.SectionLabel, color = DesignColor.Muted)
-                    Column(Modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
-                        state.units.forEachIndexed { index, unit ->
-                            key(unit.isAssessment, unit.id) {
-                                val onOpen = remember(unit.destination, unit.canOpen, onOpenUnit) {
-                                    { if (unit.canOpen) unit.destination?.let(onOpenUnit) }
-                                }
-                                if (index > 0) HorizontalDivider(color = DesignColor.Border)
-                                TrainingUnitRow(unit, onOpen)
+    ModalBottomSheet(
+        onDismissRequest = onBack,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = DesignColor.SurfaceContainerLow,
+        contentWindowInsets = { WindowInsets.safeContent.union(WindowInsets(top = 32.dp, bottom = 24.dp)) }
+    ) {
+        Column(modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                item {
+                    Column(
+                        Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        HeadingText(
+                            text = state.title.ifBlank { stringResource(R.string.training_goal_detail_title) },
+                            style = DesignTypography.AppBar
+                        )
+                        if (!state.isConfigured || !state.hasUnits) {
+                            HeadingText(
+                                text = stringResource(R.string.training_content_unconfigured),
+                                style = DesignTypography.SectionTitle
+                            )
+                            BodyText(
+                                text = stringResource(R.string.training_goal_unconfigured_description),
+                                color = DesignColor.Muted
+                            )
+                        } else {
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(DesignColor.SurfaceContainer, RoundedCornerShape(16.dp))
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                TitleText(text = stringResource(R.string.training_goal_outcome))
+                                DetailText(text = state.description)
                             }
+                            if (state.isStale)
+                                DetailText(
+                                    text = stringResource(R.string.training_stale_description),
+                                    color = DesignColor.ResultWarning
+                                )
+                            if (state.isLocked)
+                                DetailText(text = stringResource(R.string.training_locked_explanation))
                         }
                     }
                 }
-            } else GoalEmptyContent(onReturnToPath)
-        }
-        if (state.canPrepareCurrentUnit && state.hasUnits) {
-            Box(Modifier.fillMaxWidth().background(DesignColor.Surface).padding(horizontal = 24.dp)
-                .padding(top = 16.dp, bottom = 12.dp)) {
-                val isAssessment = state.units.any { it.isAssessment && it.status == TrainingProgressStatus.CURRENT }
-                PrimaryButton(
-                    stringResource(if (isAssessment) R.string.goal_assessment_header else R.string.training_prepare_current),
-                    onPrepareCurrentUnit
-                )
+                if (state.isConfigured && state.hasUnits) {
+                    items(
+                        items = state.units,
+                        key = { it.isAssessment to it.id },
+                        contentType = { it.isAssessment }
+                    ) { unit ->
+                        val onOpen =
+                            remember(unit.destination, onOpenUnit) {
+                                {
+                                    unit.destination?.let(onOpenUnit)
+                                    Unit
+                                }
+                            }
+                        TrainingUnitRow(
+                            unit = unit,
+                            onOpen = onOpen,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                }
             }
-        }
-
-    }
-}
-
-@Composable
-private fun GoalEmptyContent(onReturnToPath: () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val contentHeight = maxHeight
-        Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
-            .padding(24.dp), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                StateIllustration(R.drawable.ic_training_empty_units)
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.training_no_units_title), style = DesignTypography.Heading,
-                    color = DesignColor.Text, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.training_no_units_description), style = DesignTypography.Body,
-                    color = DesignColor.Muted, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(16.dp))
-                PrimaryButton(stringResource(R.string.training_back_to_path), onReturnToPath, Modifier.padding(horizontal = 16.dp))
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (state.canPrepareCurrentUnit && state.isConfigured) {
+                    PrimaryButton(
+                        stringResource(
+                            if (state.units.any { it.isAssessment && it.status == TrainingProgressStatus.CURRENT })
+                                R.string.goal_assessment_header
+                            else R.string.training_prepare_current
+                        ),
+                        onPrepareCurrentUnit
+                    )
+                }
+                SecondaryButton(
+                    stringResource(R.string.content_close),
+                    if (state.isConfigured) onBack else onReturnToPath
+                )
             }
         }
     }
