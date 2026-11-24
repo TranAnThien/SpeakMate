@@ -5,9 +5,35 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    jacoco
 }
+
+val coverageExcludes = listOf(
+    "**/ui/components/**",
+    "**/ui/*/components/**",
+    "**/ui/profile/savedvocab/components/**",
+    "**/ui/theme/**",
+    "**/*ScreenKt*",
+    "**/*RouteKt*",
+    "**/*ComposableSingletons*",
+    "**/app/**",
+    "**/di/**",
+    "**/MainActivity*",
+    "**/Hilt_*",
+    "**/*_Factory*",
+    "**/*_HiltModules*",
+    "**/*_MembersInjector*",
+    "**/*_GeneratedInjector*",
+    "**/Dagger*",
+    "dagger/**",
+    "hilt_aggregated_deps/**",
+    "**/BuildConfig*",
+    "**/R.class",
+    "**/R$*.class"
+)
 
 val geminiKeyName = "GEMINI_API_KEY"
 
@@ -78,6 +104,31 @@ android {
     }
 }
 
+tasks.register<JacocoReport>("jacocoCoreCoverageReport") {
+    group = "verification"
+    description = "Line coverage of core modules, excluding Compose UI and generated code."
+    dependsOn("testDebugUnitTest")
+
+    val buildDirectory = layout.buildDirectory
+    executionData.setFrom(
+        buildDirectory.file("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec")
+    )
+    classDirectories.setFrom(
+        files(
+            buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
+            buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")
+        ).asFileTree.matching { exclude(coverageExcludes) }
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        xml.outputLocation.set(buildDirectory.file("reports/jacoco/core/report.xml"))
+        html.outputLocation.set(buildDirectory.dir("reports/jacoco/core/html"))
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -111,6 +162,7 @@ dependencies {
 
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation(libs.androidx.credentials)
