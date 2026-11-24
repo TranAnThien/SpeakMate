@@ -15,7 +15,9 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 @Singleton
-class ActiveCallLocalDataSource @Inject constructor(
+class ActiveCallLocalDataSource
+@Inject
+constructor(
     @ApplicationContext private val context: Context,
     @ApplicationScope scope: CoroutineScope,
     private val authDataSource: FirebaseAuthDataSource
@@ -62,7 +64,15 @@ class ActiveCallLocalDataSource @Inject constructor(
         commands.trySend {
             val editor = preferences.edit()
             preferences.all.forEach { (key, value) ->
-                if (key.startsWith(USER_PREFIX) && value is String && JSONObject(value).optString(OWNER_FIELD) == ownerId) editor.remove(key)
+                if (key.startsWith(USER_PREFIX) && value is String) {
+                    val markerOwner =
+                        try {
+                            JSONObject(value).optString(OWNER_FIELD)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    if (markerOwner == null || markerOwner == ownerId) editor.remove(key)
+                }
             }
             editor.commit()
         }
@@ -74,26 +84,31 @@ class ActiveCallLocalDataSource @Inject constructor(
 
     suspend fun consumeInterruptedCall(userId: String): Boolean {
         val result = CompletableDeferred<Boolean>()
-        val sent = commands.trySend {
-            try {
-                val key = USER_PREFIX + userId
-                val value = preferences.getString(key, null)
-                val isInterrupted = currentUserId() == userId && value != null && JSONObject(value).optString(PROCESS_FIELD) != processId
-                if (isInterrupted) preferences.edit().remove(key).commit()
-                result.complete(isInterrupted)
-            } catch (cancelled: CancellationException) {
-                result.complete(false)
-                throw cancelled
-            } catch (_: Exception) {
-                result.complete(false)
+        val sent =
+            commands.trySend {
+                try {
+                    val key = USER_PREFIX + userId
+                    val value = preferences.getString(key, null)
+                    val isInterrupted =
+                        currentUserId() == userId &&
+                            value != null &&
+                            JSONObject(value).optString(PROCESS_FIELD) != processId
+                    if (isInterrupted) preferences.edit().remove(key).commit()
+                    result.complete(isInterrupted)
+                } catch (cancelled: CancellationException) {
+                    result.complete(value = false)
+                    throw cancelled
+                } catch (_: Exception) {
+                    result.complete(value = false)
+                }
             }
-        }
         return if (sent.isSuccess) result.await() else false
     }
 
-    private fun currentUserId(): String? = try {
-        authDataSource.requireCurrentUserId()
-    } catch (_: IllegalStateException) {
-        null
-    }
+    private fun currentUserId(): String? =
+        try {
+            authDataSource.requireCurrentUserId()
+        } catch (_: IllegalStateException) {
+            null
+        }
 }

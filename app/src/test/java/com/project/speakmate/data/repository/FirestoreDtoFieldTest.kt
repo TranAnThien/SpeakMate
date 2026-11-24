@@ -7,6 +7,8 @@ import com.project.speakmate.data.dto.SpeakingCriteriaResultDto
 import com.project.speakmate.data.dto.TrainingProgressDto
 import com.project.speakmate.data.dto.UserDto
 import com.project.speakmate.data.dto.VocabularyItemDto
+import com.project.speakmate.data.dto.toDto
+import com.project.speakmate.domain.model.SpeakingCriteriaResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -15,9 +17,34 @@ import org.junit.Test
 class FirestoreDtoFieldTest {
     @Test
     fun userWriterPreservesAllDeployedProfileAndProgressKeys() {
-        val dto = UserDto(trainingProgress = TrainingProgressDto(1, 2, "PATH_COMPLETED"), latestAssessmentCriteria = SpeakingCriteriaResultDto())
+        val dto =
+            UserDto(
+                trainingProgress =
+                    TrainingProgressDto(currentGoalOrder = 1, currentUnitOrder = 2, stage = "PATH_COMPLETED"),
+                latestAssessmentCriteria =
+                    SpeakingCriteriaResult(
+                        rangeMet = false,
+                        accuracyMet = false,
+                        fluencyMet = false,
+                        interactionMet = false,
+                        coherenceMet = false
+                    )
+                        .toDto()
+            )
         val stored = toStoredMap(dto)
-        assertEquals(setOf("userId", "displayName", "email", "photoUrl", "level", "latestAssessmentCriteria", "lastAssessedAt", "trainingProgress", "savedVocabularies"), stored.keys)
+        assertEquals(
+            setOf(
+                "userId",
+                "displayName",
+                "email",
+                "photoUrl",
+                "level",
+                "latestAssessmentCriteria",
+                "lastAssessedAt",
+                "trainingProgress"
+            ),
+            stored.keys
+        )
         val progress = stored["trainingProgress"] as Map<*, *>
         assertEquals(setOf("currentGoalOrder", "currentUnitOrder", "stage"), progress.keys)
         assertEquals("PATH_COMPLETED", progress["stage"])
@@ -26,8 +53,24 @@ class FirestoreDtoFieldTest {
     }
 
     @Test
+    fun malformedVocabularyDoesNotParticipateInProfileDeserialization() {
+        val stored =
+            mapOf("userId" to "user", "level" to "A1", "savedVocabularies" to listOf(mapOf("example" to "malformed")))
+        val profile = CustomClassMapper.convertToCustomClass(stored, UserDto::class.java, null)
+        assertEquals("user", profile.userId)
+        assertEquals("A1", profile.level)
+    }
+
+    @Test
     fun vocabularyAndExampleUseOnlyTheDeployedNestedKeys() {
-        val dto = VocabularyItemDto("coffee", "drink", "", "noun", LearningExampleDto("A coffee", "Translation"))
+        val dto =
+            VocabularyItemDto(
+                word = "coffee",
+                mean = "drink",
+                phonetic = "",
+                partOfSpeech = "noun",
+                example = LearningExampleDto("A coffee", "Translation")
+            )
         val stored = toStoredMap(dto)
         assertEquals(setOf("word", "mean", "phonetic", "partOfSpeech", "example"), stored.keys)
         val example = stored["example"] as Map<*, *>
@@ -39,14 +82,36 @@ class FirestoreDtoFieldTest {
     @Test
     fun attemptWriterHasNoEmbeddedTranscriptOrDerivedDomainProperties() {
         val stored = toStoredMap(PracticeAttemptDto())
-        assertEquals(setOf("attemptId", "scenarioId", "practiceType", "startedAt", "endedAt", "result", "criteriaResult", "requiredActionResults", "feedbackSummary", "requiredActionDescriptions"), stored.keys)
+        assertEquals(
+            setOf(
+                "attemptId",
+                "scenarioId",
+                "practiceType",
+                "startedAt",
+                "endedAt",
+                "result",
+                "criteriaResult",
+                "requiredActionResults",
+                "feedbackSummary",
+                "requiredActionDescriptions"
+            ),
+            stored.keys
+        )
         assertFalse(stored.containsKey("transcripts"))
         assertFalse(stored.containsKey("durationSeconds"))
     }
 
     @Test
     fun criteriaWriterKeepsFalseValuesAndRoundTripsTheExactFiveFields() {
-        val dto = SpeakingCriteriaResultDto()
+        val dto =
+            SpeakingCriteriaResult(
+                rangeMet = false,
+                accuracyMet = false,
+                fluencyMet = false,
+                interactionMet = false,
+                coherenceMet = false
+            )
+                .toDto()
         val stored = toStoredMap(dto)
         assertEquals(setOf("rangeMet", "accuracyMet", "fluencyMet", "interactionMet", "coherenceMet"), stored.keys)
         assertTrue(stored.values.all { it == false })

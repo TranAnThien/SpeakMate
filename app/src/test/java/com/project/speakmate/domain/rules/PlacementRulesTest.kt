@@ -5,6 +5,9 @@ import com.project.speakmate.domain.model.AssessmentResult
 import com.project.speakmate.domain.model.AssessmentTask
 import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.model.PlacementCheckpoint
+import com.project.speakmate.domain.model.PlacementResult
+import com.project.speakmate.domain.model.User
+import java.util.Date
 import com.project.speakmate.domain.model.PlacementRole
 import com.project.speakmate.domain.model.PlacementStep
 import com.project.speakmate.domain.model.PlacementStopReason
@@ -20,18 +23,63 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlacementRulesTest {
+    @Test
+    fun initialPlacementStartsOnlyForAnUnassessedProfile() {
+        SpeakingLevel.entries.forEach { level ->
+            val profile = User(userId = "owner", displayName = "Name", email = "mail", photoUrl = "", level = level)
+            assertEquals(level == SpeakingLevel.NOT_ASSESSED, PlacementRules.canStart(profile))
+        }
+    }
+
+    @Test
+    fun resultDelayKeepsTheOriginalExpiryAndAudioRetentionBounds() {
+        val checkpoint = PlacementTestFixtures.getCheckpoint()
+        assertEquals(0L, PlacementRules.getResultDelayMillis(checkpoint, checkpoint.expiresAtMillis))
+        assertEquals(0L, PlacementRules.getResultDelayMillis(checkpoint, checkpoint.expiresAtMillis + 1L))
+        assertEquals(1L, PlacementRules.getResultDelayMillis(checkpoint, checkpoint.expiresAtMillis - 1L))
+        assertEquals(
+            PracticeCompletionRules.AUDIO_RETENTION_MILLIS,
+            PlacementRules.getResultDelayMillis(checkpoint, checkpoint.createdAtMillis)
+        )
+    }
+
+    @Test
+    fun saveAllowsAnUnassessedUserOrTheExactPreviousReceipt() {
+        val criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
+        val result = PlacementResult(SpeakingLevel.A1, criteria, 1L, AssessmentResult.PASS)
+        val unassessed = User("owner", "Name", "mail", "")
+        assertTrue(PlacementRules.canSaveResult(unassessed, result))
+        val receipt = unassessed.copy(
+            level = result.level,
+            lastAssessedAt = Date(result.assessedAtMillis),
+            latestAssessmentCriteria = criteria
+        )
+        assertTrue(PlacementRules.canSaveResult(receipt, result))
+        assertFalse(PlacementRules.canSaveResult(receipt.copy(lastAssessedAt = Date(0L)), result))
+        assertFalse(PlacementRules.canSaveResult(receipt.copy(level = SpeakingLevel.B1), result))
+    }
+
     private val tasks = PlacementTestFixtures.getTasks()
     private val initial = PlacementTestFixtures.getCheckpoint()
 
     @Test
     fun nullAtA1ConfirmationNeverAssignsALevelOrExtendsTheCheckpoint() {
         InsufficientEvidenceReason.entries.forEach { reason ->
-            val initial = PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION).copy(candidateLevel = SpeakingLevel.A1)
+            val initial =
+                PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION)
+                    .copy(candidateLevel = SpeakingLevel.A1)
             val task = tasks.single { it.taskId == initial.currentTaskId }
             var current = initial
             repeat(PlacementRules.MAX_TECHNICAL_RETRIES) {
-                val transition = PlacementRules.applyOutcome(current, task, AssessmentOutcome.InsufficientEvidence(reason), tasks,
-                    Random(PlacementTestFixtures.RANDOM_SEED), initial.createdAtMillis + 1)
+                val transition =
+                    PlacementRules.applyOutcome(
+                        checkpoint = current,
+                        task = task,
+                        outcome = AssessmentOutcome.InsufficientEvidence(reason),
+                        tasks = tasks,
+                        random = Random(PlacementTestFixtures.RANDOM_SEED),
+                        nowMillis = initial.createdAtMillis + 1
+                    )
                 val retry = transition as PlacementTransition.RetryTask
                 assertEquals(initial.step, retry.checkpoint.step)
                 assertEquals(initial.currentTaskId, retry.checkpoint.currentTaskId)
@@ -41,75 +89,107 @@ class PlacementRulesTest {
                 assertNull(retry.checkpoint.pendingResult)
                 current = retry.checkpoint
             }
-            val stopped = PlacementRules.applyOutcome(current, task, AssessmentOutcome.InsufficientEvidence(reason), tasks,
-                Random(PlacementTestFixtures.RANDOM_SEED), initial.createdAtMillis + 1)
+            val stopped =
+                PlacementRules.applyOutcome(
+                    checkpoint = current,
+                    task = task,
+                    outcome = AssessmentOutcome.InsufficientEvidence(reason),
+                    tasks = tasks,
+                    random = Random(PlacementTestFixtures.RANDOM_SEED),
+                    nowMillis = initial.createdAtMillis + 1
+                )
             assertEquals(PlacementTransition.Stopped(PlacementStopReason.TECHNICAL_RETRY_LIMIT), stopped)
         }
     }
 
-    @Test
-    fun initialA2PassGoesToB1Probe() = assertPass(PlacementStep.INITIAL_A2, PlacementStep.B1_PROBE)
+    @Test fun initialA2PassGoesToB1Probe() = assertPass(PlacementStep.INITIAL_A2, PlacementStep.B1_PROBE)
 
     @Test
     fun initialA2PartialGoesToA2Confirmation() {
-        assertEquals(PlacementStep.A2_CONFIRMATION, PlacementRules.getNextStep(PlacementStep.INITIAL_A2, AssessmentResult.PARTIAL))
+        assertEquals(
+            PlacementStep.A2_CONFIRMATION,
+            PlacementRules.getNextStep(PlacementStep.INITIAL_A2, AssessmentResult.PARTIAL)
+        )
     }
 
     @Test
     fun initialA2FailGoesToA1Confirmation() {
-        assertEquals(PlacementStep.A1_CONFIRMATION, PlacementRules.getNextStep(PlacementStep.INITIAL_A2, AssessmentResult.FAIL))
+        assertEquals(
+            PlacementStep.A1_CONFIRMATION,
+            PlacementRules.getNextStep(PlacementStep.INITIAL_A2, AssessmentResult.FAIL)
+        )
     }
 
-    @Test
-    fun b1ProbePassGoesToB2Probe() = assertPass(PlacementStep.B1_PROBE, PlacementStep.B2_PROBE)
+    @Test fun b1ProbePassGoesToB2Probe() = assertPass(PlacementStep.B1_PROBE, PlacementStep.B2_PROBE)
 
     @Test
-    fun b1ProbePartialOrFailGoesToA2Confirmation() = assertNotPassed(PlacementStep.B1_PROBE, PlacementStep.A2_CONFIRMATION)
+    fun b1ProbePartialOrFailGoesToA2Confirmation() =
+        assertNotPassed(PlacementStep.B1_PROBE, PlacementStep.A2_CONFIRMATION)
+
+    @Test fun b2ProbePassGoesToB2Confirmation() = assertPass(PlacementStep.B2_PROBE, PlacementStep.B2_CONFIRMATION)
 
     @Test
-    fun b2ProbePassGoesToB2Confirmation() = assertPass(PlacementStep.B2_PROBE, PlacementStep.B2_CONFIRMATION)
+    fun b2ProbePartialOrFailGoesToB1Confirmation() =
+        assertNotPassed(PlacementStep.B2_PROBE, PlacementStep.B1_CONFIRMATION)
+
+    @Test fun b2ConfirmationPassConfirmsB2() = assertPass(step = PlacementStep.B2_CONFIRMATION, expected = null)
 
     @Test
-    fun b2ProbePartialOrFailGoesToB1Confirmation() = assertNotPassed(PlacementStep.B2_PROBE, PlacementStep.B1_CONFIRMATION)
+    fun b2ConfirmationPartialOrFailGoesToB1Confirmation() =
+        assertNotPassed(PlacementStep.B2_CONFIRMATION, PlacementStep.B1_CONFIRMATION)
+
+    @Test fun b1ConfirmationPassConfirmsB1() = assertPass(step = PlacementStep.B1_CONFIRMATION, expected = null)
 
     @Test
-    fun b2ConfirmationPassConfirmsB2() = assertPass(PlacementStep.B2_CONFIRMATION, null)
+    fun b1ConfirmationPartialOrFailGoesToA2Confirmation() =
+        assertNotPassed(PlacementStep.B1_CONFIRMATION, PlacementStep.A2_CONFIRMATION)
+
+    @Test fun a2ConfirmationPassConfirmsA2() = assertPass(step = PlacementStep.A2_CONFIRMATION, expected = null)
 
     @Test
-    fun b2ConfirmationPartialOrFailGoesToB1Confirmation() = assertNotPassed(PlacementStep.B2_CONFIRMATION, PlacementStep.B1_CONFIRMATION)
+    fun a2ConfirmationPartialOrFailGoesToA1Confirmation() =
+        assertNotPassed(PlacementStep.A2_CONFIRMATION, PlacementStep.A1_CONFIRMATION)
+
+    @Test fun a1ConfirmationPassConfirmsA1() = assertPass(step = PlacementStep.A1_CONFIRMATION, expected = null)
 
     @Test
-    fun b1ConfirmationPassConfirmsB1() = assertPass(PlacementStep.B1_CONFIRMATION, null)
-
-    @Test
-    fun b1ConfirmationPartialOrFailGoesToA2Confirmation() = assertNotPassed(PlacementStep.B1_CONFIRMATION, PlacementStep.A2_CONFIRMATION)
-
-    @Test
-    fun a2ConfirmationPassConfirmsA2() = assertPass(PlacementStep.A2_CONFIRMATION, null)
-
-    @Test
-    fun a2ConfirmationPartialOrFailGoesToA1Confirmation() = assertNotPassed(PlacementStep.A2_CONFIRMATION, PlacementStep.A1_CONFIRMATION)
-
-    @Test
-    fun a1ConfirmationPassConfirmsA1() = assertPass(PlacementStep.A1_CONFIRMATION, null)
-
-    @Test
-    fun a1ConfirmationPartialOrFailConfirmsA1() = assertNotPassed(PlacementStep.A1_CONFIRMATION, null)
+    fun a1ConfirmationPartialOrFailConfirmsA1() = assertNotPassed(step = PlacementStep.A1_CONFIRMATION, expected = null)
 
     @Test
     fun allPassConfirmsB2InFourTasks() {
-        assertPath(SpeakingLevel.B2, AssessmentResult.PASS, AssessmentResult.PASS, AssessmentResult.PASS, AssessmentResult.PASS)
+        assertPath(
+            SpeakingLevel.B2,
+            AssessmentResult.PASS,
+            AssessmentResult.PASS,
+            AssessmentResult.PASS,
+            AssessmentResult.PASS
+        )
     }
 
     @Test
     fun b2ConfirmationFailThenB1PassConfirmsB1() {
-        assertPath(SpeakingLevel.B1, AssessmentResult.PASS, AssessmentResult.PASS, AssessmentResult.PASS, AssessmentResult.FAIL, AssessmentResult.PASS)
+        assertPath(
+            SpeakingLevel.B1,
+            AssessmentResult.PASS,
+            AssessmentResult.PASS,
+            AssessmentResult.PASS,
+            AssessmentResult.FAIL,
+            AssessmentResult.PASS
+        )
     }
 
     @Test
     fun longestPathConfirmsA1InSevenTasks() {
-        assertPath(SpeakingLevel.A1, AssessmentResult.PASS, AssessmentResult.PASS, AssessmentResult.PASS, AssessmentResult.FAIL,
-            AssessmentResult.FAIL, AssessmentResult.FAIL, AssessmentResult.FAIL)
+        assertPath(
+            SpeakingLevel.A1,
+            AssessmentResult.PASS,
+            AssessmentResult.PASS,
+            AssessmentResult.PASS,
+            AssessmentResult.FAIL,
+            AssessmentResult.FAIL,
+            AssessmentResult.FAIL,
+            AssessmentResult.FAIL
+        )
     }
 
     @Test
@@ -124,7 +204,8 @@ class PlacementRulesTest {
 
     @Test
     fun singlePassNeverConfirmsLevel() {
-        val next = apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
+        val next =
+            apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
         assertEquals(PlacementStep.B1_PROBE, next.checkpoint.step)
         assertNull(next.checkpoint.pendingResult)
     }
@@ -141,7 +222,8 @@ class PlacementRulesTest {
     fun onlyConfirmationStepsConfirm() {
         PlacementStep.entries.forEach { step ->
             AssessmentResult.entries.forEach { result ->
-                val transition = apply(PlacementTestFixtures.getCheckpoint(step), PlacementTestFixtures.getOutcome(result))
+                val transition =
+                    apply(PlacementTestFixtures.getCheckpoint(step), PlacementTestFixtures.getOutcome(result))
                 if (transition is PlacementTransition.Confirmed) assertEquals(PlacementRole.CONFIRMATION, step.role)
             }
         }
@@ -150,7 +232,9 @@ class PlacementRulesTest {
     @Test
     fun speakingProfileComesFromConfirmingTask() {
         val outcome = PlacementTestFixtures.getOutcome(AssessmentResult.FAIL)
-        val confirmed = apply(PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION), outcome) as PlacementTransition.Confirmed
+        val confirmed =
+            apply(PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION), outcome)
+                as PlacementTransition.Confirmed
         assertEquals(outcome.criteria, confirmed.result.speakingProfile)
         assertEquals(confirmed.result, confirmed.checkpoint.pendingResult)
         assertEquals(SpeakingLevel.A1, confirmed.result.level)
@@ -159,28 +243,57 @@ class PlacementRulesTest {
     }
 
     @Test
-    fun a2ConfirmationAvoidsInitialA2Scenario() = assertDifferentContext(PlacementStep.INITIAL_A2, PlacementStep.A2_CONFIRMATION)
+    fun a2ConfirmationAvoidsInitialA2Scenario() =
+        assertDifferentContext(PlacementStep.INITIAL_A2, PlacementStep.A2_CONFIRMATION)
 
     @Test
-    fun b1ConfirmationAvoidsB1ProbeScenario() = assertDifferentContext(PlacementStep.B1_PROBE, PlacementStep.B1_CONFIRMATION)
+    fun b1ConfirmationAvoidsB1ProbeScenario() =
+        assertDifferentContext(PlacementStep.B1_PROBE, PlacementStep.B1_CONFIRMATION)
 
     @Test
-    fun b2ConfirmationAvoidsB2ProbeScenario() = assertDifferentContext(PlacementStep.B2_PROBE, PlacementStep.B2_CONFIRMATION)
+    fun b2ConfirmationAvoidsB2ProbeScenario() =
+        assertDifferentContext(PlacementStep.B2_PROBE, PlacementStep.B2_CONFIRMATION)
 
     @Test
     fun confirmationOnlyExcludesScenariosPreviouslyUsedAtSameLevel() {
         val otherLevel = tasks.first { it.targetLevel == SpeakingLevel.B1 }
         val sharedScenario = tasks.first().copy(scenarioId = otherLevel.scenarioId)
-        val record = PlacementTaskRecord(PlacementStep.B1_PROBE, otherLevel.taskId, otherLevel.scenarioId,
-            AssessmentResult.FAIL, PlacementTestFixtures.getOutcome(AssessmentResult.FAIL).criteria)
-        val checkpoint = initial.copy(records = listOf(record), usedScenarioIds = listOf(otherLevel.scenarioId), currentTaskId = null)
-        assertEquals(sharedScenario, PlacementRules.selectTask(PlacementStep.A2_CONFIRMATION, listOf(sharedScenario), checkpoint, random()))
+        val record =
+            PlacementTaskRecord(
+                step = PlacementStep.B1_PROBE,
+                taskId = otherLevel.taskId,
+                scenarioId = otherLevel.scenarioId,
+                result = AssessmentResult.FAIL,
+                criteria = PlacementTestFixtures.getOutcome(AssessmentResult.FAIL).criteria
+            )
+        val checkpoint =
+            initial.copy(
+                records = listOf(record),
+                usedScenarioIds = listOf(otherLevel.scenarioId),
+                currentTaskId = null
+            )
+        assertEquals(
+            sharedScenario,
+            PlacementRules.selectTask(
+                step = PlacementStep.A2_CONFIRMATION,
+                tasks = listOf(sharedScenario),
+                checkpoint = checkpoint,
+                random = random()
+            )
+        )
     }
 
     @Test
     fun probeExcludesAllPreviouslyUsedScenarios() {
         val checkpoint = initial.copy(currentTaskId = null, usedScenarioIds = tasks.map { it.scenarioId })
-        assertNull(PlacementRules.selectTask(PlacementStep.B1_PROBE, tasks, checkpoint, random()))
+        assertNull(
+            PlacementRules.selectTask(
+                step = PlacementStep.B1_PROBE,
+                tasks = tasks,
+                checkpoint = checkpoint,
+                random = random()
+            )
+        )
     }
 
     @Test
@@ -192,20 +305,43 @@ class PlacementRulesTest {
 
     @Test
     fun missingAlternativeScenarioStopsWithNoTaskAvailable() {
-        val transition = apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.FAIL), listOf(tasks.first()))
+        val transition =
+            apply(
+                checkpoint = initial,
+                outcome = PlacementTestFixtures.getOutcome(AssessmentResult.FAIL),
+                bank = listOf(tasks.first())
+            )
         assertEquals(PlacementTransition.Stopped(PlacementStopReason.NO_TASK_AVAILABLE), transition)
     }
 
     @Test
     fun selectionIsDeterministicForSeed() {
-        assertEquals(PlacementRules.selectTask(PlacementStep.INITIAL_A2, tasks, null, random()),
-            PlacementRules.selectTask(PlacementStep.INITIAL_A2, tasks, null, random()))
+        assertEquals(
+            PlacementRules.selectTask(
+                step = PlacementStep.INITIAL_A2,
+                tasks = tasks,
+                checkpoint = null,
+                random = random()
+            ),
+            PlacementRules.selectTask(
+                step = PlacementStep.INITIAL_A2,
+                tasks = tasks,
+                checkpoint = null,
+                random = random()
+            )
+        )
     }
 
     @Test
     fun selectionAlwaysMatchesStepLevel() {
         PlacementStep.entries.forEach { step ->
-            assertEquals(step.level, checkNotNull(PlacementRules.selectTask(step, tasks, null, random())).targetLevel)
+            assertEquals(
+                step.level,
+                checkNotNull(
+                    PlacementRules.selectTask(step = step, tasks = tasks, checkpoint = null, random = random())
+                )
+                    .targetLevel
+            )
         }
     }
 
@@ -216,12 +352,27 @@ class PlacementRulesTest {
         assertEquals(initial.currentTaskId, retry.checkpoint.currentTaskId)
         assertEquals(1, retry.checkpoint.technicalRetryCount)
         assertEquals(InsufficientEvidenceReason.AUDIO_UNAVAILABLE, retry.reason)
-        assertEquals(getTask(initial), PlacementRules.selectTask(initial.step, tasks.reversed(), retry.checkpoint, Random(1)))
+        assertEquals(
+            getTask(initial),
+            PlacementRules.selectTask(
+                step = initial.step,
+                tasks = tasks.reversed(),
+                checkpoint = retry.checkpoint,
+                random = Random(1)
+            )
+        )
     }
 
     @Test
     fun missingRetryTaskDoesNotChooseReplacement() {
-        assertNull(PlacementRules.selectTask(initial.step, tasks.filter { it.taskId != initial.currentTaskId }, initial, random()))
+        assertNull(
+            PlacementRules.selectTask(
+                step = initial.step,
+                tasks = tasks.filter { it.taskId != initial.currentTaskId },
+                checkpoint = initial,
+                random = random()
+            )
+        )
     }
 
     @Test
@@ -237,15 +388,22 @@ class PlacementRulesTest {
             val first = apply(initial, insufficient(reason)) as PlacementTransition.RetryTask
             val second = apply(first.checkpoint, insufficient(reason)) as PlacementTransition.RetryTask
             assertEquals(2, second.checkpoint.technicalRetryCount)
-            assertEquals(PlacementTransition.Stopped(PlacementStopReason.TECHNICAL_RETRY_LIMIT), apply(second.checkpoint, insufficient(reason)))
+            assertEquals(
+                PlacementTransition.Stopped(PlacementStopReason.TECHNICAL_RETRY_LIMIT),
+                apply(second.checkpoint, insufficient(reason))
+            )
             assertEquals(SpeakingLevel.NOT_ASSESSED, second.checkpoint.candidateLevel)
         }
     }
 
     @Test
     fun retryCountResetsAfterValidResult() {
-        val next = apply(initial.copy(technicalRetryCount = PlacementRules.MAX_TECHNICAL_RETRIES),
-            PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
+        val next =
+            apply(
+                initial.copy(technicalRetryCount = PlacementRules.MAX_TECHNICAL_RETRIES),
+                PlacementTestFixtures.getOutcome(AssessmentResult.PASS)
+            )
+                as PlacementTransition.NextTask
         assertEquals(0, next.checkpoint.technicalRetryCount)
     }
 
@@ -265,30 +423,56 @@ class PlacementRulesTest {
     fun candidateTracksHighestPassedProbeAndThenConfirmationLevel() {
         val b1 = apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
         assertEquals(SpeakingLevel.A2, b1.checkpoint.candidateLevel)
-        val b2 = apply(b1.checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
+        val b2 =
+            apply(b1.checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.PASS))
+                as PlacementTransition.NextTask
         assertEquals(SpeakingLevel.B1, b2.checkpoint.candidateLevel)
-        val confirmation = apply(b2.checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
+        val confirmation =
+            apply(b2.checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.PASS))
+                as PlacementTransition.NextTask
         assertEquals(SpeakingLevel.B2, confirmation.checkpoint.candidateLevel)
-        val lower = apply(confirmation.checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.FAIL)) as PlacementTransition.NextTask
+        val lower =
+            apply(confirmation.checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.FAIL))
+                as PlacementTransition.NextTask
         assertEquals(SpeakingLevel.B1, lower.checkpoint.candidateLevel)
     }
 
     @Test
     fun eighthValidTaskIsRejected() {
-        val record = PlacementTaskRecord(initial.step, getTask(initial).taskId, getTask(initial).scenarioId,
-            AssessmentResult.PASS, PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria)
-        val checkpoint = PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION)
-            .copy(records = List(PlacementRules.MAX_VALID_TASKS) { record })
-        assertEquals(PlacementTransition.Stopped(PlacementStopReason.TASK_LIMIT_REACHED),
-            apply(checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.FAIL)))
+        val record =
+            PlacementTaskRecord(
+                step = initial.step,
+                taskId = getTask(initial).taskId,
+                scenarioId = getTask(initial).scenarioId,
+                result = AssessmentResult.PASS,
+                criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
+            )
+        val checkpoint =
+            PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION)
+                .copy(records = List(PlacementRules.MAX_VALID_TASKS) { record })
+        assertEquals(
+            PlacementTransition.Stopped(PlacementStopReason.TASK_LIMIT_REACHED),
+            apply(checkpoint, PlacementTestFixtures.getOutcome(AssessmentResult.FAIL))
+        )
     }
 
     @Test
     fun seventhValidTaskCannotStartAnEighth() {
-        val record = PlacementTaskRecord(initial.step, getTask(initial).taskId, getTask(initial).scenarioId,
-            AssessmentResult.PASS, PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria)
-        assertEquals(PlacementTransition.Stopped(PlacementStopReason.TASK_LIMIT_REACHED),
-            apply(initial.copy(records = List(PlacementRules.MAX_VALID_TASKS - 1) { record }), PlacementTestFixtures.getOutcome(AssessmentResult.PASS)))
+        val record =
+            PlacementTaskRecord(
+                step = initial.step,
+                taskId = getTask(initial).taskId,
+                scenarioId = getTask(initial).scenarioId,
+                result = AssessmentResult.PASS,
+                criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
+            )
+        assertEquals(
+            PlacementTransition.Stopped(PlacementStopReason.TASK_LIMIT_REACHED),
+            apply(
+                initial.copy(records = List(PlacementRules.MAX_VALID_TASKS - 1) { record }),
+                PlacementTestFixtures.getOutcome(AssessmentResult.PASS)
+            )
+        )
     }
 
     @Test
@@ -305,9 +489,37 @@ class PlacementRulesTest {
     }
 
     @Test
+    fun storedEarlierExpiryEndsTheCheckpointAtItsSavedDeadline() {
+        val deadline = initial.createdAtMillis + 1
+        val checkpoint = initial.copy(expiresAtMillis = deadline)
+        assertFalse(PlacementRules.isExpired(checkpoint, nowMillis = deadline - 1))
+        assertTrue(PlacementRules.isExpired(checkpoint, nowMillis = deadline))
+    }
+
+    @Test
+    fun legacyNonPositiveExpiryUsesTheOriginalTtl() {
+        listOf(0L, -1L).forEach { expiry ->
+            val checkpoint = initial.copy(expiresAtMillis = expiry)
+            val deadline = initial.createdAtMillis + PlacementRules.CHECKPOINT_TTL_MILLIS
+            assertFalse(PlacementRules.isExpired(checkpoint, nowMillis = deadline - 1))
+            assertTrue(PlacementRules.isExpired(checkpoint, nowMillis = deadline))
+        }
+    }
+
+    @Test
+    fun storedLaterExpiryCannotExtendTheCheckpointBeyondItsTtl() {
+        val deadline = initial.createdAtMillis + PlacementRules.CHECKPOINT_TTL_MILLIS
+        val checkpoint = initial.copy(expiresAtMillis = Long.MAX_VALUE)
+        assertFalse(PlacementRules.isExpired(checkpoint, nowMillis = deadline - 1))
+        assertTrue(PlacementRules.isExpired(checkpoint, nowMillis = deadline))
+    }
+
+    @Test
     fun checkpointIsValidJustBeforeExpiry() {
         assertFalse(PlacementRules.isExpired(initial, initial.createdAtMillis))
-        assertFalse(PlacementRules.isExpired(initial, initial.createdAtMillis + PlacementRules.CHECKPOINT_TTL_MILLIS - 1))
+        assertFalse(
+            PlacementRules.isExpired(initial, initial.createdAtMillis + PlacementRules.CHECKPOINT_TTL_MILLIS - 1)
+        )
     }
 
     @Test
@@ -327,9 +539,13 @@ class PlacementRulesTest {
 
     @Test
     fun resumeKeepsStepRecordsAndUsedScenarios() {
-        val next = apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
+        val next =
+            apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
         val snapshot = next.checkpoint.copy()
-        assertEquals(getTask(snapshot), PlacementRules.selectTask(snapshot.step, tasks, snapshot, random()))
+        assertEquals(
+            getTask(snapshot),
+            PlacementRules.selectTask(step = snapshot.step, tasks = tasks, checkpoint = snapshot, random = random())
+        )
         assertEquals(snapshot, next.checkpoint)
         assertEquals(1, snapshot.records.size)
         assertEquals(listOf(getTask(initial).scenarioId), snapshot.usedScenarioIds)
@@ -337,7 +553,8 @@ class PlacementRulesTest {
 
     @Test
     fun transitionsAndRetriesNeverExtendExpiry() {
-        val next = apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
+        val next =
+            apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
         val retry = apply(next.checkpoint, insufficient()) as PlacementTransition.RetryTask
         assertEquals(initial.createdAtMillis, retry.checkpoint.createdAtMillis)
         assertEquals(initial.expiresAtMillis, retry.checkpoint.expiresAtMillis)
@@ -345,10 +562,11 @@ class PlacementRulesTest {
 
     @Test
     fun restartAfterExpiryBeginsAtInitialA2() {
-        val next = apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
+        val next =
+            apply(initial, PlacementTestFixtures.getOutcome(AssessmentResult.PASS)) as PlacementTransition.NextTask
         val nowMillis = initial.expiresAtMillis
         assertTrue(PlacementRules.isExpired(next.checkpoint, nowMillis))
-        val restarted = PlacementRules.start(initial.userId, tasks.first(), nowMillis)
+        val restarted = PlacementRules.start(userId = initial.userId, task = tasks.first(), nowMillis = nowMillis)
         assertEquals(PlacementStep.INITIAL_A2, restarted.step)
         assertTrue(restarted.records.isEmpty())
         assertTrue(restarted.usedScenarioIds.isEmpty())
@@ -366,9 +584,15 @@ class PlacementRulesTest {
             val checkpoint = PlacementTestFixtures.getCheckpoint(PlacementStep.A1_CONFIRMATION)
             val task = tasks.first { it.taskId == checkpoint.currentTaskId }
             val outcome = PlacementTestFixtures.getOutcome(result)
-            val transition = PlacementRules.applyOutcome(
-                checkpoint, task, outcome, tasks, random(), checkpoint.createdAtMillis + 1
-            ) as PlacementTransition.Confirmed
+            val transition =
+                PlacementRules.applyOutcome(
+                    checkpoint = checkpoint,
+                    task = task,
+                    outcome = outcome,
+                    tasks = tasks,
+                    random = random(),
+                    nowMillis = checkpoint.createdAtMillis + 1
+                ) as PlacementTransition.Confirmed
 
             assertEquals(result, transition.result.taskResult)
             assertEquals(outcome.criteria, transition.result.speakingProfile)
@@ -384,10 +608,25 @@ class PlacementRulesTest {
 
     private fun assertDifferentContext(previous: PlacementStep, next: PlacementStep) {
         val previousTask = tasks.first { it.targetLevel == previous.level }
-        val record = PlacementTaskRecord(previous, previousTask.taskId, previousTask.scenarioId,
-            AssessmentResult.PASS, PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria)
-        val checkpoint = initial.copy(step = next, currentTaskId = null, records = listOf(record), usedScenarioIds = listOf(previousTask.scenarioId))
-        val selected = checkNotNull(PlacementRules.selectTask(next, tasks, checkpoint, random()))
+        val record =
+            PlacementTaskRecord(
+                step = previous,
+                taskId = previousTask.taskId,
+                scenarioId = previousTask.scenarioId,
+                result = AssessmentResult.PASS,
+                criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
+            )
+        val checkpoint =
+            initial.copy(
+                step = next,
+                currentTaskId = null,
+                records = listOf(record),
+                usedScenarioIds = listOf(previousTask.scenarioId)
+            )
+        val selected =
+            checkNotNull(
+                PlacementRules.selectTask(step = next, tasks = tasks, checkpoint = checkpoint, random = random())
+            )
         assertNotEquals(previousTask.scenarioId, selected.scenarioId)
     }
 
@@ -406,31 +645,41 @@ class PlacementRulesTest {
         }
     }
 
-    private fun walkPaths(checkpoint: PlacementCheckpoint): List<Int> = AssessmentResult.entries.flatMap { result ->
-        when (val transition = apply(checkpoint, PlacementTestFixtures.getOutcome(result))) {
-            is PlacementTransition.NextTask -> {
-                assertTrue(transition.checkpoint.records.size < PlacementRules.MAX_VALID_TASKS)
-                walkPaths(transition.checkpoint)
+    private fun walkPaths(checkpoint: PlacementCheckpoint): List<Int> =
+        AssessmentResult.entries.flatMap { result ->
+            when (val transition = apply(checkpoint, PlacementTestFixtures.getOutcome(result))) {
+                is PlacementTransition.NextTask -> {
+                    assertTrue(transition.checkpoint.records.size < PlacementRules.MAX_VALID_TASKS)
+                    walkPaths(transition.checkpoint)
+                }
+                is PlacementTransition.Confirmed -> {
+                    assertEquals(PlacementRole.CONFIRMATION, checkpoint.step.role)
+                    listOf(transition.checkpoint.records.size)
+                }
+                else -> error("A complete task bank must confirm every valid path")
             }
-            is PlacementTransition.Confirmed -> {
-                assertEquals(PlacementRole.CONFIRMATION, checkpoint.step.role)
-                listOf(transition.checkpoint.records.size)
-            }
-            else -> error("A complete task bank must confirm every valid path")
         }
-    }
 
     private fun apply(
         checkpoint: PlacementCheckpoint,
         outcome: AssessmentOutcome,
         bank: List<AssessmentTask> = tasks
-    ): PlacementTransition = PlacementRules.applyOutcome(checkpoint, getTask(checkpoint), outcome, bank, random(),
-        PlacementTestFixtures.CREATED_AT_MILLIS + 1)
+    ): PlacementTransition =
+        PlacementRules.applyOutcome(
+            checkpoint = checkpoint,
+            task = getTask(checkpoint),
+            outcome = outcome,
+            tasks = bank,
+            random = random(),
+            nowMillis = PlacementTestFixtures.CREATED_AT_MILLIS + 1
+        )
 
-    private fun getTask(checkpoint: PlacementCheckpoint): AssessmentTask = tasks.first { it.taskId == checkpoint.currentTaskId }
+    private fun getTask(checkpoint: PlacementCheckpoint): AssessmentTask =
+        tasks.first { it.taskId == checkpoint.currentTaskId }
 
-    private fun insufficient(reason: InsufficientEvidenceReason = InsufficientEvidenceReason.AUDIO_UNAVAILABLE): AssessmentOutcome =
-        AssessmentOutcome.InsufficientEvidence(reason)
+    private fun insufficient(
+        reason: InsufficientEvidenceReason = InsufficientEvidenceReason.AUDIO_UNAVAILABLE
+    ): AssessmentOutcome = AssessmentOutcome.InsufficientEvidence(reason)
 
     private fun random(): Random = Random(PlacementTestFixtures.RANDOM_SEED)
 }

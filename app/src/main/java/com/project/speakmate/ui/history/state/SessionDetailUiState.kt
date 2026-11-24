@@ -5,7 +5,8 @@ import com.project.speakmate.domain.model.HistoryReadFailure
 import com.project.speakmate.domain.model.PracticeCompletionStatus
 import com.project.speakmate.domain.model.PracticeSaveFailure
 import com.project.speakmate.domain.rules.PracticeSaveRetryRules
-import com.project.speakmate.ui.components.TranscriptMessageUiState
+import com.project.speakmate.ui.components.assessment.AssessmentCriterionUiState
+import com.project.speakmate.ui.components.transcript.TranscriptMessageUiState
 
 @Immutable
 data class SessionDetailUiState(
@@ -14,7 +15,7 @@ data class SessionDetailUiState(
     val startedAtMillis: Long? = null,
     val duration: String = "",
     val requiredActions: List<SessionActionUiState> = emptyList(),
-    val criteria: List<SessionCriterionUiState> = emptyList(),
+    val criteria: List<AssessmentCriterionUiState> = emptyList(),
     val messages: List<TranscriptMessageUiState> = emptyList(),
     val result: HistoryResultPresentation? = null,
     val isAssessed: Boolean = false,
@@ -31,5 +32,5 @@ data class SessionDetailUiState(
     val transcriptFailure: HistoryReadFailure? = null
 ) {
     val canRetrySave: Boolean
-        get() = saveFailure?.let(PracticeSaveRetryRules::canRetryManually) != false
+        get() = saveFailure?.let(PracticeSaveRetryRules::canRetry) != false
 }

@@ -3,22 +3,15 @@ package com.project.speakmate.ui.training
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.BackAppBar
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
 import com.project.speakmate.ui.call.CallRoute
-import com.project.speakmate.ui.training.components.TrainingUnavailableContent
+import com.project.speakmate.ui.training.components.TrainingUnavailableScreen
 import com.project.speakmate.ui.training.state.TrainingContentStatus
 
 @Composable
@@ -30,40 +23,24 @@ fun GoalAssessmentCallRoute(
     viewModel: GoalAssessmentViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var hasPreparedRetry by rememberSaveable { mutableStateOf(false) }
-    var activity by remember(viewModel) {
-        mutableStateOf(viewModel.uiState.value.activity.takeIf { !isRetry || hasPreparedRetry || state.isReplay })
-    }
-    var isReplay by rememberSaveable { mutableStateOf(state.isReplay) }
-    LaunchedEffect(state.activity, isRetry) {
-        if (activity == null && state.status == TrainingContentStatus.CONTENT) {
-            if (isRetry && !state.isReplay && !hasPreparedRetry) {
-                viewModel.prepareRetry()
-                hasPreparedRetry = true
-            }
-            activity = viewModel.uiState.value.activity
-            isReplay = state.isReplay
-        }
-        if (activity != null) viewModel.stopObservingAssessment()
-    }
-    val callActivity = activity
+    LaunchedEffect(isRetry, viewModel) { viewModel.prepareCall(isRetry = isRetry) }
+    val callActivity = state.activeCallActivity
     if (callActivity == null) {
-        Column(modifier.fillMaxSize()) {
-            BackAppBar(stringResource(R.string.goal_assessment_header), onBack)
-            TrainingUnavailableContent(
-                isLoading = state.status == TrainingContentStatus.LOADING,
-                onRetry = if (state.isLocked) onBack else viewModel::retry,
-                errorMessage = if (state.isLocked) stringResource(R.string.goal_assessment_locked) else "",
-                modifier = Modifier.weight(1f)
-            )
-        }
+        TrainingUnavailableScreen(
+            title = stringResource(R.string.goal_assessment_header),
+            isLoading = state.status == TrainingContentStatus.LOADING,
+            onBack = onBack,
+            onRetry = if (state.isLocked) onBack else viewModel::retry,
+            errorMessage = if (state.isLocked) stringResource(R.string.goal_assessment_locked) else "",
+            modifier = modifier
+        )
     } else {
         CallRoute(
             scenario = callActivity.scenario,
             activityType = CallActivityType.GOAL_ASSESSMENT,
             onExit = onBack,
             activityContext = CallActivityContext.Training(callActivity),
-            onPracticeCompleted = { attemptId -> onCompleted(attemptId, isReplay) },
+            onPracticeCompleted = { attemptId -> onCompleted(attemptId, state.activeCallIsReplay) },
             modifier = modifier
         )
     }

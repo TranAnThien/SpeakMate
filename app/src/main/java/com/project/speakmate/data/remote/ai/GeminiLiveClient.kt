@@ -26,6 +26,7 @@ class GeminiLiveClient(
         private const val ENDPOINT =
             "https://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
         private const val MAX_UPLINK_BACKLOG_BYTES = 16_384L
+        private const val MAX_CONSECUTIVE_BACKLOG_DROPS = 5
         private const val MAX_FRAME_BYTES = 524_288
         private const val NORMAL_CLOSURE = 1000
         private const val INPUT_MIME_TYPE = "${GeminiWireField.PCM_MIME_TYPE};rate=${AppConstant.CALL_INPUT_SAMPLE_RATE}"
@@ -47,6 +48,7 @@ class GeminiLiveClient(
     private var hasSentAudio = false
     private var isModelTurnOpen = false
     private var hasInputDuringModelTurn = false
+    private var consecutiveBacklogDrops = 0
 
     fun connect(scenario: Scenario, resumptionHandle: String? = null) {
         if (apiKey.isBlank()) {
@@ -98,7 +100,10 @@ class GeminiLiveClient(
     }
 
     fun suspendAudio() {
-        synchronized(socketLock) { audioGeneration = null }
+        synchronized(socketLock) {
+            audioGeneration = null
+            consecutiveBacklogDrops = 0
+        }
     }
 
     fun enableDownlink(generation: Long, requiresIdleTurn: Boolean): CallFailure? = synchronized(socketLock) {
@@ -112,22 +117,35 @@ class GeminiLiveClient(
         synchronized(socketLock) {
             audioGeneration = null
             playbackGeneration = null
+            consecutiveBacklogDrops = 0
         }
     }
 
     fun sendAudio(generation: Long, audio: ByteArray, hasAudibleInput: Boolean): Boolean {
         val input = JSONObject().put(GeminiWireField.MIME_TYPE, INPUT_MIME_TYPE).put(GeminiWireField.DATA, Base64.getEncoder().encodeToString(audio))
         val message = JSONObject().put(GeminiWireField.REALTIME_INPUT, JSONObject().put(GeminiWireField.AUDIO, input)).toString()
+        var shouldFail = false
         val sent = synchronized(socketLock) {
             if (audioGeneration != generation) return false
-            trySend(message).also {
-                if (it) {
-                    hasSentAudio = true
-                    if (hasAudibleInput) markInputPending()
-                }
+            val webSocket = socket
+            if (!isOpen || webSocket == null) {
+                shouldFail = true
+                false
+            } else if (webSocket.queueSize() + message.length > MAX_UPLINK_BACKLOG_BYTES) {
+                consecutiveBacklogDrops++
+                if (consecutiveBacklogDrops >= MAX_CONSECUTIVE_BACKLOG_DROPS) shouldFail = true
+                false
+            } else if (webSocket.send(message)) {
+                consecutiveBacklogDrops = 0
+                hasSentAudio = true
+                if (hasAudibleInput) markInputPending()
+                true
+            } else {
+                shouldFail = true
+                false
             }
         }
-        if (!sent) reportFailure(CallFailure.NETWORK)
+        if (shouldFail) reportFailure(CallFailure.NETWORK)
         return sent
     }
 
@@ -135,7 +153,11 @@ class GeminiLiveClient(
         val sent = synchronized(socketLock) {
             if (!hasSentAudio || !isOpen) return
             hasSentAudio = false
-            trySend(JSONObject().put(GeminiWireField.REALTIME_INPUT, JSONObject().put(GeminiWireField.AUDIO_STREAM_END, true)).toString())
+            socket?.send(
+                JSONObject()
+                    .put(GeminiWireField.REALTIME_INPUT, JSONObject().put(GeminiWireField.AUDIO_STREAM_END, true))
+                    .toString()
+            ) == true
         }
         if (!sent) reportFailure(CallFailure.NETWORK)
     }
@@ -150,7 +172,7 @@ class GeminiLiveClient(
             if (isClosed || socket !== webSocket) null
             else {
                 isOpen = true
-                trySend(setup)
+                webSocket.send(setup)
             }
         }
         when (sent) {
@@ -158,12 +180,6 @@ class GeminiLiveClient(
             false -> reportFailure(CallFailure.NETWORK)
             true -> Unit
         }
-    }
-
-    private fun trySend(message: String): Boolean {
-        val webSocket = socket ?: return false
-        return isOpen && webSocket.queueSize() + message.length <= MAX_UPLINK_BACKLOG_BYTES &&
-            webSocket.send(message)
     }
 
     private fun readMessage(message: String) {
@@ -233,6 +249,7 @@ class GeminiLiveClient(
         isOpen = false
         audioGeneration = null
         playbackGeneration = null
+        consecutiveBacklogDrops = 0
         mutableTurnPending.value = false
         return socket.also { socket = null }
     }

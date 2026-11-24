@@ -5,10 +5,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class FakeAuthRepository(userId: String? = "user-1") : AuthRepository {
+    var isConnected = true
+
+    override fun isNetworkAvailable(): Boolean = isConnected
+
     val signedInUserId = MutableStateFlow(userId)
 
-    override suspend fun signInWithGoogle(idToken: String): Result<String> =
-        Result.success(requireCurrentUserId())
+    override suspend fun signInWithGoogle(idToken: String): Result<String> = Result.success(requireCurrentUserId())
 
     override suspend fun signOut(): Result<Unit> {
         signedInUserId.value = null

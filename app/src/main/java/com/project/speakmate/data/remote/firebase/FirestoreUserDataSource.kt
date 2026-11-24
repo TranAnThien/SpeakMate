@@ -1,8 +1,7 @@
 package com.project.speakmate.data.remote.firebase
 
-import com.google.firebase.firestore.Source
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.snapshots
 import com.project.speakmate.data.dto.SpeakingCriteriaResultDto
 import com.project.speakmate.data.dto.TrainingProgressDto
@@ -11,35 +10,36 @@ import com.project.speakmate.data.dto.toDomain
 import com.project.speakmate.domain.model.InvalidUserProfileException
 import com.project.speakmate.domain.model.SpeakingLevel
 import java.util.Date
+import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
-import javax.inject.Inject
 
-class FirestoreUserDataSource @Inject constructor(
-    private val firestore: FirebaseFirestore,
-    private val authDataSource: FirebaseAuthDataSource
-) {
+class FirestoreUserDataSource
+@Inject
+constructor(private val firestore: FirebaseFirestore, private val authDataSource: FirebaseAuthDataSource) {
     private val usersCollection = firestore.collection(FirestoreCollection.USERS)
 
     suspend fun getOrCreateUser(userDto: UserDto): UserDto {
         val docRef = usersCollection.document(userDto.userId)
-        return firestore.runTransaction { transaction ->
-            val snapshot = transaction.get(docRef)
-            if (snapshot.exists()) {
-                snapshot.requireUserDto()
-            } else {
-                transaction.set(docRef, userDto)
-                userDto
+        return firestore
+            .runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                if (snapshot.exists()) {
+                    snapshot.requireUserDto()
+                } else {
+                    transaction.set(docRef, userDto)
+                    userDto
+                }
             }
-        }.await()
+            .await()
     }
 
     suspend fun getUser(userId: String, requireServer: Boolean = false): UserDto? {
-        val documentSnapshot = usersCollection.document(userId).get(if (requireServer) Source.SERVER else Source.DEFAULT).await()
-        if (requireServer) check(!documentSnapshot.metadata.isFromCache && !documentSnapshot.metadata.hasPendingWrites())
+        val documentSnapshot = usersCollection.document(userId).get(requireServer.toFirestoreSource()).await()
+        if (requireServer) check(documentSnapshot.metadata.isServerConfirmed())
         return if (documentSnapshot.exists()) {
             documentSnapshot.requireUserDto()
         } else {
@@ -49,9 +49,11 @@ class FirestoreUserDataSource @Inject constructor(
 
     fun observeUser(userId: String): Flow<UserDto?> = flow {
         check(authDataSource.requireCurrentUserId() == userId)
-        emitAll(usersCollection.document(userId).snapshots().map { snapshot ->
-            if (snapshot.exists()) snapshot.requireUserDto() else null
-        })
+        emitAll(
+            usersCollection.document(userId).snapshots().map { snapshot ->
+                if (snapshot.exists()) snapshot.requireUserDto() else null
+            }
+        )
     }
 
     suspend fun saveAssessedLevel(
@@ -61,35 +63,39 @@ class FirestoreUserDataSource @Inject constructor(
         trainingProgress: TrainingProgressDto
     ) {
         val document = usersCollection.document(authDataSource.requireCurrentUserId())
-        firestore.runTransaction { transaction ->
-            val current = transaction.get(document).requireUserDto()
-            current.toDomain()
-            val previousAssessment = current.lastAssessedAt
-            if (previousAssessment == assessedAt) {
-                check(current.level == level && current.latestAssessmentCriteria == criteria)
-                return@runTransaction
-            }
-            check(previousAssessment == null || assessedAt.after(previousAssessment))
-            transaction.update(
-                document,
-                mapOf(
-                    FirestoreField.LEVEL to level,
-                    FirestoreField.LATEST_ASSESSMENT_CRITERIA to criteria,
-                    FirestoreField.LAST_ASSESSED_AT to assessedAt,
-                    FirestoreField.TRAINING_PROGRESS to trainingProgress
+        firestore
+            .runTransaction { transaction ->
+                val current = transaction.get(document).requireUserDto()
+                current.toDomain()
+                val previousAssessment = current.lastAssessedAt
+                if (previousAssessment == assessedAt) {
+                    check(current.level == level && current.latestAssessmentCriteria == criteria)
+                    return@runTransaction
+                }
+                check(previousAssessment == null || assessedAt.after(previousAssessment))
+                transaction.update(
+                    document,
+                    mapOf(
+                        FirestoreField.LEVEL to level,
+                        FirestoreField.LATEST_ASSESSMENT_CRITERIA to criteria,
+                        FirestoreField.LAST_ASSESSED_AT to assessedAt,
+                        FirestoreField.TRAINING_PROGRESS to trainingProgress
+                    )
                 )
-            )
-            Unit
-        }.await()
+                Unit
+            }
+            .await()
     }
 
     suspend fun markNotAssessed() {
         val document = usersCollection.document(authDataSource.requireCurrentUserId())
-        firestore.runTransaction { transaction ->
-            val current = transaction.get(document).requireUserDto().toDomain()
-            check(current.level == SpeakingLevel.NOT_ASSESSED)
-            transaction.update(document, FirestoreField.LEVEL, SpeakingLevel.NOT_ASSESSED.name)
-        }.await()
+        firestore
+            .runTransaction { transaction ->
+                val current = transaction.get(document).requireUserDto().toDomain()
+                check(current.level == SpeakingLevel.NOT_ASSESSED)
+                transaction.update(document, FirestoreField.LEVEL, SpeakingLevel.NOT_ASSESSED.name)
+            }
+            .await()
     }
 
     private fun DocumentSnapshot.requireUserDto(): UserDto {

@@ -14,11 +14,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.domain.model.CallActivityContext
 import com.project.speakmate.domain.model.CallActivityType
-import com.project.speakmate.domain.model.CallOutcome
 import com.project.speakmate.domain.model.CallSessionState
-import com.project.speakmate.domain.model.PlacementRole
 import com.project.speakmate.domain.model.Scenario
-import com.project.speakmate.domain.model.SpeakingLevel
 import com.project.speakmate.ui.call.components.CallAudioVisualizer
 import com.project.speakmate.ui.call.components.CallDurationLabel
 import com.project.speakmate.ui.call.state.CallPresentation
@@ -35,10 +32,9 @@ fun CallRoute(
     onCallFinished: ((CallSessionState) -> Unit)? = null,
     activityContext: CallActivityContext? = null,
     onPracticeCompleted: ((String) -> Unit)? = null,
-    activityStep: Int? = null,
-    activityLevel: SpeakingLevel? = null,
-    activityRole: PlacementRole? = null
+    shouldSavePractice: Boolean = true
 ) {
+    val assessmentContext = activityContext as? CallActivityContext.Assessment
     val viewModel: CallViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val onExitRequested by rememberUpdatedState(onExit)
@@ -46,9 +42,19 @@ fun CallRoute(
     val onCompleted by rememberUpdatedState(onPracticeCompleted)
     val lifecycleOwner = LocalLifecycleOwner.current
     val finishedSession = state.finishedSession
-    val permissionController = rememberCallPermissionController(viewModel, scenario, activityType, communicativeGoal, activityContext)
-    LaunchedEffect(viewModel, scenario.scenarioId, activityType) {
-        if (viewModel.consumeStartReady()) permissionController.onRequestStart()
+    val permissionController =
+        rememberCallPermissionController(
+            viewModel = viewModel,
+            scenario = scenario,
+            activityType = activityType,
+            communicativeGoal = communicativeGoal,
+            activityContext = activityContext,
+            shouldSavePractice = shouldSavePractice
+        )
+    LaunchedEffect(viewModel, lifecycleOwner, scenario.scenarioId, activityType) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            if (viewModel.consumeStartReady()) permissionController.onRequestStart()
+        }
     }
     if (state.isExitReady) {
         LaunchedEffect(viewModel, lifecycleOwner) {
@@ -57,12 +63,13 @@ fun CallRoute(
             }
         }
     }
-    if (finishedSession != null && !state.isExiting && (onCallFinished != null && onPracticeCompleted == null ||
-        finishedSession.outcome == CallOutcome.CANCELLED ||
-        onCallFinished == null && onPracticeCompleted == null && finishedSession.outcome == CallOutcome.COMPLETED)) {
+    if (finishedSession != null && !state.isExiting) {
         LaunchedEffect(finishedSession, lifecycleOwner) {
             lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                if (viewModel.consumeFinishedSession()) {
+                if (viewModel.consumeFinishedSession(
+                    hasCallResultConsumer = onFinished != null,
+                    hasPracticeResultConsumer = onCompleted != null
+                )) {
                     if (onFinished != null) onFinished?.invoke(finishedSession) else onExitRequested()
                 }
             }
@@ -83,7 +90,8 @@ fun CallRoute(
             state.isEndConfirmationVisible -> viewModel.dismissEndConfirmation()
             state.dictionary != null -> viewModel.closeDictionary()
             state.isTranscriptVisible -> viewModel.closeTranscript()
-            state.presentation == CallPresentation.READY || state.presentation == CallPresentation.FAILED -> viewModel.exitCall()
+            state.presentation == CallPresentation.READY || state.presentation == CallPresentation.FAILED ->
+                viewModel.exitCall()
             else -> viewModel.requestEndCall()
         }
     }
@@ -104,9 +112,9 @@ fun CallRoute(
         CallScreen(
             state = state,
             title = scenario.name,
-            activityIndex = activityStep.default(state.activityIndex),
-            activityLevel = activityLevel,
-            activityRole = activityRole,
+            activityIndex = assessmentContext?.step.default(state.activityIndex),
+            activityLevel = assessmentContext?.targetLevel,
+            activityRole = assessmentContext?.role,
             onStartCall = permissionController.onRequestStart,
             onReturnToPreparation = viewModel::exitCall,
             onToggleMute = viewModel::toggleMute,

@@ -53,7 +53,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 @Singleton
-class PracticeCompletionManager @Inject constructor(
+class PracticeCompletionManager
+@Inject
+constructor(
     @ApplicationScope private val applicationScope: CoroutineScope,
     private val authRepository: AuthRepository,
     private val historyRepository: HistoryRepository,
@@ -67,15 +69,18 @@ class PracticeCompletionManager @Inject constructor(
     private val entries = ConcurrentHashMap<String, CompletionEntry>()
     private val pendingLock = Any()
     private val pendingByUser = MutableStateFlow<Map<String, List<PendingPracticeCompletion>>>(emptyMap())
-    @Volatile
-    private var isNetworkAvailable = false
+    @Volatile private var isNetworkAvailable = false
 
     init {
         applicationScope.launch {
-            authRepository.observeSignedInUserId().distinctUntilChanged().catch { failure ->
-                if (failure is CancellationException) throw failure
-                clearOtherUsers(null)
-            }.collect { uid -> clearOtherUsers(uid) }
+            authRepository
+                .observeSignedInUserId()
+                .distinctUntilChanged()
+                .catch { failure ->
+                    if (failure is CancellationException) throw failure
+                    clearOtherUsers(userId = null)
+                }
+                .collect { uid -> clearOtherUsers(uid) }
         }
     }
 
@@ -86,18 +91,25 @@ class PracticeCompletionManager @Inject constructor(
             entries.values.forEach { entry ->
                 synchronized(entry) {
                     val failed = entry.state.value as? PracticeCompletionState.SaveFailed
-                    if (failed != null && !failed.isSaving && entry.automaticRetryJob?.isActive != true) entry.automaticAttempts = 0
+                    if (failed != null && !failed.isSaving && entry.automaticRetryJob?.isActive != true)
+                        entry.automaticAttempts = 0
                 }
             }
             resumePendingSaves()
-        } else entries.values.forEach { it.automaticRetryJob?.cancel(); it.automaticRetryJob = null }
+        } else
+            entries.values.forEach {
+                it.automaticRetryJob?.cancel()
+                it.automaticRetryJob = null
+            }
     }
 
     fun resumePendingSaves() {
         if (!isNetworkAvailable) return
         entries.forEach { (id, entry) ->
             val state = entry.state.value as? PracticeCompletionState.SaveFailed ?: return@forEach
-            if (!state.isSaving && entry.automaticRetryJob?.isActive != true && PracticeSaveRetryRules.canRetry(state.reason)) {
+            if (!state.isSaving &&
+                entry.automaticRetryJob?.isActive != true &&
+                PracticeSaveRetryRules.canRetry(state.reason)) {
                 scheduleRetry(id, entry)
             }
         }
@@ -105,30 +117,38 @@ class PracticeCompletionManager @Inject constructor(
 
     private fun scheduleRetry(attemptId: String, entry: CompletionEntry) {
         val failed = entry.state.value as? PracticeCompletionState.SaveFailed ?: return
-        if (failed.isSaving || !isNetworkAvailable ||
-            !PracticeSaveRetryRules.canRetry(failed.reason) || ownedEntry(attemptId) !== entry) return
+        if (failed.isSaving ||
+            !isNetworkAvailable ||
+            !PracticeSaveRetryRules.canRetry(failed.reason) ||
+            ownedEntry(attemptId) !== entry)
+            return
         synchronized(entry) {
             if (entry.automaticRetryJob?.isActive == true) return
             val delayMillis = PracticeSaveRetryRules.getDelayMillis(entry.automaticAttempts) ?: return
-            entry.automaticRetryJob = entry.scope.launch {
-                delay(delayMillis)
-                entry.automaticRetryJob = null
-                if (!isNetworkAvailable || ownedEntry(attemptId) !== entry) return@launch
-                val pending = entry.state.value as? PracticeCompletionState.SaveFailed ?: return@launch
-                if (pending.isSaving || !PracticeSaveRetryRules.canRetry(pending.reason) ||
-                    !entry.state.compareAndSet(pending, pending.copy(isSaving = true))) return@launch
-                entry.automaticAttempts++
-                entry.status = PracticeCompletionStatus.SAVING
-                publishPending()
-                entry.scope.launch { save(attemptId, entry, pending.completion) }
-            }
+            entry.automaticRetryJob =
+                entry.scope.launch {
+                    delay(delayMillis)
+                    entry.automaticRetryJob = null
+                    if (!isNetworkAvailable || ownedEntry(attemptId) !== entry) return@launch
+                    val pending = entry.state.value as? PracticeCompletionState.SaveFailed ?: return@launch
+                    if (pending.isSaving ||
+                        !PracticeSaveRetryRules.canRetry(pending.reason) ||
+                        !entry.state.compareAndSet(pending, pending.copy(isSaving = true)))
+                        return@launch
+                    entry.automaticAttempts++
+                    entry.status = PracticeCompletionStatus.SAVING
+                    publishPending()
+                    entry.scope.launch { save(attemptId = attemptId, entry = entry, completion = pending.completion) }
+                }
         }
     }
 
     fun discardCompletion(attemptId: String) {
         val entry = ownedEntry(attemptId) ?: return
         val state = entry.state.value
-        if (state !is PracticeCompletionState.AwaitingGrading && (state !is PracticeCompletionState.SaveFailed || state.isSaving)) return
+        if (state !is PracticeCompletionState.AwaitingGrading &&
+            (state !is PracticeCompletionState.SaveFailed || state.isSaving))
+            return
         if (!entry.state.compareAndSet(state, PracticeCompletionState.Unavailable)) return
         entries.remove(attemptId, entry)
         entry.scope.cancel()
@@ -136,60 +156,108 @@ class PracticeCompletionManager @Inject constructor(
         applicationScope.launch { clearEntryAudio(entry) }
     }
 
-    fun completePractice(practice: CompletedPractice): String? = synchronized(pendingLock) {
-        if (!PracticeCompletionRules.canComplete(practice)) return null
-        val userId = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { return null }
-        entries.entries.firstOrNull { (_, entry) ->
-            entry.userId == userId && entry.practice.session.startedAtEpochMillis == practice.session.startedAtEpochMillis &&
-                entry.practice.session.startedAtMillis == practice.session.startedAtMillis && entry.practice.context == practice.context
-        }?.let { return it.key }
-        val attemptId = UUID.randomUUID().toString()
-        val entryScope = CoroutineScope(applicationScope.coroutineContext + SupervisorJob(applicationScope.coroutineContext[Job]))
-        val summary = PendingPracticeCompletion(
-            attemptId = attemptId,
-            practiceType = when (practice.context.activityType) {
-                CallActivityType.FREE_PRACTICE -> PracticeType.FREE_PRACTICE
-                CallActivityType.TRAINING_UNIT -> PracticeType.TRAINING_UNIT
-                else -> PracticeType.GOAL_ASSESSMENT
-            },
-            scenarioTitle = practice.context.scenario.name,
-            startedAtEpochMillis = requireNotNull(practice.session.startedAtEpochMillis),
-            status = PracticeCompletionStatus.GRADING
-        )
-        val session = practice.session.copy(transcript = practice.session.transcript.toList())
-        val context = when (val current = practice.context) {
-            is CallActivityContext.Training -> current.copy(activityScenario = current.activityScenario.copy(requiredActions = current.activityScenario.requiredActions.toList()))
-            else -> current
+    fun completePractice(practice: CompletedPractice): String? =
+        synchronized(pendingLock) {
+            if (!PracticeCompletionRules.canComplete(practice)) return null
+            val userId =
+                try {
+                    authRepository.requireCurrentUserId()
+                } catch (_: IllegalStateException) {
+                    return null
+                }
+            entries.entries
+                .firstOrNull { (_, entry) ->
+                    entry.userId == userId &&
+                        entry.practice.session.startedAtEpochMillis == practice.session.startedAtEpochMillis &&
+                        entry.practice.session.startedAtMillis == practice.session.startedAtMillis &&
+                        entry.practice.context == practice.context
+                }
+                ?.let {
+                    return it.key
+                }
+            val attemptId = UUID.randomUUID().toString()
+            val entryScope =
+                CoroutineScope(
+                    applicationScope.coroutineContext + SupervisorJob(applicationScope.coroutineContext[Job])
+                )
+            val summary =
+                PendingPracticeCompletion(
+                    attemptId = attemptId,
+                    practiceType =
+                        when (practice.context.activityType) {
+                            CallActivityType.FREE_PRACTICE -> PracticeType.FREE_PRACTICE
+                            CallActivityType.TRAINING_UNIT -> PracticeType.TRAINING_UNIT
+                            else -> PracticeType.GOAL_ASSESSMENT
+                        },
+                    scenarioTitle = practice.context.scenario.name,
+                    startedAtEpochMillis = requireNotNull(practice.session.startedAtEpochMillis),
+                    status = PracticeCompletionStatus.GRADING
+                )
+            val session = practice.session.copy(transcript = practice.session.transcript.toList())
+            val context =
+                when (val current = practice.context) {
+                    is CallActivityContext.Training ->
+                        current.copy(
+                            activityScenario =
+                                current.activityScenario.copy(
+                                    requiredActions = current.activityScenario.requiredActions.toList()
+                                )
+                        )
+                    else -> current
+                }
+            val snapshot = practice.copy(session = session, context = context)
+            val entry =
+                CompletionEntry(
+                    userId = userId,
+                    scope = entryScope,
+                    summary = summary,
+                    practice = snapshot,
+                    createdAtMillis = clock.millis()
+                )
+            entries[attemptId] = entry
+            publishPending()
+            entry.expiryJob =
+                entry.scope.launch {
+                    delay(PracticeCompletionRules.AUDIO_RETENTION_MILLIS)
+                    clearEntryAudio(entry)
+                }
+            entry.scope.launch { grade(attemptId, entry) }
+            return attemptId
         }
-        val snapshot = practice.copy(session = session, context = context)
-        val entry = CompletionEntry(userId, entryScope, summary, snapshot, clock.millis())
-        entries[attemptId] = entry
-        publishPending()
-        entry.expiryJob = entry.scope.launch {
-            delay(PracticeCompletionRules.AUDIO_RETENTION_MILLIS)
-            clearEntryAudio(entry)
-        }
-        entry.scope.launch { grade(attemptId, entry) }
-        return attemptId
-    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observeCompletion(attemptId: String): Flow<PracticeCompletionState> {
         val entry = ownedEntry(attemptId)
-        return authRepository.observeSignedInUserId().distinctUntilChanged().flatMapLatest { uid ->
-            if (entry == null || entry.userId != uid) flowOf(PracticeCompletionState.Unavailable)
-            else entry.state.map { state ->
-                val current = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { null }
-                if (current == entry.userId) state else PracticeCompletionState.Unavailable
+        return authRepository
+            .observeSignedInUserId()
+            .distinctUntilChanged()
+            .flatMapLatest { uid ->
+                if (entry == null || entry.userId != uid) flowOf(PracticeCompletionState.Unavailable)
+                else
+                    entry.state.map { state ->
+                        val current =
+                            try {
+                                authRepository.requireCurrentUserId()
+                            } catch (_: IllegalStateException) {
+                                null
+                            }
+                        if (current == entry.userId) state else PracticeCompletionState.Unavailable
+                    }
             }
-        }.distinctUntilChanged()
+            .distinctUntilChanged()
     }
 
     fun observePendingCompletions(): Flow<List<PendingPracticeCompletion>> =
         combine(pendingByUser, authRepository.observeSignedInUserId()) { pending, uid ->
-            val current = try { authRepository.requireCurrentUserId() } catch (_: IllegalStateException) { null }
+            val current =
+                try {
+                    authRepository.requireCurrentUserId()
+                } catch (_: IllegalStateException) {
+                    null
+                }
             if (uid != null && uid == current) pending[uid].defaultEmpty() else emptyList()
-        }.distinctUntilChanged()
+        }
+            .distinctUntilChanged()
 
     fun retryGrading(attemptId: String) {
         val entry = ownedEntry(attemptId) ?: return
@@ -203,20 +271,31 @@ class PracticeCompletionManager @Inject constructor(
     fun saveUnassessed(attemptId: String) {
         val entry = ownedEntry(attemptId) ?: return
         val pending = entry.state.value as? PracticeCompletionState.AwaitingGrading ?: return
-        val reason = if (PracticeCompletionRules.isEvidenceExpired(entry.createdAtMillis, clock.millis()))
-            InsufficientEvidenceReason.AUDIO_UNAVAILABLE else pending.reason
-        val completion = PracticeCompletionRules.createCompletion(attemptId, entry.practice, AssessmentOutcome.InsufficientEvidence(reason))
+        val reason =
+            if (PracticeCompletionRules.isEvidenceExpired(entry.createdAtMillis, clock.millis()))
+                InsufficientEvidenceReason.AUDIO_UNAVAILABLE
+            else pending.reason
+        val completion =
+            PracticeCompletionRules.createCompletion(
+                attemptId = attemptId,
+                practice = entry.practice,
+                outcome = AssessmentOutcome.InsufficientEvidence(reason)
+            )
         if (!entry.state.compareAndSet(pending, PracticeCompletionState.Saving(completion))) return
         entry.expiryJob?.cancel()
         entry.scope.launch {
             clearEntryAudio(entry)
-            save(attemptId, entry, completion)
+            save(attemptId = attemptId, entry = entry, completion = completion)
         }
     }
 
     private fun ownedEntry(attemptId: String): CompletionEntry? {
         val entry = entries[attemptId] ?: return null
-        return try { entry.takeIf { authRepository.requireCurrentUserId() == it.userId } } catch (_: IllegalStateException) { null }
+        return try {
+            entry.takeIf { authRepository.requireCurrentUserId() == it.userId }
+        } catch (_: IllegalStateException) {
+            null
+        }
     }
 
     private suspend fun grade(attemptId: String, entry: CompletionEntry) {
@@ -225,26 +304,41 @@ class PracticeCompletionManager @Inject constructor(
             check(ownedEntry(attemptId) === entry)
             val createdAt = entry.createdAtMillis
             val expired = PracticeCompletionRules.isEvidenceExpired(createdAt, clock.millis())
-            val outcome = if (expired) AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+            val outcome =
+                if (expired) AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
                 else evaluate(entry, attemptId)
             currentCoroutineContext().ensureActive()
             if (ownedEntry(attemptId) !== entry) return
-            val completedOutcome = if (entry.practice.context is CallActivityContext.Training && PracticeCompletionRules.isEvidenceExpired(createdAt, clock.millis()))
-                AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE) else outcome
-            val completion = PracticeCompletionRules.createCompletion(attemptId, entry.practice, completedOutcome)
+            val completedOutcome =
+                if (entry.practice.context is CallActivityContext.Training &&
+                    PracticeCompletionRules.isEvidenceExpired(createdAt, clock.millis()))
+                    AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+                else outcome
+            val completion =
+                PracticeCompletionRules.createCompletion(
+                    attemptId = attemptId,
+                    practice = entry.practice,
+                    outcome = completedOutcome
+                )
             val normalized = completion.outcome
-            if (normalized is AssessmentOutcome.InsufficientEvidence && PracticeCompletionRules.canRetryGrading(normalized.reason) && !expired) {
+            if (normalized is AssessmentOutcome.InsufficientEvidence &&
+                PracticeCompletionRules.canRetryGrading(normalized.reason) &&
+                !expired) {
                 retainAudio = true
-                awaitGrading(attemptId, entry, normalized.reason)
+                awaitGrading(attemptId = attemptId, entry = entry, reason = normalized.reason)
             } else {
-                save(attemptId, entry, completion)
+                save(attemptId = attemptId, entry = entry, completion = completion)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             if (ownedEntry(attemptId) === entry) {
                 retainAudio = true
-                awaitGrading(attemptId, entry, InsufficientEvidenceReason.EVALUATION_FAILED)
+                awaitGrading(
+                    attemptId = attemptId,
+                    entry = entry,
+                    reason = InsufficientEvidenceReason.EVALUATION_FAILED
+                )
             }
         } finally {
             if (!retainAudio) clearEntryAudio(entry)
@@ -253,32 +347,48 @@ class PracticeCompletionManager @Inject constructor(
 
     private fun awaitGrading(attemptId: String, entry: CompletionEntry, reason: InsufficientEvidenceReason) {
         entry.status = PracticeCompletionStatus.AWAITING_GRADING
-        entry.state.value = PracticeCompletionState.AwaitingGrading(reason, entry.createdAtMillis + PracticeCompletionRules.AUDIO_RETENTION_MILLIS)
+        entry.state.value =
+            PracticeCompletionState.AwaitingGrading(
+                reason,
+                entry.createdAtMillis + PracticeCompletionRules.AUDIO_RETENTION_MILLIS
+            )
         publishPending()
         entry.expiryJob?.cancel()
-        entry.expiryJob = entry.scope.launch {
-            delay((entry.createdAtMillis + PracticeCompletionRules.AUDIO_RETENTION_MILLIS - clock.millis())
-                .coerceIn(0L, PracticeCompletionRules.AUDIO_RETENTION_MILLIS))
-            if (ownedEntry(attemptId) !== entry) return@launch
-            clearEntryAudio(entry)
-            val pending = entry.state.value as? PracticeCompletionState.AwaitingGrading ?: return@launch
-            val completion = PracticeCompletionRules.createCompletion(attemptId, entry.practice,
-                AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE))
-            if (entry.state.compareAndSet(pending, PracticeCompletionState.Saving(completion))) {
-                save(attemptId, entry, completion)
+        entry.expiryJob =
+            entry.scope.launch {
+                delay(
+                    (entry.createdAtMillis + PracticeCompletionRules.AUDIO_RETENTION_MILLIS - clock.millis()).coerceIn(
+                        0L,
+                        PracticeCompletionRules.AUDIO_RETENTION_MILLIS
+                    )
+                )
+                if (ownedEntry(attemptId) !== entry) return@launch
+                clearEntryAudio(entry)
+                val pending = entry.state.value as? PracticeCompletionState.AwaitingGrading ?: return@launch
+                val completion =
+                    PracticeCompletionRules.createCompletion(
+                        attemptId = attemptId,
+                        practice = entry.practice,
+                        outcome = AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+                    )
+                if (entry.state.compareAndSet(pending, PracticeCompletionState.Saving(completion))) {
+                    save(attemptId = attemptId, entry = entry, completion = completion)
+                }
             }
-        }
     }
 
     fun retrySave(attemptId: String) {
         val entry = ownedEntry(attemptId) ?: return
         val failed = entry.state.value as? PracticeCompletionState.SaveFailed ?: return
-        if (failed.isSaving || !PracticeSaveRetryRules.canRetryManually(failed.reason) || !entry.state.compareAndSet(failed, failed.copy(isSaving = true))) return
+        if (failed.isSaving ||
+            !PracticeSaveRetryRules.canRetry(failed.reason) ||
+            !entry.state.compareAndSet(failed, failed.copy(isSaving = true)))
+            return
         entry.automaticRetryJob?.cancel()
         entry.automaticRetryJob = null
         entry.status = PracticeCompletionStatus.SAVING
         publishPending()
-        entry.scope.launch { save(attemptId, entry, failed.completion) }
+        entry.scope.launch { save(attemptId = attemptId, entry = entry, completion = failed.completion) }
     }
 
     fun releaseCompletion(attemptId: String) {
@@ -319,13 +429,16 @@ class PracticeCompletionManager @Inject constructor(
             if (entries[attemptId] !== entry || entry.state.value is PracticeCompletionState.Saved) return
             try {
                 check(authRepository.requireCurrentUserId() == entry.userId)
-                if (entry.state.value !is PracticeCompletionState.SaveFailed) entry.state.value = PracticeCompletionState.Saving(completion)
+                if (entry.state.value !is PracticeCompletionState.SaveFailed)
+                    entry.state.value = PracticeCompletionState.Saving(completion)
                 entry.status = PracticeCompletionStatus.SAVING
                 publishPending()
                 currentCoroutineContext().ensureActive()
                 if (entries[attemptId] !== entry) return
                 try {
-                    withTimeout(SAVE_TIMEOUT_MILLIS) { historyRepository.saveCompletedPractice(entry.userId, completion).getOrThrow() }
+                    withTimeout(SAVE_TIMEOUT_MILLIS) {
+                        historyRepository.saveCompletedPractice(entry.userId, completion).getOrThrow()
+                    }
                 } catch (timeout: TimeoutCancellationException) {
                     throw PracticeSaveException(PracticeSaveFailure.NETWORK, timeout)
                 }
@@ -333,7 +446,9 @@ class PracticeCompletionManager @Inject constructor(
                 if (entries[attemptId] !== entry) return
                 check(authRepository.requireCurrentUserId() == entry.userId)
                 val saving = entry.state.value
-                if (saving !is PracticeCompletionState.Saving && (saving !is PracticeCompletionState.SaveFailed || !saving.isSaving)) return
+                if (saving !is PracticeCompletionState.Saving &&
+                    (saving !is PracticeCompletionState.SaveFailed || !saving.isSaving))
+                    return
                 if (!entry.state.compareAndSet(saving, PracticeCompletionState.Saved(completion))) return
                 entry.automaticRetryJob?.cancel()
                 publishPending()
@@ -345,7 +460,11 @@ class PracticeCompletionManager @Inject constructor(
                     val reason = (failure as? PracticeSaveException)?.reason.default(PracticeSaveFailure.UNKNOWN)
                     val saving = entry.state.value
                     if (saving is PracticeCompletionState.Saved || saving == PracticeCompletionState.Unavailable) return
-                    if (!entry.state.compareAndSet(saving, PracticeCompletionState.SaveFailed(completion, reason = reason))) return
+                    if (!entry.state.compareAndSet(
+                        saving,
+                        PracticeCompletionState.SaveFailed(completion, reason = reason)
+                    ))
+                        return
                     entry.status = PracticeCompletionStatus.SAVE_FAILED
                     publishPending()
                     scheduleRetry(attemptId, entry)
@@ -355,73 +474,87 @@ class PracticeCompletionManager @Inject constructor(
     }
 
     private fun removeSaved(attemptId: String, entry: CompletionEntry) {
-        if (entry.isRead.get() && entry.state.value is PracticeCompletionState.Saved && entries.remove(attemptId, entry)) {
+        if (entry.isRead.get() &&
+            entry.state.value is PracticeCompletionState.Saved &&
+            entries.remove(attemptId, entry)) {
             entry.scope.cancel()
             publishPending()
         }
     }
 
-    private fun clearOtherUsers(userId: String?) = synchronized(pendingLock) {
-        entries.forEach { (attemptId, entry) ->
-            if (entry.userId != userId && entries.remove(attemptId, entry)) {
-                entry.state.value = PracticeCompletionState.Unavailable
-                entry.scope.cancel()
-                applicationScope.launch {
-                    clearEntryAudio(entry)
+    private fun clearOtherUsers(userId: String?) =
+        synchronized(pendingLock) {
+            entries.forEach { (attemptId, entry) ->
+                if (entry.userId != userId && entries.remove(attemptId, entry)) {
+                    entry.state.value = PracticeCompletionState.Unavailable
+                    entry.scope.cancel()
+                    applicationScope.launch { clearEntryAudio(entry) }
                 }
             }
+            publishPending()
         }
-        publishPending()
-    }
 
     private fun publishPending() {
         synchronized(pendingLock) {
-            val pending = entries.values
-                .filter { it.state.value != PracticeCompletionState.Unavailable && it.state.value !is PracticeCompletionState.Saved }
-                .map { it.userId to it.summary.copy(status = it.status, saveFailure = (it.state.value as? PracticeCompletionState.SaveFailed)?.reason) }
-            pendingByUser.value = pending.groupBy { it.first }
-                .mapValues { (_, pending) ->
-                    pending.map { it.second }
-                        .sortedWith(compareByDescending<PendingPracticeCompletion> { it.startedAtEpochMillis }.thenBy { it.attemptId })
-                }
+            val pending =
+                entries.values
+                    .filter {
+                        it.state.value != PracticeCompletionState.Unavailable &&
+                            it.state.value !is PracticeCompletionState.Saved
+                    }
+                    .map {
+                        it.userId to
+                            it.summary.copy(
+                                status = it.status,
+                                saveFailure = (it.state.value as? PracticeCompletionState.SaveFailed)?.reason
+                            )
+                    }
+            pendingByUser.value =
+                pending
+                    .groupBy { it.first }
+                    .mapValues { (_, pending) ->
+                        pending
+                            .map { it.second }
+                            .sortedWith(
+                                compareByDescending<PendingPracticeCompletion> { it.startedAtEpochMillis }
+                                    .thenBy { it.attemptId }
+                            )
+                    }
         }
     }
 
     private suspend fun clearEntryAudio(entry: CompletionEntry) {
         val audioId = entry.practice.session.assessmentAudioId ?: return
         if (!entry.isAudioCleared.compareAndSet(false, true)) return
-        val cleared = withContext(NonCancellable) {
-            try {
-                assessmentRepository.clearAudioEvidence(audioId)
-                true
-            } catch (cancelled: CancellationException) {
-                entry.isAudioCleared.set(false)
-                throw cancelled
-            } catch (_: Exception) {
-                false
+        val cleared =
+            withContext(NonCancellable) {
+                try {
+                    assessmentRepository.clearAudioEvidence(audioId)
+                    true
+                } catch (cancelled: CancellationException) {
+                    entry.isAudioCleared.set(false)
+                    throw cancelled
+                } catch (_: Exception) {
+                    false
+                }
             }
-        }
         if (!cleared) entry.isAudioCleared.set(false)
     }
 
     private class CompletionEntry(
         val userId: String,
         val scope: CoroutineScope,
-        var summary: PendingPracticeCompletion,
+        val summary: PendingPracticeCompletion,
         val practice: CompletedPractice,
         val createdAtMillis: Long
     ) {
         val state = MutableStateFlow<PracticeCompletionState>(PracticeCompletionState.Grading)
         var expiryJob: Job? = null
-        @Volatile
-        var automaticRetryJob: Job? = null
-        @Volatile
-        var automaticAttempts = 0
+        @Volatile var automaticRetryJob: Job? = null
+        @Volatile var automaticAttempts = 0
         val isRead = AtomicBoolean(false)
         val isAudioCleared = AtomicBoolean(false)
         val mutex = Mutex()
-        @Volatile
-        var status = PracticeCompletionStatus.GRADING
+        @Volatile var status = PracticeCompletionStatus.GRADING
     }
-
 }

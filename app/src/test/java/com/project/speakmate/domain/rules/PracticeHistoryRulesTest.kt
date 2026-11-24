@@ -1,14 +1,88 @@
 package com.project.speakmate.domain.rules
 
 import com.project.speakmate.domain.model.PracticeAttempt
+import com.project.speakmate.domain.model.PendingPracticeCompletion
+import com.project.speakmate.domain.model.PracticeCompletionStatus
 import com.project.speakmate.domain.model.PracticeType
+import com.project.speakmate.domain.model.PracticeHistoryCursor
+import com.project.speakmate.domain.model.PracticeHistoryPage
 import com.project.speakmate.domain.model.RequiredAction
 import java.util.Date
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class PracticeHistoryRulesTest {
+    @Test
+    fun refreshDeduplicatesInServerOrderAndPreservesThePageCursor() {
+        val cursor = PracticeHistoryCursor(
+            userId = "owner",
+            practiceType = null,
+            startedAtSeconds = 1L,
+            startedAtNanoseconds = 0,
+            attemptId = "next"
+        )
+        val page = PracticeHistoryPage(attempts = listOf(attempt, attempt), nextCursor = cursor, hasMore = true)
+        val merged = PracticeHistoryRules.mergePage(
+            attempts = listOf(attempt.copy(attemptId = "old")),
+            page = page,
+            cursor = null,
+            isRefresh = true
+        )
+        assertEquals(listOf(attempt), merged.attempts)
+        assertEquals(cursor, merged.nextCursor)
+        assertTrue(merged.hasMore)
+        assertEquals(2, page.attempts.size)
+    }
+
+    @Test
+    fun loadingMoreMergesRowsButRejectsMissingOrRepeatedNonterminalCursor() {
+        val cursor = PracticeHistoryCursor(
+            userId = "owner",
+            practiceType = null,
+            startedAtSeconds = 1L,
+            startedAtNanoseconds = 0,
+            attemptId = "cursor"
+        )
+        val next = cursor.copy(attemptId = "next")
+        val second = attempt.copy(attemptId = "second")
+        val merged = PracticeHistoryRules.mergePage(
+            attempts = listOf(attempt),
+            page = PracticeHistoryPage(attempts = listOf(attempt, second), nextCursor = next, hasMore = true),
+            cursor = cursor,
+            isRefresh = false
+        )
+        assertEquals(listOf(attempt, second), merged.attempts)
+        listOf(null, cursor).forEach { invalid ->
+            assertThrows(IllegalStateException::class.java) {
+                PracticeHistoryRules.mergePage(
+                    attempts = listOf(attempt),
+                    page = PracticeHistoryPage(attempts = emptyList(), nextCursor = invalid, hasMore = true),
+                    cursor = cursor,
+                    isRefresh = false
+                )
+            }
+        }
+    }
+
+    @Test
+    fun pendingBridgeKeepsOnlyUnloadedAttemptsAndDoesNotMutateRemovedEntries() {
+        val removed = listOf("attempt", "missing").map { id ->
+            PendingPracticeCompletion(
+                attemptId = id,
+                practiceType = PracticeType.FREE_PRACTICE,
+                scenarioTitle = id,
+                startedAtEpochMillis = 0L,
+                status = PracticeCompletionStatus.SAVE_FAILED
+            )
+        }
+        val bridge = PracticeHistoryRules.getPendingBridge(removed, listOf(attempt))
+        assertEquals(listOf("missing"), bridge.map { it.attemptId })
+        assertEquals(PracticeCompletionStatus.SAVING, bridge.single().status)
+        assertTrue(removed.all { it.status == PracticeCompletionStatus.SAVE_FAILED })
+    }
+
     private val attempt = PracticeAttempt(attemptId = "attempt", scenarioId = "scenario", practiceType = PracticeType.FREE_PRACTICE,
         startedAt = Date(0), endedAt = Date(0), result = null, criteriaResult = null,
         requiredActionResults = emptyMap(), transcripts = emptyList(), feedbackSummary = null)

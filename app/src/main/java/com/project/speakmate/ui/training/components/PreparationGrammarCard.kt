@@ -13,6 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.domain.model.PronunciationPlaybackState
+import com.project.speakmate.ui.components.card.SpeakMateCard
+import com.project.speakmate.ui.components.text.CaptionText
+import com.project.speakmate.ui.components.text.DetailText
+import com.project.speakmate.ui.components.text.TitleText
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.state.PreparationGrammarUiState
@@ -22,21 +27,29 @@ fun PreparationGrammarCard(
     grammar: PreparationGrammarUiState,
     onPlayExample: (String) -> Unit,
     modifier: Modifier = Modifier,
-    playback: com.project.speakmate.domain.model.PronunciationPlaybackState = com.project.speakmate.domain.model.PronunciationPlaybackState()
+    playback: PronunciationPlaybackState = PronunciationPlaybackState()
 ) {
-    Column(modifier.fillMaxWidth().background(DesignColor.Surface, RoundedCornerShape(16.dp)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(grammar.title, style = DesignTypography.Title, color = DesignColor.Text)
-        Text(grammar.explanation, style = DesignTypography.Detail, color = DesignColor.Muted)
-        Column(Modifier.fillMaxWidth().background(DesignColor.ExampleSurface, RoundedCornerShape(16.dp)).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.preparation_structure), style = DesignTypography.Label, color = DesignColor.Muted)
-            Text(grammar.structure, style = DesignTypography.Detail, color = DesignColor.Text)
+    SpeakMateCard(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = 16.dp,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TitleText(text = grammar.title)
+        DetailText(text = grammar.explanation)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(DesignColor.ExampleSurface, RoundedCornerShape(16.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CaptionText(text = stringResource(R.string.preparation_structure), style = DesignTypography.Label)
+            DetailText(text = grammar.structure, color = DesignColor.Text)
         }
-        val examples = grammar.examples.ifEmpty { listOf(grammar.example).filter { it.sentence.isNotBlank() } }
+        val examples = grammar.examples
         examples.forEach { example ->
             val onPlay = remember(example.sentence, onPlayExample) { { onPlayExample(example.sentence) } }
-            PreparationExampleCard(example, onPlay, playback = playback)
+            PreparationExampleCard(example = example, onPlayExample = onPlay, playback = playback)
         }
         PreparationNote(grammar.usageNote)
     }

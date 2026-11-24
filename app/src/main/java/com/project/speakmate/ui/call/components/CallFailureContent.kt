@@ -1,6 +1,5 @@
 package com.project.speakmate.ui.call.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,14 +16,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.BackAppBar
-import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.components.SecondaryButton
+import com.project.speakmate.ui.call.state.CallPresentation
+import com.project.speakmate.ui.components.button.PrimaryButton
+import com.project.speakmate.ui.components.button.SecondaryButton
+import com.project.speakmate.ui.components.header.BackAppBar
+import com.project.speakmate.ui.components.state.StatusContent
+import com.project.speakmate.ui.components.text.BodyText
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -39,25 +40,61 @@ fun CallFailureContent(
 ) {
     Column(modifier.fillMaxSize().background(DesignColor.Background)) {
         BackAppBar(
-            stringResource(if (isConnectionFailure) R.string.call_failure_header else R.string.call_failure_general_header),
-            onExit,
+            title =
+                stringResource(
+                    if (isConnectionFailure) R.string.call_failure_header else R.string.call_failure_general_header
+                ),
+            onBack = onExit,
             isClose = true
         )
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val contentHeight = maxHeight
-            Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = contentHeight)
-                .padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 36.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    CallAvatar(com.project.speakmate.ui.call.state.CallPresentation.FAILED, Modifier.size(200.dp), isConnectionFailure = isConnectionFailure)
-                    Text(stringResource(R.string.call_failure_title), style = DesignTypography.Heading, color = DesignColor.Primary, textAlign = TextAlign.Center)
-                    Text(description, style = DesignTypography.Body, color = DesignColor.Text, textAlign = TextAlign.Center)
-                    if (isConnectionFailure) {
-                        Text(stringResource(R.string.call_failure_note), style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = contentHeight)
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 24.dp, bottom = 36.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                StatusContent(
+                    title = stringResource(R.string.call_failure_title),
+                    titleStyle = DesignTypography.Heading,
+                    titleColor = DesignColor.Primary,
+                    titleTextAlign = TextAlign.Center,
+                    description = description,
+                    descriptionStyle = DesignTypography.Body,
+                    descriptionColor = DesignColor.Text,
+                    descriptionTextAlign = TextAlign.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    illustration = {
+                        CallAvatar(
+                            presentation = CallPresentation.FAILED,
+                            modifier = Modifier.size(200.dp),
+                            isConnectionFailure = isConnectionFailure
+                        )
+                    },
+                    actions = {
+                        if (isConnectionFailure) {
+                            BodyText(
+                                text = stringResource(R.string.call_failure_note),
+                                color = DesignColor.Muted,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
-                }
+                )
             }
         }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             if (retryLabel != null) PrimaryButton(retryLabel, onRetry)
             SecondaryButton(stringResource(R.string.call_exit), onExit)
         }

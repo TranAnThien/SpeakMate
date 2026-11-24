@@ -7,7 +7,9 @@ import java.util.Locale
 
 class AppLocaleProvider {
     fun wrap(base: Context): Context {
-        val language = AppLanguageLocalDataSource(base).getSavedLanguage()
+        val language =
+            (base.applicationContext as? SpeakMateApplication)?.getLanguageLocalDataSource()?.getSavedLanguage()
+                ?: AppLanguageLocalDataSource(base).readSavedLanguage()
         val locale = Locale.forLanguageTag(language.languageTag)
         Locale.setDefault(locale)
         val configuration = Configuration(base.resources.configuration)

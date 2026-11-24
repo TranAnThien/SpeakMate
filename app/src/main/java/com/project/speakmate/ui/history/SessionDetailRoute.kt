@@ -18,7 +18,6 @@ fun SessionDetailRoute(
         onBack = onBack,
         onRetrySession = viewModel::retry,
         onRetryTranscript = viewModel::retryTranscript,
-        onDismissError = onBack,
         onReturnToHistory = onBack,
         onRetryGrading = viewModel::retryGrading,
         onSaveUnassessed = viewModel::saveUnassessed,

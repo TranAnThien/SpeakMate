@@ -11,7 +11,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.ui.training.state.TrainingActivityDestination
-import com.project.speakmate.ui.training.state.TrainingPathEffect
 
 @Composable
 fun TrainingPathRoute(
@@ -29,10 +28,10 @@ fun TrainingPathRoute(
     }
     val lifecycleOwner = LocalLifecycleOwner.current
     val openActivity by rememberUpdatedState(onOpenActivity)
-    LaunchedEffect(viewModel, lifecycleOwner) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            viewModel.uiEffect.collect { effect ->
-                when (effect) { is TrainingPathEffect.OpenActivity -> openActivity(effect.destination) }
+    LaunchedEffect(state.pendingNavigation, viewModel, lifecycleOwner) {
+        if (state.pendingNavigation != null) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                viewModel.consumePendingNavigation()?.let(openActivity)
             }
         }
     }

@@ -19,6 +19,7 @@ class DebugCallActivity : ComponentActivity() {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(AppLocaleProvider().wrap(base))
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -28,11 +29,16 @@ class DebugCallActivity : ComponentActivity() {
         hideSpeakMateSystemBars(window)
         val scenario = DebugCallScenario.getScenario(this)
         setContent {
-                SpeakMateTheme {
-                    SpeakMateWindowContent {
-                        CallRoute(scenario, CallActivityType.FREE_PRACTICE, onExit = ::finish)
-                    }
+            SpeakMateTheme {
+                SpeakMateWindowContent {
+                    CallRoute(
+                        scenario = scenario,
+                        activityType = CallActivityType.FREE_PRACTICE,
+                        onExit = ::finish,
+                        shouldSavePractice = false
+                    )
                 }
+            }
         }
     }
 

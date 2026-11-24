@@ -16,5 +16,6 @@ data class HistoryUiState(
     val hasRefreshError: Boolean = false,
     val hasMore: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val hasLoadMoreError: Boolean = false
+    val hasLoadMoreError: Boolean = false,
+    val pendingNavigation: HistoryNavigation? = null
 )

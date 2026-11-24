@@ -1,12 +1,12 @@
 package com.project.speakmate.ui.training.state
 
 import androidx.compose.runtime.Immutable
+import com.project.speakmate.ui.components.assessment.AssessmentCriterionType
 
 @Immutable
 data class UnitResultCriterionUiState(
     val id: String = "",
-    val name: String = "",
     val description: String = "",
     val evaluation: UnitResultEvaluation = UnitResultEvaluation.NOT_EVALUATED,
-    val criterion: UnitResultCriterionType = UnitResultCriterionType.RANGE
+    val criterion: AssessmentCriterionType = AssessmentCriterionType.RANGE
 )

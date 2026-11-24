@@ -33,12 +33,15 @@ import com.project.speakmate.domain.rules.AssessmentRules
 import com.project.speakmate.domain.rules.PracticeCompletionRules
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.call.state.CallPresentation
+import com.project.speakmate.ui.call.state.CallDictionaryStatus
 import com.project.speakmate.ui.call.state.CallVocabularySaveStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import java.time.Clock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -120,8 +123,7 @@ class CallViewModelTest {
 
         viewModel = CallViewModel(
             repository = callRepository,
-            dictionaryRepository = dictionaryRepository,
-            savedVocabularyRepository = savedVocabularyRepository,
+            dictionaryManager = CallDictionaryManager(dictionaryRepository, savedVocabularyRepository, callRepository),
             completionRepository = completionRepository
         )
     }
@@ -399,9 +401,153 @@ class CallViewModelTest {
         advanceUntilIdle()
         assertEquals(CallVocabularySaveStatus.MOVED_TO_TOP, viewModel.uiState.value.dictionary?.saveStatus)
     }
+
+    @Test
+    fun startCallDoesNotStickInConnectingWhenSessionRemainsReady() = runTest {
+        viewModel.startCall(CallActivityContext.FreePractice(testScenario))
+        advanceUntilIdle()
+
+        assertEquals(CallPresentation.READY, viewModel.uiState.value.presentation)
+
+        sessionStateFlow.value = CallSessionState(state = CallState.CALLING)
+        advanceUntilIdle()
+
+        assertEquals(CallPresentation.CONNECTING, viewModel.uiState.value.presentation)
+    }
+
+    @Test
+    fun requestEndCallWhileReadyCancelsStartAndExits() = runTest {
+        viewModel.startCall(CallActivityContext.FreePractice(testScenario))
+        advanceUntilIdle()
+
+        viewModel.requestEndCall()
+        advanceUntilIdle()
+
+        verify(exactly = 1) { callRepository.endCall() }
+        verify(exactly = 1) { callRepository.close() }
+        assertTrue(viewModel.uiState.value.isExiting)
+    }
     @After
     fun tearDown() {
         completionScope.cancel()
+    }
+
+    @Test
+    fun dictionaryLookupRetriesErrorsAndKeepsTheSelectedSentence() = runTest {
+        openDictionarySession()
+        coEvery { dictionaryRepository.lookUp("coffee", "Want coffee?") } returns
+            DictionaryLookupResult.Error(IllegalStateException())
+        viewModel.selectWord("message", 12, "coffee")
+        advanceUntilIdle()
+        assertEquals(CallDictionaryStatus.ERROR, viewModel.uiState.value.dictionary?.status)
+        assertEquals("Want coffee?", viewModel.uiState.value.dictionary?.sentence)
+        coEvery { dictionaryRepository.lookUp("coffee", "Want coffee?") } returns
+            DictionaryLookupResult.NotFound
+        viewModel.retryLookup()
+        advanceUntilIdle()
+        assertEquals(CallDictionaryStatus.NOT_FOUND, viewModel.uiState.value.dictionary?.status)
+        viewModel.selectWord("message", -1, "coffee")
+        assertEquals(CallDictionaryStatus.NOT_FOUND, viewModel.uiState.value.dictionary?.status)
+    }
+
+    @Test
+    fun dictionarySavesAllRepositoryOutcomesAndFailure() = runTest {
+        openDictionarySession()
+        coEvery { dictionaryRepository.lookUp(any(), any()) } returns DictionaryLookupResult.Found(
+            VocabularyItem("coffee", "meaning", "phonetic", "noun", LearningExample("example", "translation"))
+        )
+        val outcomes = listOf(
+            Result.success(VocabularySaveResult.SAVED) to CallVocabularySaveStatus.SAVED,
+            Result.success(VocabularySaveResult.MOVED_TO_TOP) to CallVocabularySaveStatus.MOVED_TO_TOP,
+            Result.success(VocabularySaveResult.SAVED_REPLACING_OLDEST) to
+                CallVocabularySaveStatus.SAVED_REPLACING_OLDEST,
+            Result.failure<VocabularySaveResult>(IllegalStateException()) to CallVocabularySaveStatus.FAILED
+        )
+        outcomes.forEach { (outcome, expected) ->
+            coEvery { savedVocabularyRepository.saveVocabulary(any()) } returns outcome
+            viewModel.selectWord("message", 12, "coffee")
+            advanceUntilIdle()
+            viewModel.saveDictionaryWord()
+            advanceUntilIdle()
+            assertEquals(expected, viewModel.uiState.value.dictionary?.saveStatus)
+        }
+        coVerify(exactly = outcomes.size) { savedVocabularyRepository.saveVocabulary(any()) }
+    }
+
+    @Test
+    fun closingDictionaryCancelsLookupAndStopsPronunciation() = runTest {
+        openDictionarySession()
+        var isCancelled = false
+        val gate = CompletableDeferred<DictionaryLookupResult>()
+        coEvery { dictionaryRepository.lookUp(any(), any()) } coAnswers {
+            try {
+                gate.await()
+            } finally {
+                isCancelled = true
+            }
+        }
+        viewModel.selectWord("message", 12, "coffee")
+        runCurrent()
+        viewModel.closeDictionary()
+        runCurrent()
+        assertTrue(isCancelled)
+        assertNull(viewModel.uiState.value.dictionary)
+        verify(atLeast = 2) { callRepository.stopPronunciation() }
+    }
+
+    @Test
+    fun dictionaryPronunciationTracksSessionAndClosesWithTranscript() = runTest {
+        openDictionarySession()
+        coEvery { dictionaryRepository.lookUp(any(), any()) } returns DictionaryLookupResult.Found(
+            VocabularyItem("coffee", "meaning", "", "noun", LearningExample("", ""))
+        )
+        viewModel.selectWord("message", 12, "coffee")
+        advanceUntilIdle()
+        viewModel.playDictionaryWord()
+        assertTrue(viewModel.uiState.value.dictionary?.isPronunciationLoading == true)
+        verify(exactly = 1) { callRepository.playPronunciation("coffee") }
+        sessionStateFlow.value = sessionStateFlow.value.copy(
+            pronunciation = com.project.speakmate.domain.model.PronunciationState.PLAYING,
+            pronunciationText = "coffee"
+        )
+        runCurrent()
+        assertTrue(viewModel.uiState.value.dictionary?.isPronouncing == true)
+        Assert.assertFalse(viewModel.uiState.value.dictionary?.isPronunciationLoading == true)
+        viewModel.stopDictionaryWord()
+        viewModel.closeTranscript()
+        assertNull(viewModel.uiState.value.dictionary)
+        Assert.assertFalse(viewModel.uiState.value.isTranscriptVisible)
+    }
+
+    @Test
+    fun clearingCallViewModelClosesTheRepositoryWhileDictionaryLookupIsPending() = runTest {
+        openDictionarySession()
+        val gate = CompletableDeferred<DictionaryLookupResult>()
+        coEvery { dictionaryRepository.lookUp(any(), any()) } coAnswers { gate.await() }
+        viewModel.selectWord("message", 12, "coffee")
+        val store = androidx.lifecycle.ViewModelStore()
+        store.put("call", viewModel)
+        store.clear()
+        runCurrent()
+        verify(exactly = 1) { callRepository.close() }
+        assertTrue(viewModel.uiState.value.dictionary?.status == CallDictionaryStatus.LOADING)
+    }
+
+    private suspend fun openDictionarySession() {
+        viewModel.startCall(CallActivityContext.FreePractice(testScenario))
+        sessionStateFlow.value = CallSessionState(
+            state = CallState.ACTIVE,
+            transcript = listOf(TranscriptMessage(
+                messageId = "message",
+                senderType = SenderType.USER,
+                content = "Hello! Want coffee? Yes.",
+                orderIndex = 0,
+                isFinal = true,
+                isInterrupted = false
+            ))
+        )
+        kotlinx.coroutines.yield()
+        viewModel.openTranscript()
     }
 
     private fun trainingContext() = CallActivityContext.Training(

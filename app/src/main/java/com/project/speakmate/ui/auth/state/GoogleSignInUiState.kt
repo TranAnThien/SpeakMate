@@ -1,7 +1,7 @@
 package com.project.speakmate.ui.auth.state
 
 import androidx.compose.runtime.Immutable
-import com.project.speakmate.ui.components.LegalDocument
+import com.project.speakmate.ui.components.dialog.LegalDocument
 
 @Immutable
 data class GoogleSignInUiState(

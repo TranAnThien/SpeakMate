@@ -16,5 +16,5 @@ data class HistoryPendingSessionUiState(
     val saveFailure: PracticeSaveFailure? = null
 ) {
     val canRetrySave: Boolean
-        get() = saveFailure?.let(PracticeSaveRetryRules::canRetryManually) != false
+        get() = saveFailure?.let(PracticeSaveRetryRules::canRetry) != false
 }

@@ -46,8 +46,7 @@ class AuthViewModelTest {
         private const val TOKEN = "sample-token"
     }
 
-    @get:Rule
-    val mainDispatcherRule = MainDispatcherRule(StandardTestDispatcher())
+    @get:Rule val mainDispatcherRule = MainDispatcherRule(StandardTestDispatcher())
     private val auth = mockk<AuthRepository>()
     private val users = mockk<UserRepository>()
     private val signedInUserId = MutableStateFlow<String?>(null)
@@ -57,16 +56,19 @@ class AuthViewModelTest {
 
     @Before
     fun setUp() {
+        every { auth.isNetworkAvailable() } returns true
         every { auth.observeSignedInUserId() } returns signedInUserId
         every { auth.requireCurrentUserId() } answers { checkNotNull(signedInUserId.value) }
-        coEvery { auth.signInWithGoogle(any()) } coAnswers {
-            signedInUserId.value = USER_ID
-            Result.success(USER_ID)
-        }
-        coEvery { auth.signOut() } coAnswers {
-            signedInUserId.value = null
-            Result.success(Unit)
-        }
+        coEvery { auth.signInWithGoogle(any()) } coAnswers
+            {
+                signedInUserId.value = USER_ID
+                Result.success(USER_ID)
+            }
+        coEvery { auth.signOut() } coAnswers
+            {
+                signedInUserId.value = null
+                Result.success(Unit)
+            }
         coEvery { users.getUser(any()) } answers { Result.success(profile(firstArg())) }
         coEvery { users.getOrCreateUser(any()) } answers { Result.success(firstArg<User>()) }
         viewModel = AuthViewModel(auth, users)
@@ -82,11 +84,12 @@ class AuthViewModelTest {
     fun retryRestartsASessionObserverAfterUpstreamFailure() = runTest {
         store.clear()
         var subscriptions = 0
-        every { auth.observeSignedInUserId() } returns flow {
-            subscriptions++
-            if (subscriptions == 1) throw IllegalStateException()
-            emitAll(signedInUserId)
-        }
+        every { auth.observeSignedInUserId() } returns
+            flow {
+                subscriptions++
+                if (subscriptions == 1) throw IllegalStateException()
+                emitAll(signedInUserId)
+            }
         viewModel = AuthViewModel(auth, users)
         store.put(VIEW_MODEL_KEY, viewModel)
         advanceUntilIdle()
@@ -131,11 +134,20 @@ class AuthViewModelTest {
         advanceUntilIdle()
         assertTrue(viewModel.startSignIn())
         assertFalse(viewModel.startSignIn())
-        viewModel.handleGoogleSignIn(TOKEN, null, null, null)
-        viewModel.handleGoogleSignIn(TOKEN, null, null, null)
+        viewModel.handleGoogleSignIn(idToken = TOKEN, displayName = null, email = null, photoUrl = null)
+        viewModel.handleGoogleSignIn(idToken = TOKEN, displayName = null, email = null, photoUrl = null)
         advanceUntilIdle()
         coVerify(exactly = 1) { auth.signInWithGoogle(TOKEN) }
-        coVerify { users.getOrCreateUser(match { it.level == SpeakingLevel.NOT_ASSESSED && it.displayName.isEmpty() && it.email.isEmpty() && it.photoUrl.isEmpty() }) }
+        coVerify {
+            users.getOrCreateUser(
+                match {
+                    it.level == SpeakingLevel.NOT_ASSESSED &&
+                        it.displayName.isEmpty() &&
+                        it.email.isEmpty() &&
+                        it.photoUrl.isEmpty()
+                }
+            )
+        }
     }
 
     @Test
@@ -144,7 +156,7 @@ class AuthViewModelTest {
         coEvery { users.getOrCreateUser(any()) } coAnswers { Result.success(gate.await()) }
         advanceUntilIdle()
         viewModel.startSignIn()
-        viewModel.handleGoogleSignIn(TOKEN, null, null, null)
+        viewModel.handleGoogleSignIn(idToken = TOKEN, displayName = null, email = null, photoUrl = null)
         runCurrent()
         assertFalse(viewModel.uiState.value.isProfileReady)
         assertTrue(viewModel.uiState.value.isCheckingProfile)
@@ -179,7 +191,15 @@ class AuthViewModelTest {
 
     @Test
     fun assessedAccountDoesNotOpenInitialPlacement() = runTest {
-        coEvery { users.getUser(USER_ID) } returns Result.success(profile(USER_ID).copy(level = SpeakingLevel.A2, trainingProgress = TrainingProgress(0, 0, TrainingStage.UNIT)))
+        coEvery { users.getUser(USER_ID) } returns
+            Result.success(
+                profile(USER_ID)
+                    .copy(
+                        level = SpeakingLevel.A2,
+                        trainingProgress =
+                            TrainingProgress(currentGoalOrder = 0, currentUnitOrder = 0, stage = TrainingStage.UNIT)
+                    )
+            )
         signedInUserId.value = USER_ID
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isProfileReady)
@@ -203,12 +223,13 @@ class AuthViewModelTest {
     fun signOutCleanupSurvivesTheNullUidCallback() = runTest {
         val gate = CompletableDeferred<Unit>()
         var isCleanupFinished = false
-        coEvery { auth.signOut() } coAnswers {
-            signedInUserId.value = null
-            gate.await()
-            isCleanupFinished = true
-            Result.success(Unit)
-        }
+        coEvery { auth.signOut() } coAnswers
+            {
+                signedInUserId.value = null
+                gate.await()
+                isCleanupFinished = true
+                Result.success(Unit)
+            }
         coEvery { users.getUser(USER_ID) } returns Result.success(null)
         signedInUserId.value = USER_ID
         advanceUntilIdle()
@@ -222,5 +243,6 @@ class AuthViewModelTest {
         assertNull(viewModel.uiState.value.userId)
     }
 
-    private fun profile(userId: String) = User(userId, "Sample", "sample@example.com", "")
+    private fun profile(userId: String) =
+        User(userId = userId, displayName = "Sample", email = "sample@example.com", photoUrl = "")
 }

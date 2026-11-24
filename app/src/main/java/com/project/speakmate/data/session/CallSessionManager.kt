@@ -50,7 +50,6 @@ class CallSessionManager(
         private const val RECONNECT_WINDOW_MILLIS = 30_000L
         private const val MICROPHONE_WINDOW_MILLIS = 60_000L
         private const val FINALIZE_WINDOW_MILLIS = 3_000L
-        private const val PRONUNCIATION_TIMEOUT_MILLIS = 10_000L
         private const val MAX_SERVER_EVENTS = 256
     }
 
@@ -68,35 +67,47 @@ class CallSessionManager(
     val sessionState = mutableSessionState.asStateFlow()
     private val activeAudioLevel = MutableStateFlow<StateFlow<Float>?>(null)
     @OptIn(ExperimentalCoroutinesApi::class)
-    val audioLevel = activeAudioLevel.flatMapLatest { it ?: flowOf(0f) }
-        .stateIn(scope, SharingStarted.Eagerly, 0f)
+    val audioLevel =
+        activeAudioLevel
+            .flatMapLatest { it ?: flowOf(0f) }
+            .stateIn(scope = scope, started = SharingStarted.Eagerly, initialValue = 0f)
     private var isForeground = false
     private var session: CallSession? = null
 
     init {
-        scope.launch {
-            for (command in commands) command()
-        }
+        scope.launch { for (command in commands) command() }
     }
 
-    fun startCall(scenario: Scenario, activityType: CallActivityType, communicativeGoal: String) {
+    fun startCall(scenario: Scenario, activityType: CallActivityType) {
         val revision = mediaRevision.get()
         commands.trySend command@{
             if (!isMediaCurrent(revision) || !isForeground || session != null) return@command
-            val media = try {
-                createMedia()
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Exception) {
-                mutableSessionState.value = CallSessionState(
-                    state = CallState.FAILED,
-                    failure = CallFailure.CONFIGURATION,
-                    outcome = CallOutcome.FAILED
+            val media =
+                try {
+                    createMedia()
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Exception) {
+                    mutableSessionState.value =
+                        CallSessionState(
+                            state = CallState.FAILED,
+                            failure = CallFailure.CONFIGURATION,
+                            outcome = CallOutcome.FAILED
+                        )
+                    return@command
+                }
+            val current =
+                CallSession(
+                    media = media,
+                    events = Channel(MAX_SERVER_EVENTS),
+                    scope = createSessionScope(),
+                    callingAtMillis = nowMillis(),
+                    mediaRevision = revision,
+                    scenario = scenario,
+                    activityType = activityType
                 )
-                return@command
-            }
-            val current = CallSession(media, Channel(MAX_SERVER_EVENTS), createSessionScope(), nowMillis(), revision, scenario, activityType)
             session = current
+            mutableSessionState.value = CallSessionState(state = CallState.CALLING)
             try {
                 current.media.configureAssessmentRecording(current.activityType) {
                     commands.trySend {
@@ -123,9 +134,12 @@ class CallSessionManager(
         commands.trySend command@{
             val current = session ?: return@command
             val state = mutableSessionState.value
-            if (state.state != CallState.ACTIVE || state.interruption != null || current.isFinalizing ||
-                current.mediaRevision != attemptRevision || !canOpenAudio(current)
-            ) return@command
+            if (state.state != CallState.ACTIVE ||
+                state.interruption != null ||
+                current.isFinalizing ||
+                current.mediaRevision != attemptRevision ||
+                !canOpenAudio(current))
+                return@command
             val isMuted = !state.isMuted
             runMediaOperation(current) {
                 if (isMuted) {
@@ -174,19 +188,28 @@ class CallSessionManager(
             val current = session ?: return@command
             val state = mutableSessionState.value
             if (state.state == CallState.ACTIVE && state.interruption == CallInterruption.MICROPHONE) {
-                if (isForeground && isMediaCurrent(revision) && !current.isFinalizing && current.media.hasMicrophonePermission() &&
-                    !current.media.isMicrophoneSilenced()) setMicrophoneSilenced(current, false)
+                if (isForeground &&
+                    isMediaCurrent(revision) &&
+                    !current.isFinalizing &&
+                    current.media.hasMicrophonePermission() &&
+                    !current.media.isMicrophoneSilenced())
+                    setMicrophoneSilenced(current = current, isSilenced = false)
                 return@command
             }
-            if (state.state != CallState.PAUSED || state.interruption == CallInterruption.NETWORK || current.isFinalizing ||
-                !isForeground || !isMediaCurrent(revision) || current.resumeJob?.isActive == true
-            ) return@command
+            if (state.state != CallState.PAUSED ||
+                state.interruption == CallInterruption.NETWORK ||
+                current.isFinalizing ||
+                !isForeground ||
+                !isMediaCurrent(revision) ||
+                current.resumeJob?.isActive == true)
+                return@command
             current.mediaRevision = revision
-            val failure = when {
-                hasPauseExpired() -> CallFailure.PAUSE_EXPIRED
-                !current.media.hasMicrophonePermission() -> CallFailure.MICROPHONE_PERMISSION
-                else -> current.media.getConnectionFailure()
-            }
+            val failure =
+                when {
+                    hasPauseExpired() -> CallFailure.PAUSE_EXPIRED
+                    !current.media.hasMicrophonePermission() -> CallFailure.MICROPHONE_PERMISSION
+                    else -> current.media.getConnectionFailure()
+                }
             if (failure != null) {
                 finish(current, failure)
                 return@command
@@ -201,42 +224,28 @@ class CallSessionManager(
         commands.trySend command@{
             val current = session ?: return@command
             val state = mutableSessionState.value.state
-            if (current.isFinalizing || text.isBlank() || state != CallState.ACTIVE && state != CallState.PAUSED) return@command
+            if (current.isFinalizing || text.isBlank() || state != CallState.ACTIVE && state != CallState.PAUSED)
+                return@command
             if (current.isPronouncing && mutableSessionState.value.pronunciationText == text) return@command
             val revision = ++current.pronunciationRevision
             if (!current.isPronouncing) holdCallAudio(current)
             current.isPronouncing = true
             current.pronunciationJob?.cancel()
             mutableSessionState.update { it.copy(pronunciation = PronunciationState.LOADING, pronunciationText = text) }
-            current.pronunciationJob = current.scope.launch {
-                delay(PRONUNCIATION_TIMEOUT_MILLIS)
-                commands.trySend {
-                    if (session === current && current.pronunciationRevision == revision &&
-                        mutableSessionState.value.pronunciation == PronunciationState.LOADING) {
-                        runSupportOperation { current.media.stopPronunciation() }
-                        endPronunciation(current, false)
-                    }
+            pronunciationHold.play(
+                current = current,
+                text = text,
+                revision = revision,
+                sendCommand = { commands.trySend(it) },
+                isCurrent = { session === current },
+                isLoading = { mutableSessionState.value.pronunciation == PronunciationState.LOADING },
+                onStarted = { mutableSessionState.update { it.copy(pronunciation = PronunciationState.PLAYING) } },
+                onFinished = { endPronunciation(current, it) },
+                onTimeout = {
+                    runSupportOperation { current.media.stopPronunciation() }
+                    endPronunciation(current = current, isSuccess = false)
                 }
-            }
-            try {
-                current.media.speakPronunciation(text, onStarted = {
-                    commands.trySend {
-                        if (session === current && current.pronunciationRevision == revision && current.isPronouncing) {
-                            current.pronunciationJob?.cancel()
-                            current.pronunciationJob = null
-                            mutableSessionState.update { it.copy(pronunciation = PronunciationState.PLAYING) }
-                        }
-                    }
-                }) { isSuccess ->
-                    commands.trySend {
-                        if (session === current && current.pronunciationRevision == revision) endPronunciation(current, isSuccess)
-                    }
-                }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Exception) {
-                endPronunciation(current, isSuccess = false)
-            }
+            )
         }
     }
 
@@ -245,7 +254,9 @@ class CallSessionManager(
             val current = session ?: return@command
             if (!current.isPronouncing) {
                 mutableSessionState.update {
-                    if (it.pronunciation == PronunciationState.FAILED) it.copy(pronunciation = PronunciationState.IDLE, pronunciationText = "") else it
+                    if (it.pronunciation == PronunciationState.FAILED)
+                        it.copy(pronunciation = PronunciationState.IDLE, pronunciationText = "")
+                    else it
                 }
                 return@command
             }
@@ -266,8 +277,7 @@ class CallSessionManager(
         commands.trySend {
             try {
                 val current = session
-                if (current != null) finish(current)
-                else mutableSessionState.update { it.copy(isClosed = true) }
+                if (current != null) finish(current) else mutableSessionState.update { it.copy(isClosed = true) }
             } finally {
                 commands.cancel()
                 scope.cancel()
@@ -283,16 +293,13 @@ class CallSessionManager(
             finish(current, CallFailure.MICROPHONE_PERMISSION)
             return
         }
-        mutableSessionState.value = CallSessionState(state = CallState.CALLING)
-        current.scope.launch {
-            for (event in current.events) handleEvent(current, event)
-        }
-        startTimeout(current, SETUP_TIMEOUT_MILLIS, CallFailure.TIMEOUT)
+        current.scope.launch { for (event in current.events) handleEvent(current, event) }
+        startTimeout(current = current, delayMillis = SETUP_TIMEOUT_MILLIS, failure = CallFailure.TIMEOUT)
         val generation = ++current.connectionGeneration
         current.media.connect(
-            current.scenario,
-            onEvent = { event -> receiveEvent(current, generation, event) },
-            onFailure = { failure -> receiveFailure(current, generation, failure) }
+            scenario = current.scenario,
+            onEvent = { event -> receiveEvent(current = current, generation = generation, event = event) },
+            onFailure = { failure -> receiveFailure(current = current, generation = generation, failure = failure) }
         )
     }
 
@@ -304,17 +311,17 @@ class CallSessionManager(
     }
 
     private fun receiveFailure(current: CallSession, generation: Long, failure: CallFailure) {
-        commands.trySend {
-            if (current.connectionGeneration == generation) handleTransportFailure(current, failure)
-        }
+        commands.trySend { if (current.connectionGeneration == generation) handleTransportFailure(current, failure) }
     }
 
     private fun handleTransportFailure(current: CallSession, failure: CallFailure) {
         if (session !== current) return
         val state = mutableSessionState.value
         when {
-            current.isFinalizing -> finish(current, isEndedByUser = true)
-            failure == CallFailure.NETWORK && state.startedAtMillis != null && current.resumptionHandle != null &&
+            current.isFinalizing -> finish(current = current, isEndedByUser = true)
+            failure == CallFailure.NETWORK &&
+                state.startedAtMillis != null &&
+                current.resumptionHandle != null &&
                 (state.state == CallState.ACTIVE || state.state == CallState.PAUSED) -> scheduleReconnect(current)
             else -> finish(current, failure)
         }
@@ -331,33 +338,42 @@ class CallSessionManager(
             if (state.state == CallState.ACTIVE) {
                 pause(current)
                 if (session !== current) return
-                startTimeout(current, RECONNECT_WINDOW_MILLIS, CallFailure.NETWORK)
+                startTimeout(current = current, delayMillis = RECONNECT_WINDOW_MILLIS, failure = CallFailure.NETWORK)
             }
             mutableSessionState.update { it.copy(interruption = CallInterruption.NETWORK, isResuming = false) }
         }
-        val remainingMillis = reconnectWindow.getRemainingMillis(current.disconnectedAtMillis, now, RECONNECT_WINDOW_MILLIS)
+        val remainingMillis =
+            reconnectWindow.getRemainingMillis(
+                disconnectedAtMillis = current.disconnectedAtMillis,
+                nowMillis = now,
+                windowMillis = RECONNECT_WINDOW_MILLIS
+            )
         if (remainingMillis <= 0L) {
             finish(current, CallFailure.NETWORK)
             return
         }
         val delayMillis = reconnectPolicy.getDelayMillis(current.reconnectAttempt++).coerceAtMost(remainingMillis)
         current.reconnectJob?.cancel()
-        current.reconnectJob = current.scope.launch {
-            delay(delayMillis)
-            reconnect(current)
-        }
+        current.reconnectJob =
+            current.scope.launch {
+                delay(delayMillis)
+                reconnect(current)
+            }
     }
 
     private fun reconnect(current: CallSession) {
         val handle = current.resumptionHandle
-        if (session !== current || mutableSessionState.value.interruption != CallInterruption.NETWORK || handle == null) return
+        if (session !== current || mutableSessionState.value.interruption != CallInterruption.NETWORK || handle == null)
+            return
         val generation = ++current.connectionGeneration
         try {
             current.media.reconnect(
-                current.scenario,
-                handle,
-                onEvent = { event -> receiveEvent(current, generation, event) },
-                onFailure = { failure -> receiveFailure(current, generation, failure) }
+                scenario = current.scenario,
+                resumptionHandle = handle,
+                onEvent = { event -> receiveEvent(current = current, generation = generation, event = event) },
+                onFailure = { failure ->
+                    receiveFailure(current = current, generation = generation, failure = failure)
+                }
             )
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -380,16 +396,22 @@ class CallSessionManager(
         }
         current.shouldResumeAfterReconnect = false
         val pausedAt = mutableSessionState.value.pausedAtMillis ?: return
-        startTimeout(current, (PAUSE_TIMEOUT_MILLIS - (nowMillis() - pausedAt)).coerceAtLeast(0L), CallFailure.PAUSE_EXPIRED)
+        startTimeout(
+            current = current,
+            delayMillis = (PAUSE_TIMEOUT_MILLIS - (nowMillis() - pausedAt)).coerceAtLeast(0L),
+            failure = CallFailure.PAUSE_EXPIRED
+        )
     }
 
     private fun requestEnd(current: CallSession) {
         if (current.isFinalizing) return
         val state = mutableSessionState.value
-        val canFinalize = state.startedAtMillis != null && state.interruption != CallInterruption.NETWORK &&
-            current.transcript.hasOpenUserTurn && current.media.getConnectionFailure() == null
-        if (canFinalize) beginFinalize(current)
-        else finish(current, isEndedByUser = true)
+        val canFinalize =
+            state.startedAtMillis != null &&
+                state.interruption != CallInterruption.NETWORK &&
+                current.transcript.hasOpenUserTurn &&
+                current.media.getConnectionFailure() == null
+        if (canFinalize) beginFinalize(current) else finish(current = current, isEndedByUser = true)
     }
 
     private fun beginFinalize(current: CallSession) {
@@ -405,7 +427,7 @@ class CallSessionManager(
         runMediaOperation(current) {
             current.media.suspendUplink()
             current.media.finishAudioInput()
-            current.transcript.interruptAiTurn(current.media.clearPlayback().playedRatio)
+            interruptPlayback(current = current, closeUserTurn = false)
             closeAudio(current)
         }
         if (session !== current) return
@@ -421,72 +443,52 @@ class CallSessionManager(
                 interruption = null
             )
         }
-        current.timeoutJob = current.scope.launch {
-            delay(FINALIZE_WINDOW_MILLIS)
-            finish(current, isEndedByUser = true)
-        }
+        current.timeoutJob =
+            current.scope.launch {
+                delay(FINALIZE_WINDOW_MILLIS)
+                finish(current = current, isEndedByUser = true)
+            }
     }
 
     private suspend fun resumeAudio(current: CallSession, generation: Long) {
         var downlinkFailure: CallFailure? = null
-        val hasTurnBoundary = try {
-            withTimeoutOrNull(RESUME_TURN_TIMEOUT_MILLIS) {
-                do {
-                    current.media.awaitTurnBoundary()
-                    if (!canOpenAudio(current)) return@withTimeoutOrNull false
-                    downlinkFailure = current.media.enableDownlink(generation, requiresIdleTurn = true)
-                    if (downlinkFailure == CallFailure.TIMEOUT) yield()
-                } while (downlinkFailure == CallFailure.TIMEOUT)
-                true
-            } == true
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Exception) {
-            if (canOpenAudio(current)) finish(current, CallFailure.NETWORK)
-            return
-        }
+        val hasTurnBoundary =
+            try {
+                withTimeoutOrNull(RESUME_TURN_TIMEOUT_MILLIS) {
+                    do {
+                        current.media.awaitTurnBoundary()
+                        if (!canOpenAudio(current)) return@withTimeoutOrNull false
+                        downlinkFailure = current.media.enableDownlink(generation = generation, requiresIdleTurn = true)
+                        if (downlinkFailure == CallFailure.TIMEOUT) yield()
+                    } while (downlinkFailure == CallFailure.TIMEOUT)
+                    true
+                } == true
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                if (canOpenAudio(current)) finish(current, CallFailure.NETWORK)
+                return
+            }
         if (!canOpenAudio(current)) return
         val failure = if (hasTurnBoundary) downlinkFailure else CallFailure.TIMEOUT
-        if (failure != null) finish(current, failure)
-        else openAudio(current, enabledDownlinkGeneration = generation)
+        if (failure != null) finish(current, failure) else openAudio(current, enabledDownlinkGeneration = generation)
     }
 
     private fun handleEvent(current: CallSession, event: GeminiLiveEvent) {
         val state = mutableSessionState.value.state
         val canHandleAudio = state == CallState.ACTIVE && canOpenAudio(current)
         when (event) {
-            GeminiLiveEvent.SetupComplete -> when {
-                state == CallState.CALLING -> openAudio(current)
-                mutableSessionState.value.interruption == CallInterruption.NETWORK -> completeReconnect(current)
-            }
-            is GeminiLiveEvent.SpeechActivity -> {
-                if (!canHandleAudio || event.playbackGeneration != current.audioGeneration) return
-                if (event.isSpeaking) {
-                    current.timeoutJob?.cancel()
-                    current.speechEvidence.startSpeech(nowMillis())
-                    current.transcript.startUserTurn()
-                    publishTranscript(current)
-                } else {
-                    startTimeout(current, RESPONSE_TIMEOUT_MILLIS, CallFailure.TIMEOUT)
-                    current.speechEvidence.endSpeech(nowMillis())
+            GeminiLiveEvent.SetupComplete ->
+                when {
+                    state == CallState.CALLING -> openAudio(current)
+                    mutableSessionState.value.interruption == CallInterruption.NETWORK -> completeReconnect(current)
                 }
-                mutableSessionState.update {
-                    it.copy(isProcessing = !event.isSpeaking, isAiInterrupted = it.isAiInterrupted && event.isSpeaking)
-                }
-                publishSpeechEvidence(current)
-            }
+            is GeminiLiveEvent.SpeechActivity ->
+                handleSpeechActivity(current = current, event = event, canHandleAudio = canHandleAudio)
             is GeminiLiveEvent.Content -> {
                 if (canHandleAudio) handleContent(current, event)
             }
-            is GeminiLiveEvent.InputTranscription -> {
-                if (session === current && mutableSessionState.value.startedAtMillis != null) {
-                    current.speechEvidence.recordUserTranscript(event.text)
-                    publishSpeechEvidence(current)
-                    current.transcript.appendUserText(event.text, event.isFinished)
-                    publishTranscript(current)
-                    if (current.isFinalizing && !current.transcript.hasOpenUserTurn) finish(current, isEndedByUser = true)
-                }
-            }
+            is GeminiLiveEvent.InputTranscription -> handleInputTranscription(current, event)
             is GeminiLiveEvent.OutputTranscription -> {
                 if (!canHandleAudio || event.playbackGeneration != current.audioGeneration) return
                 if (!current.transcript.hasOpenAiTurn) current.media.markPlaybackTurn()
@@ -495,16 +497,50 @@ class CallSessionManager(
             }
             is GeminiLiveEvent.Interrupted -> {
                 if (!canHandleAudio || event.playbackGeneration != current.audioGeneration) return
-                val progress = current.media.clearPlayback()
-                current.transcript.interruptAiTurn(progress.playedRatio)
+                interruptPlayback(current = current, closeUserTurn = false)
                 publishTranscript(current)
                 mutableSessionState.update { it.copy(isAiInterrupted = true, isPlaying = false) }
             }
             is GeminiLiveEvent.ResumptionUpdate -> {
                 if (session === current && event.isResumable) current.resumptionHandle = event.handle
             }
-            is GeminiLiveEvent.GenerationComplete,
-            is GeminiLiveEvent.GoAway -> Unit
+            GeminiLiveEvent.GoAway -> Unit
+        }
+    }
+
+    private fun handleSpeechActivity(
+        current: CallSession,
+        event: GeminiLiveEvent.SpeechActivity,
+        canHandleAudio: Boolean
+    ) {
+        if (!canHandleAudio || event.playbackGeneration != current.audioGeneration) return
+        if (event.isSpeaking) {
+            current.timeoutJob?.cancel()
+            current.speechEvidence.startSpeech(nowMillis())
+            current.transcript.startUserTurn()
+            publishTranscript(current)
+        } else {
+            startTimeout(
+                current = current,
+                delayMillis = RESPONSE_TIMEOUT_MILLIS,
+                failure = CallFailure.TIMEOUT
+            )
+            current.speechEvidence.endSpeech(nowMillis())
+        }
+        mutableSessionState.update {
+            it.copy(isProcessing = !event.isSpeaking, isAiInterrupted = it.isAiInterrupted && event.isSpeaking)
+        }
+        publishSpeechEvidence(current)
+    }
+
+    private fun handleInputTranscription(current: CallSession, event: GeminiLiveEvent.InputTranscription) {
+        if (session === current && mutableSessionState.value.startedAtMillis != null) {
+            current.speechEvidence.recordUserTranscript(event.text)
+            publishSpeechEvidence(current)
+            current.transcript.appendUserText(event.text, event.isFinished)
+            publishTranscript(current)
+            if (current.isFinalizing && !current.transcript.hasOpenUserTurn)
+                finish(current = current, isEndedByUser = true)
         }
     }
 
@@ -529,7 +565,7 @@ class CallSessionManager(
             current.timeoutJob?.cancel()
             mutableSessionState.update { it.copy(isProcessing = false) }
         } else if (content.hasModelTurn) {
-            startTimeout(current, RESPONSE_TIMEOUT_MILLIS, CallFailure.TIMEOUT)
+            startTimeout(current = current, delayMillis = RESPONSE_TIMEOUT_MILLIS, failure = CallFailure.TIMEOUT)
             mutableSessionState.update { it.copy(isProcessing = content.audio.isEmpty() && !it.isPlaying) }
         }
     }
@@ -550,8 +586,9 @@ class CallSessionManager(
                 closeAudio(current)
                 return
             }
-            val downlinkFailure = if (enabledDownlinkGeneration != null) current.media.getConnectionFailure()
-                else current.media.enableDownlink(audioGeneration, requiresIdleTurn = false)
+            val downlinkFailure =
+                if (enabledDownlinkGeneration != null) current.media.getConnectionFailure()
+                else current.media.enableDownlink(generation = audioGeneration, requiresIdleTurn = false)
             if (downlinkFailure != null) {
                 finish(current, downlinkFailure)
                 return
@@ -569,11 +606,12 @@ class CallSessionManager(
             }
             if (!mutableSessionState.value.isMuted) enableUplink(current, uplinkRevision.get())
             val activeAt = nowMillis()
-            val activationFailure = when {
-                isResuming && hasPauseExpired() -> CallFailure.PAUSE_EXPIRED
-                !isResuming && activeAt - current.callingAtMillis >= SETUP_TIMEOUT_MILLIS -> CallFailure.TIMEOUT
-                else -> current.media.getConnectionFailure()
-            }
+            val activationFailure =
+                when {
+                    isResuming && hasPauseExpired() -> CallFailure.PAUSE_EXPIRED
+                    !isResuming && activeAt - current.callingAtMillis >= SETUP_TIMEOUT_MILLIS -> CallFailure.TIMEOUT
+                    else -> current.media.getConnectionFailure()
+                }
             if (!canOpenAudio(current)) {
                 closeAudio(current)
                 return
@@ -582,7 +620,7 @@ class CallSessionManager(
                 finish(current, activationFailure)
                 return
             }
-            activate(current, audioLevel, activeAt)
+            activate(current = current, audioLevel = audioLevel, activeAt = activeAt)
         }
     }
 
@@ -591,15 +629,19 @@ class CallSessionManager(
             onFailure = { failure ->
                 commands.trySend {
                     if (canOpenAudio(current) && audioGeneration == current.audioGeneration) {
-                        finish(current, if (current.media.hasMicrophonePermission()) failure else CallFailure.MICROPHONE_PERMISSION)
+                        finish(
+                            current,
+                            if (current.media.hasMicrophonePermission()) failure else CallFailure.MICROPHONE_PERMISSION
+                        )
                     }
                 }
             },
             onInterrupted = {
                 commands.trySend {
-                    if (canOpenAudio(current) && audioGeneration == current.audioGeneration &&
-                        mutableSessionState.value.state == CallState.ACTIVE && !current.isFinalizing
-                    ) {
+                    if (canOpenAudio(current) &&
+                        audioGeneration == current.audioGeneration &&
+                        mutableSessionState.value.state == CallState.ACTIVE &&
+                        !current.isFinalizing) {
                         revokeMedia()
                         pause(current)
                     }
@@ -629,17 +671,18 @@ class CallSessionManager(
             if (session !== current) return
             mutableSessionState.update { it.copy(interruption = CallInterruption.MICROPHONE) }
             current.microphoneJob?.cancel()
-            current.microphoneJob = current.scope.launch {
-                delay(MICROPHONE_WINDOW_MILLIS)
-                finish(current, CallFailure.MICROPHONE_PERMISSION)
-            }
+            current.microphoneJob =
+                current.scope.launch {
+                    delay(MICROPHONE_WINDOW_MILLIS)
+                    finish(current, CallFailure.MICROPHONE_PERMISSION)
+                }
             return
         }
         if (state.interruption != CallInterruption.MICROPHONE) return
         current.microphoneJob?.cancel()
         current.microphoneJob = null
         mutableSessionState.update { it.copy(interruption = null) }
-        if (!state.isMuted && !current.isCallAudioHeld) runMediaOperation(current) { enableUplink(current, uplinkRevision.get()) }
+        if (shouldSendMicrophone(current)) runMediaOperation(current) { enableUplink(current, uplinkRevision.get()) }
     }
 
     private fun holdCallAudio(current: CallSession) {
@@ -649,7 +692,7 @@ class CallSessionManager(
             current.media.blockUplink()
             current.media.suspendUplink()
             current.media.finishAudioInput()
-            current.media.setPlaybackPaused(true)
+            current.media.setPlaybackPaused(isPaused = true)
         }
     }
 
@@ -659,8 +702,8 @@ class CallSessionManager(
         val state = mutableSessionState.value
         if (state.state != CallState.ACTIVE || current.isFinalizing || !canOpenAudio(current)) return
         runSupportOperation {
-            current.media.setPlaybackPaused(false)
-            if (!state.isMuted && state.interruption == null) enableUplink(current, uplinkRevision.get())
+            current.media.setPlaybackPaused(isPaused = false)
+            if (shouldSendMicrophone(current)) enableUplink(current, uplinkRevision.get())
         }
     }
 
@@ -671,8 +714,10 @@ class CallSessionManager(
         current.isPronouncing = false
         releaseCallAudio(current)
         mutableSessionState.update {
-            it.copy(pronunciation = if (isSuccess) PronunciationState.IDLE else PronunciationState.FAILED,
-                pronunciationText = if (isSuccess) "" else it.pronunciationText)
+            it.copy(
+                pronunciation = if (isSuccess) PronunciationState.IDLE else PronunciationState.FAILED,
+                pronunciationText = if (isSuccess) "" else it.pronunciationText
+            )
         }
     }
 
@@ -701,7 +746,7 @@ class CallSessionManager(
         activeAudioLevel.value = audioLevel
         val startedAtEpochMillis = mutableSessionState.value.startedAtEpochMillis ?: epochMillis()
         mutableSessionState.update {
-            val pauseMillis = it.pausedAtMillis?.let { pausedAt -> activeAt - pausedAt }.default(0L)
+            val pauseMillis = it.pausedAtMillis?.let { pausedAt -> activeAt - pausedAt }.default(fallback = 0L)
             it.copy(
                 state = CallState.ACTIVE,
                 startedAtMillis = it.startedAtMillis.default(activeAt),
@@ -722,7 +767,7 @@ class CallSessionManager(
         current.isCallAudioHeld = false
         current.speechEvidence.endSpeech(now)
         publishSpeechEvidence(current)
-        current.transcript.interruptOpenTurns(current.media.clearPlayback().playedRatio)
+        interruptPlayback(current = current, closeUserTurn = true)
         publishTranscript(current)
         runMediaOperation(current) {
             current.media.suspendMedia()
@@ -739,7 +784,7 @@ class CallSessionManager(
                     interruption = null
                 )
             }
-            startTimeout(current, PAUSE_TIMEOUT_MILLIS, CallFailure.PAUSE_EXPIRED)
+            startTimeout(current = current, delayMillis = PAUSE_TIMEOUT_MILLIS, failure = CallFailure.PAUSE_EXPIRED)
         }
     }
 
@@ -756,6 +801,17 @@ class CallSessionManager(
         }
     }
 
+    private fun shouldSendMicrophone(current: CallSession): Boolean {
+        val state = mutableSessionState.value
+        return !state.isMuted && !current.isCallAudioHeld && state.interruption == null
+    }
+
+    private fun interruptPlayback(current: CallSession, closeUserTurn: Boolean) {
+        val progress = current.media.clearPlayback()
+        if (closeUserTurn) current.transcript.interruptOpenTurns(progress.playedRatio)
+        else current.transcript.interruptAiTurn(progress.playedRatio)
+    }
+
     private fun canOpenAudio(current: CallSession): Boolean =
         session === current && isForeground && isMediaCurrent(current.mediaRevision)
 
@@ -766,8 +822,7 @@ class CallSessionManager(
         }
     }
 
-    private fun isMediaCurrent(revision: Long): Boolean =
-        !isClosed.get() && mediaRevision.get() == revision
+    private fun isMediaCurrent(revision: Long): Boolean = !isClosed.get() && mediaRevision.get() == revision
 
     private fun revokeMedia() {
         mediaRevision.incrementAndGet()
@@ -780,11 +835,12 @@ class CallSessionManager(
 
     private fun startTimeout(current: CallSession, delayMillis: Long, failure: CallFailure) {
         current.timeoutJob?.cancel()
-        current.timeoutJob = current.scope.launch {
-            delay(delayMillis)
-            val isUnconditional = failure == CallFailure.PAUSE_EXPIRED || failure == CallFailure.NETWORK
-            if (isUnconditional || canOpenAudio(current)) finish(current, failure)
-        }
+        current.timeoutJob =
+            current.scope.launch {
+                delay(delayMillis)
+                val isUnconditional = failure == CallFailure.PAUSE_EXPIRED || failure == CallFailure.NETWORK
+                if (isUnconditional || canOpenAudio(current)) finish(current, failure)
+            }
     }
 
     private fun publishSpeechEvidence(current: CallSession) {
@@ -807,13 +863,14 @@ class CallSessionManager(
         val endedAt = current.endRequestedAtMillis.default(now)
         val isUserEnd = isEndedByUser || current.isFinalizing
         current.speechEvidence.endSpeech(endedAt)
-        val playedRatio = try {
-            current.media.clearPlayback().playedRatio
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Exception) {
-            0f
-        }
+        val playedRatio =
+            try {
+                current.media.clearPlayback().playedRatio
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                0f
+            }
         current.transcript.interruptOpenTurns(playedRatio)
         publishTranscript(current)
         cancelPronunciation(current)
@@ -825,15 +882,22 @@ class CallSessionManager(
         current.audioGeneration++
         current.connectionGeneration++
         activeAudioLevel.value = null
-        var terminalFailure = try {
-            current.media.close()
-            failure
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Exception) {
-            failure.default(CallFailure.AUDIO)
-        }
-        var outcome = terminalStateMapper.getOutcome(terminalFailure, isUserEnd, mutableSessionState.value, current.speechEvidence)
+        var terminalFailure =
+            try {
+                current.media.close()
+                failure
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                failure.default(CallFailure.AUDIO)
+            }
+        var outcome =
+            terminalStateMapper.getOutcome(
+                failure = terminalFailure,
+                isUserEnd = isUserEnd,
+                state = mutableSessionState.value,
+                evidence = current.speechEvidence
+            )
         try {
             current.media.finishAssessmentRecording(outcome)
         } catch (cancellation: CancellationException) {
@@ -842,23 +906,33 @@ class CallSessionManager(
             terminalFailure = terminalFailure.default(CallFailure.AUDIO)
             outcome = CallOutcome.FAILED
         }
-        publishTerminalState(current, terminalFailure, outcome, endedAt)
+        publishTerminalState(current = current, terminalFailure = terminalFailure, outcome = outcome, endedAt = endedAt)
     }
 
-    private fun publishTerminalState(current: CallSession, terminalFailure: CallFailure?, outcome: CallOutcome, endedAt: Long) {
+    private fun publishTerminalState(
+        current: CallSession,
+        terminalFailure: CallFailure?,
+        outcome: CallOutcome,
+        endedAt: Long
+    ) {
         mutableSessionState.update {
             it.copy(
                 state = if (terminalFailure == null) CallState.ENDED else CallState.FAILED,
                 failure = terminalFailure,
                 outcome = outcome,
                 assessmentAudioId = current.media.assessmentAudioId.takeIf { outcome == CallOutcome.COMPLETED },
-                assessmentAudioDurationMillis = current.media.assessmentAudioDurationMillis.takeIf { outcome == CallOutcome.COMPLETED },
+                assessmentAudioDurationMillis =
+                    current.media.assessmentAudioDurationMillis.takeIf { outcome == CallOutcome.COMPLETED },
                 isUserSpeaking = false,
                 isAiInterrupted = false,
                 hasUserSpeech = current.speechEvidence.hasUserSpeech,
                 endedAtMillis = endedAt,
-                totalPausedMillis = it.totalPausedMillis +
-                    it.pausedAtMillis?.let { pausedAt -> endedAt - pausedAt }.default(0L).coerceAtLeast(0L),
+                totalPausedMillis =
+                    it.totalPausedMillis +
+                        it.pausedAtMillis
+                            ?.let { pausedAt -> endedAt - pausedAt }
+                            .default(fallback = 0L)
+                            .coerceAtLeast(0L),
                 pausedAtMillis = null,
                 interruption = null,
                 isFinalizing = false,

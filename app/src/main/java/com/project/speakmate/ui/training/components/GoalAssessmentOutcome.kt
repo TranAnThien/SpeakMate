@@ -12,15 +12,27 @@ fun GoalAssessmentOutcome(
     description: String,
     modifier: Modifier = Modifier
 ) {
-    val surface = when (presentation) {
-        GoalAssessmentPresentation.NEXT_GOAL, GoalAssessmentPresentation.PATH_COMPLETED, GoalAssessmentPresentation.REPLAY_COMPLETED -> DesignColor.ResultSuccessSurface
-        GoalAssessmentPresentation.FAIL_CRITERIA, GoalAssessmentPresentation.FAIL_REQUIRED_ACTION -> DesignColor.ErrorSurface
-        GoalAssessmentPresentation.PARTIAL, GoalAssessmentPresentation.INSUFFICIENT_EVIDENCE -> DesignColor.ResultWarningSurface
-        else -> DesignColor.Background
-    }
-    TrainingResultOutcome(title, description, surface,
+    val surface =
+        when (presentation) {
+            GoalAssessmentPresentation.NEXT_GOAL,
+            GoalAssessmentPresentation.PATH_COMPLETED,
+            GoalAssessmentPresentation.REPLAY_COMPLETED -> DesignColor.SuccessContainer
+            GoalAssessmentPresentation.FAIL_CRITERIA,
+            GoalAssessmentPresentation.FAIL_REQUIRED_ACTION -> DesignColor.ErrorSurface
+            GoalAssessmentPresentation.PARTIAL,
+            GoalAssessmentPresentation.INSUFFICIENT_EVIDENCE -> DesignColor.ResultWarningSurface
+            else -> DesignColor.Background
+        }
+    TrainingResultOutcome(
+        title = title,
+        description = description,
+        surface = surface,
         isProcessing = presentation == GoalAssessmentPresentation.PROCESSING,
-        isPassed = presentation == GoalAssessmentPresentation.NEXT_GOAL || presentation == GoalAssessmentPresentation.PATH_COMPLETED ||
-            presentation == GoalAssessmentPresentation.REPLAY_COMPLETED,
-        modifier = modifier, isIntroduction = presentation == GoalAssessmentPresentation.INTRODUCTION)
+        isPassed =
+            presentation == GoalAssessmentPresentation.NEXT_GOAL ||
+                presentation == GoalAssessmentPresentation.PATH_COMPLETED ||
+                presentation == GoalAssessmentPresentation.REPLAY_COMPLETED,
+        modifier = modifier,
+        isIntroduction = presentation == GoalAssessmentPresentation.INTRODUCTION
+    )
 }

@@ -19,6 +19,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -42,11 +44,16 @@ class CallSessionManagerTest {
         private const val MICROPHONE_WINDOW_MILLIS = 60_000L
         private const val RESUMPTION_HANDLE = "handle-1"
         private const val TEST_AUDIO_BYTES = 32_000
-        private val scenario = Scenario("cafe", "Cafe", "Order a drink", "Act as a barista")
+        private val scenario =
+            Scenario(
+                scenarioId = "cafe",
+                name = "Cafe",
+                description = "Order a drink",
+                promptTemplate = "Act as a barista"
+            )
     }
 
-    @get:Rule
-    val folder = TemporaryFolder()
+    @get:Rule val folder = TemporaryFolder()
 
     @Test
     fun epochEndIsFixedBeforeWaitingForTheFinalTranscript() = withManager { manager, attempts ->
@@ -60,7 +67,7 @@ class CallSessionManagerTest {
         runCurrent()
         assertEquals(endedAtEpochMillis, manager.sessionState.value.endedAtEpochMillis)
         advanceTimeBy(TEST_INTERVAL_MILLIS)
-        media.emitInputTranscription("A large latte", isFinished = true)
+        media.emitInputTranscription(text = "A large latte", isFinished = true)
         runCurrent()
 
         assertEquals(CallOutcome.COMPLETED, manager.sessionState.value.outcome)
@@ -71,7 +78,7 @@ class CallSessionManagerTest {
     fun epochStartSurvivesReconnection() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
         val startedAtEpochMillis = manager.sessionState.value.startedAtEpochMillis
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         media.emitResumptionHandle(RESUMPTION_HANDLE)
         runCurrent()
         advanceTimeBy(TEST_INTERVAL_MILLIS)
@@ -90,14 +97,14 @@ class CallSessionManagerTest {
     fun recordsOnlyAssessmentActivities() = withManager { manager, attempts ->
         val files = AssessmentAudioFileProvider(folder.root)
         for (activityType in CallActivityType.entries) {
-            manager.startCall(scenario, activityType, "Order a drink")
+            manager.startCall(scenario, activityType)
             runCurrent()
             val media = attempts.last()
             media.audioFiles = files
             media.acknowledgeSetup()
             runCurrent()
             assertEquals(activityType, media.activityType)
-            media.emitInputTranscription("Hello", isFinished = true)
+            media.emitInputTranscription(text = "Hello", isFinished = true)
             media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES))
             endAndSettle(manager)
             val state = manager.sessionState.value
@@ -115,7 +122,7 @@ class CallSessionManagerTest {
     fun mutedAndUnsentChunksAreNotRecorded() = withManager { manager, attempts ->
         val media = startAssessment(manager, attempts)
         assertTrue(media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES)))
-        assertFalse(media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES), isAcceptedByProvider = false))
+        assertFalse(media.sendMicrophoneChunk(chunk = ByteArray(TEST_AUDIO_BYTES), isAcceptedByProvider = false))
         manager.toggleMute()
         runCurrent()
         assertFalse(media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES)))
@@ -129,7 +136,7 @@ class CallSessionManagerTest {
     fun completedAssessmentRetainsWavAndClosesOnce() = withManager { manager, attempts ->
         val media = startAssessment(manager, attempts)
         media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES))
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         runCurrent()
         endAndSettle(manager)
         endAndSettle(manager)
@@ -159,7 +166,7 @@ class CallSessionManagerTest {
     fun assessmentAppendFailureEndsWithAudioFailureAndDeletesWav() = withManager { manager, attempts ->
         val media = startAssessment(manager, attempts)
         assertTrue(media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES)))
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         runCurrent()
         val audioId = checkNotNull(media.recordingAudioId)
         val files = checkNotNull(media.audioFiles)
@@ -187,7 +194,7 @@ class CallSessionManagerTest {
     fun assessmentAppendFailureStillFailsWhenEndPrecedesFailureCallback() = withManager { manager, attempts ->
         val media = startAssessment(manager, attempts)
         media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES))
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         runCurrent()
         val audioId = checkNotNull(media.recordingAudioId)
         media.shouldFailRecordingAppend = true
@@ -211,7 +218,7 @@ class CallSessionManagerTest {
     fun closeFailureDeletesAssessmentEvidence() = withManager { manager, attempts ->
         val media = startAssessment(manager, attempts)
         media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES))
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         media.shouldFailClose = true
         runCurrent()
         endAndSettle(manager)
@@ -225,7 +232,7 @@ class CallSessionManagerTest {
         val first = startAssessment(manager, attempts)
         first.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES))
         val stale = first.captureMicrophoneCallback()
-        first.emitInputTranscription("Hello", isFinished = true)
+        first.emitInputTranscription(text = "Hello", isFinished = true)
         runCurrent()
         endAndSettle(manager)
         val second = startAssessment(manager, attempts)
@@ -238,13 +245,16 @@ class CallSessionManagerTest {
     @Test
     fun assessmentAudioLimitUsesExistingEndPath() = withManager { manager, attempts ->
         val media = startAssessment(manager, attempts)
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         runCurrent()
         val seconds = AssessmentAudioRecorder.MAX_ASSESSMENT_AUDIO_MILLIS / TEST_INTERVAL_MILLIS
         repeat(seconds.toInt()) { media.sendMicrophoneChunk(ByteArray(TEST_AUDIO_BYTES)) }
         runCurrent()
         assertEquals(CallOutcome.COMPLETED, manager.sessionState.value.outcome)
-        assertEquals(AssessmentAudioRecorder.MAX_ASSESSMENT_AUDIO_MILLIS, manager.sessionState.value.assessmentAudioDurationMillis)
+        assertEquals(
+            AssessmentAudioRecorder.MAX_ASSESSMENT_AUDIO_MILLIS,
+            manager.sessionState.value.assessmentAudioDurationMillis
+        )
         assertTrue(manager.sessionState.value.hasReachedAssessmentAudioLimit)
         assertEquals(1, media.recordingFinishCount)
     }
@@ -274,8 +284,11 @@ class CallSessionManagerTest {
         assertEquals(0, second.closeCount)
     }
 
-    private fun TestScope.startAssessment(manager: CallSessionManager, attempts: List<FakeCallSessionMedia>): FakeCallSessionMedia {
-        manager.startCall(scenario, CallActivityType.INITIAL_PLACEMENT, "Order a drink")
+    private fun TestScope.startAssessment(
+        manager: CallSessionManager,
+        attempts: List<FakeCallSessionMedia>
+    ): FakeCallSessionMedia {
+        manager.startCall(scenario, CallActivityType.INITIAL_PLACEMENT)
         runCurrent()
         val media = attempts.last()
         media.audioFiles = AssessmentAudioFileProvider(folder.root)
@@ -286,8 +299,8 @@ class CallSessionManagerTest {
 
     @Test
     fun startWaitsForSetupAndKeepsOneSession() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
 
         assertEquals(CallState.CALLING, manager.sessionState.value.state)
@@ -301,7 +314,7 @@ class CallSessionManagerTest {
 
     @Test
     fun endDuringSetupReleasesOnceAndIgnoresLateSignals() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
 
@@ -319,10 +332,10 @@ class CallSessionManagerTest {
 
     @Test
     fun backgroundDuringAudioOpenNeverActivatesMedia() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
-        media.onOpenAudio = { manager.setForeground(false) }
+        media.onOpenAudio = { manager.setForeground(isForeground = false) }
 
         media.acknowledgeSetup()
         runCurrent()
@@ -335,7 +348,7 @@ class CallSessionManagerTest {
 
     @Test
     fun endDuringDownlinkSetupPreventsPlaybackAndCapture() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
         media.onEnableDownlink = { manager.endCall() }
@@ -351,7 +364,7 @@ class CallSessionManagerTest {
 
     @Test
     fun endDuringCaptureStartNeverPublishesActive() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
         media.onStartCapture = {
@@ -370,8 +383,8 @@ class CallSessionManagerTest {
     @Test
     fun rapidForegroundReturnKeepsMediaPausedUntilResume() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        manager.setForeground(false)
-        manager.setForeground(true)
+        manager.setForeground(isForeground = false)
+        manager.setForeground(isForeground = true)
         assertFalse(media.isUplinkEnabled)
         runCurrent()
 
@@ -385,7 +398,7 @@ class CallSessionManagerTest {
 
     @Test
     fun providerFailureDuringSetupKeepsOriginalCause() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
         media.onEnableDownlink = { media.disconnect(CallFailure.QUOTA) }
@@ -418,8 +431,8 @@ class CallSessionManagerTest {
         runCurrent()
         assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
 
-        media.emitSpeechActivity(true)
-        media.emitSpeechActivity(false)
+        media.emitSpeechActivity(isSpeaking = true)
+        media.emitSpeechActivity(isSpeaking = false)
         runCurrent()
         assertTrue(manager.sessionState.value.isProcessing)
         advanceTimeBy(RESPONSE_TIMEOUT_MILLIS)
@@ -430,14 +443,14 @@ class CallSessionManagerTest {
 
     @Test
     fun timeoutAndLateFailureCannotTerminateRetry() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val old = attempts.single()
         advanceTimeBy(SETUP_TIMEOUT_MILLIS)
         runCurrent()
         assertEquals(CallFailure.TIMEOUT, manager.sessionState.value.failure)
 
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val current = attempts.last()
         old.emitFailure(CallFailure.NETWORK)
@@ -451,7 +464,7 @@ class CallSessionManagerTest {
 
     @Test
     fun partialAudioFailureClosesTransportAndAudio() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
         media.shouldFailAudioOpen = true
@@ -464,25 +477,27 @@ class CallSessionManagerTest {
     }
 
     @Test
-    fun deniedPermissionClosesAttemptBeforeConnecting() = withManager(hasPermission = false) { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
-        runCurrent()
-        val media = attempts.single()
+    fun deniedPermissionClosesAttemptBeforeConnecting() =
+        withManager(hasPermission = false) { manager, attempts ->
+            manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
+            runCurrent()
+            val media = attempts.single()
 
-        assertEquals(CallFailure.MICROPHONE_PERMISSION, manager.sessionState.value.failure)
-        assertFalse(media.hasConnection)
-        assertEquals(1, media.closeCount)
-    }
+            assertEquals(CallFailure.MICROPHONE_PERMISSION, manager.sessionState.value.failure)
+            assertFalse(media.hasConnection)
+            assertEquals(1, media.closeCount)
+        }
 
     @Test
-    fun mediaConstructionFailurePublishesFailed() = withManager(shouldFailConstruction = true) { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
-        runCurrent()
+    fun mediaConstructionFailurePublishesFailed() =
+        withManager(shouldFailConstruction = true) { manager, attempts ->
+            manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
+            runCurrent()
 
-        assertEquals(CallState.FAILED, manager.sessionState.value.state)
-        assertEquals(CallFailure.CONFIGURATION, manager.sessionState.value.failure)
-        assertTrue(attempts.isEmpty())
-    }
+            assertEquals(CallState.FAILED, manager.sessionState.value.state)
+            assertEquals(CallFailure.CONFIGURATION, manager.sessionState.value.failure)
+            assertTrue(attempts.isEmpty())
+        }
 
     @Test
     fun muteBlocksUplinkAndLeavesPlaybackOpen() = withManager { manager, attempts ->
@@ -548,12 +563,12 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         val previousGeneration = media.playbackGeneration
         media.isTurnIdle.value = false
-        manager.setForeground(false)
+        manager.setForeground(isForeground = false)
         runCurrent()
         assertFalse(media.isAudioOpen)
         assertTrue(media.hasConnection)
 
-        manager.setForeground(true)
+        manager.setForeground(isForeground = true)
         manager.resumeCall()
         runCurrent()
         assertEquals(CallState.PAUSED, manager.sessionState.value.state)
@@ -573,9 +588,9 @@ class CallSessionManagerTest {
     fun resumeWithoutTurnBoundaryTimesOut() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
         media.isTurnIdle.value = false
-        manager.setForeground(false)
+        manager.setForeground(isForeground = false)
         runCurrent()
-        manager.setForeground(true)
+        manager.setForeground(isForeground = true)
         manager.resumeCall()
         runCurrent()
         advanceTimeBy(RESUME_TIMEOUT_MILLIS)
@@ -588,7 +603,7 @@ class CallSessionManagerTest {
     @Test
     fun pauseExpiresAndReleasesSocket() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        manager.setForeground(false)
+        manager.setForeground(isForeground = false)
         runCurrent()
         advanceTimeBy(PAUSE_TIMEOUT_MILLIS)
         runCurrent()
@@ -602,9 +617,9 @@ class CallSessionManagerTest {
     fun endWhileResumingPreventsAudioFromReopening() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
         media.isTurnIdle.value = false
-        manager.setForeground(false)
+        manager.setForeground(isForeground = false)
         runCurrent()
-        manager.setForeground(true)
+        manager.setForeground(isForeground = true)
         manager.resumeCall()
         runCurrent()
 
@@ -620,21 +635,21 @@ class CallSessionManagerTest {
     @Test
     fun laterResumeRejectsFramesFromRevokedDownlink() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        manager.setForeground(false)
+        manager.setForeground(isForeground = false)
         runCurrent()
         var revokedGeneration: Long? = null
         media.onEnableDownlink = { generation ->
             revokedGeneration = generation
-            manager.setForeground(false)
+            manager.setForeground(isForeground = false)
         }
-        manager.setForeground(true)
+        manager.setForeground(isForeground = true)
         manager.resumeCall()
         runCurrent()
         assertEquals(CallState.PAUSED, manager.sessionState.value.state)
         assertFalse(media.isAudioOpen)
 
         media.onEnableDownlink = {}
-        manager.setForeground(true)
+        manager.setForeground(isForeground = true)
         manager.resumeCall()
         runCurrent()
         media.emitAudio(checkNotNull(revokedGeneration))
@@ -653,10 +668,10 @@ class CallSessionManagerTest {
         assertEquals(startedAt, manager.sessionState.value.startedAtMillis)
 
         advanceTimeBy(TEST_INTERVAL_MILLIS)
-        manager.setForeground(false)
+        manager.setForeground(isForeground = false)
         runCurrent()
         advanceTimeBy(TEST_INTERVAL_MILLIS)
-        manager.setForeground(true)
+        manager.setForeground(isForeground = true)
         manager.resumeCall()
         runCurrent()
         endAndSettle(manager)
@@ -668,7 +683,7 @@ class CallSessionManagerTest {
 
     @Test
     fun endBeforeActiveIsCancelled() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         attempts.single().emitInputTranscription("Hello")
         endAndSettle(manager)
@@ -678,7 +693,7 @@ class CallSessionManagerTest {
 
     @Test
     fun transcriptBeforeActiveIsNotSpeechEvidence() = withManager { manager, attempts ->
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
         media.emitInputTranscription("Hello")
@@ -714,11 +729,11 @@ class CallSessionManagerTest {
     @Test
     fun sustainedSpeechCompletesSession() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.emitSpeechActivity(true)
+        media.emitSpeechActivity(isSpeaking = true)
         runCurrent()
         assertTrue(manager.sessionState.value.isUserSpeaking)
         advanceTimeBy(LONG_SPEECH_MILLIS)
-        media.emitSpeechActivity(false)
+        media.emitSpeechActivity(isSpeaking = false)
         runCurrent()
         assertTrue(manager.sessionState.value.hasUserSpeech)
         assertFalse(manager.sessionState.value.isUserSpeaking)
@@ -754,7 +769,7 @@ class CallSessionManagerTest {
     @Test
     fun endDuringOpenSpeechCountsElapsedSpeech() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.emitSpeechActivity(true)
+        media.emitSpeechActivity(isSpeaking = true)
         runCurrent()
         advanceTimeBy(LONG_SPEECH_MILLIS)
         endAndSettle(manager)
@@ -801,7 +816,7 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         speak(media, LONG_SPEECH_MILLIS)
         endAndSettle(manager)
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         attempts.last().acknowledgeSetup()
         runCurrent()
@@ -813,9 +828,9 @@ class CallSessionManagerTest {
     @Test
     fun liveTranscriptFollowsTurnsDuringCall() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.emitSpeechActivity(true)
+        media.emitSpeechActivity(isSpeaking = true)
         media.emitInputTranscription("A latte")
-        media.emitSpeechActivity(false)
+        media.emitSpeechActivity(isSpeaking = false)
         media.emitAudio(media.playbackGeneration)
         media.emitOutputTranscription("What size?")
         runCurrent()
@@ -844,7 +859,7 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         media.emitAudio(media.playbackGeneration)
         media.emitOutputTranscription("Our special today")
-        media.playbackProgress = PlaybackProgress(50L, 100L)
+        media.playbackProgress = PlaybackProgress(playedFrames = 50L, enqueuedFrames = 100L)
         media.emitInterrupted()
         runCurrent()
 
@@ -858,13 +873,13 @@ class CallSessionManagerTest {
     fun bargeInStopsPlaybackAndShowsUntilUserStopsSpeaking() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
         media.emitAudio(media.playbackGeneration)
-        media.emitSpeechActivity(true)
+        media.emitSpeechActivity(isSpeaking = true)
         media.emitInterrupted()
         runCurrent()
         assertTrue(manager.sessionState.value.isAiInterrupted)
         assertFalse(manager.sessionState.value.isPlaying)
 
-        media.emitSpeechActivity(false)
+        media.emitSpeechActivity(isSpeaking = false)
         runCurrent()
 
         assertFalse(manager.sessionState.value.isAiInterrupted)
@@ -876,7 +891,7 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         media.emitAudio(media.playbackGeneration)
         media.emitOutputTranscription("Welcome")
-        media.playbackProgress = PlaybackProgress(100L, 100L)
+        media.playbackProgress = PlaybackProgress(playedFrames = 100L, enqueuedFrames = 100L)
         media.emitInterrupted()
         media.emitOutputTranscription(" to our cafe")
         media.emitAudio(media.playbackGeneration)
@@ -915,10 +930,10 @@ class CallSessionManagerTest {
     @Test
     fun endCallKeepsFinalTranscriptAndMarksOpenAnswer() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         media.emitAudio(media.playbackGeneration)
         media.emitOutputTranscription("Hi, welcome")
-        media.playbackProgress = PlaybackProgress(100L, 100L)
+        media.playbackProgress = PlaybackProgress(playedFrames = 100L, enqueuedFrames = 100L)
         runCurrent()
         endAndSettle(manager)
 
@@ -933,13 +948,13 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         media.emitAudio(media.playbackGeneration)
         media.emitOutputTranscription("Hello")
-        media.playbackProgress = PlaybackProgress(100L, 100L)
+        media.playbackProgress = PlaybackProgress(playedFrames = 100L, enqueuedFrames = 100L)
         runCurrent()
         media.interruptAudio()
         runCurrent()
         assertTrue(manager.sessionState.value.transcript.single().isInterrupted)
         endAndSettle(manager)
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
 
         assertTrue(manager.sessionState.value.transcript.isEmpty())
@@ -959,7 +974,7 @@ class CallSessionManagerTest {
         assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
 
         advanceTimeBy(TEST_INTERVAL_MILLIS)
-        media.emitInputTranscription("A large latte", isFinished = true)
+        media.emitInputTranscription(text = "A large latte", isFinished = true)
         runCurrent()
 
         val state = manager.sessionState.value
@@ -1008,7 +1023,7 @@ class CallSessionManagerTest {
         manager.endCall()
         runCurrent()
         manager.endCall()
-        manager.setForeground(false)
+        manager.setForeground(isForeground = false)
         runCurrent()
         assertTrue(manager.sessionState.value.isFinalizing)
         advanceTimeBy(FINALIZE_WINDOW_MILLIS)
@@ -1033,7 +1048,7 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         val startedAt = manager.sessionState.value.startedAtMillis
         media.emitResumptionHandle(RESUMPTION_HANDLE)
-        media.emitInputTranscription("Hello", isFinished = true)
+        media.emitInputTranscription(text = "Hello", isFinished = true)
         runCurrent()
         media.disconnect(CallFailure.NETWORK)
         runCurrent()
@@ -1142,13 +1157,13 @@ class CallSessionManagerTest {
     @Test
     fun silencedMicrophoneBlocksUplinkAndRecovers() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.silenceMicrophone(true)
+        media.silenceMicrophone(isSilenced = true)
         runCurrent()
         assertEquals(CallInterruption.MICROPHONE, manager.sessionState.value.interruption)
         assertTrue(media.isUplinkBlocked)
         assertEquals(CallState.ACTIVE, manager.sessionState.value.state)
 
-        media.silenceMicrophone(false)
+        media.silenceMicrophone(isSilenced = false)
         runCurrent()
 
         assertEquals(null, manager.sessionState.value.interruption)
@@ -1160,9 +1175,9 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         manager.toggleMute()
         runCurrent()
-        media.silenceMicrophone(true)
+        media.silenceMicrophone(isSilenced = true)
         runCurrent()
-        media.silenceMicrophone(false)
+        media.silenceMicrophone(isSilenced = false)
         runCurrent()
 
         assertTrue(manager.sessionState.value.isMuted)
@@ -1172,7 +1187,7 @@ class CallSessionManagerTest {
     @Test
     fun silencedMicrophoneFailsAfterWindow() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.silenceMicrophone(true)
+        media.silenceMicrophone(isSilenced = true)
         runCurrent()
         advanceTimeBy(MICROPHONE_WINDOW_MILLIS)
         runCurrent()
@@ -1183,7 +1198,7 @@ class CallSessionManagerTest {
     @Test
     fun muteIsIgnoredWhileMicrophoneIsBlocked() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.silenceMicrophone(true)
+        media.silenceMicrophone(isSilenced = true)
         runCurrent()
         manager.toggleMute()
         runCurrent()
@@ -1201,7 +1216,7 @@ class CallSessionManagerTest {
         assertTrue(media.isPlaybackPaused)
         assertEquals(PronunciationState.PLAYING, manager.sessionState.value.pronunciation)
 
-        media.finishPronunciation(true)
+        media.finishPronunciation(isSuccess = true)
         runCurrent()
 
         assertFalse(media.isUplinkBlocked)
@@ -1218,7 +1233,7 @@ class CallSessionManagerTest {
         runCurrent()
         manager.playPronunciation("latte")
         runCurrent()
-        media.finishPronunciation(true)
+        media.finishPronunciation(isSuccess = true)
         runCurrent()
 
         assertTrue(manager.sessionState.value.isMuted)
@@ -1237,7 +1252,7 @@ class CallSessionManagerTest {
         runCurrent()
         assertFalse(media.isUplinkEnabled)
 
-        media.finishPronunciation(true)
+        media.finishPronunciation(isSuccess = true)
         runCurrent()
 
         assertFalse(manager.sessionState.value.isMuted)
@@ -1249,7 +1264,7 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         manager.playPronunciation("latte")
         runCurrent()
-        media.finishPronunciation(false)
+        media.finishPronunciation(isSuccess = false)
         runCurrent()
 
         val state = manager.sessionState.value
@@ -1284,7 +1299,7 @@ class CallSessionManagerTest {
 
         assertEquals(PronunciationState.PLAYING, manager.sessionState.value.pronunciation)
         assertTrue(media.isPlaybackPaused)
-        media.finishPronunciation(true)
+        media.finishPronunciation(isSuccess = true)
         runCurrent()
         assertFalse(media.isPlaybackPaused)
     }
@@ -1319,7 +1334,7 @@ class CallSessionManagerTest {
         val media = startActive(manager, attempts)
         manager.playPronunciation("latte")
         runCurrent()
-        media.finishPronunciation(false)
+        media.finishPronunciation(isSuccess = false)
         runCurrent()
         manager.stopPronunciation()
         runCurrent()
@@ -1345,10 +1360,10 @@ class CallSessionManagerTest {
     }
 
     private fun TestScope.speak(media: FakeCallSessionMedia, durationMillis: Long) {
-        media.emitSpeechActivity(true)
+        media.emitSpeechActivity(isSpeaking = true)
         runCurrent()
         advanceTimeBy(durationMillis)
-        media.emitSpeechActivity(false)
+        media.emitSpeechActivity(isSpeaking = false)
         runCurrent()
     }
 
@@ -1379,7 +1394,7 @@ class CallSessionManagerTest {
     fun cancellingBeforeActiveNeverWritesAnActiveMarker() {
         val marker = FakeActiveCallMarker()
         withManager(marker = marker) { manager, _ ->
-            manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+            manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
             runCurrent()
             manager.endCall()
             runCurrent()
@@ -1433,21 +1448,22 @@ class CallSessionManagerTest {
         test: TestScope.(CallSessionManager, List<FakeCallSessionMedia>) -> Unit
     ) = runTest {
         val attempts = mutableListOf<FakeCallSessionMedia>()
-        val manager = CallSessionManager(
-            createMedia = {
-                check(!shouldFailConstruction)
-                FakeCallSessionMedia().also {
-                    it.hasPermission = hasPermission
-                    attempts += it
-                }
-            },
-            dispatcher = StandardTestDispatcher(testScheduler),
-            nowMillis = { testScheduler.currentTime },
-            epochMillis = { EPOCH_START_MILLIS + testScheduler.currentTime },
-            saveActiveMarker = { marker?.save(it) },
-            removeActiveMarker = { marker?.remove(it) }
-        )
-        manager.setForeground(true)
+        val manager =
+            CallSessionManager(
+                createMedia = {
+                    check(!shouldFailConstruction)
+                    FakeCallSessionMedia().also {
+                        it.hasPermission = hasPermission
+                        attempts += it
+                    }
+                },
+                dispatcher = StandardTestDispatcher(testScheduler),
+                nowMillis = { testScheduler.currentTime },
+                epochMillis = { EPOCH_START_MILLIS + testScheduler.currentTime },
+                saveActiveMarker = { marker?.save(it) },
+                removeActiveMarker = { marker?.remove(it) }
+            )
+        manager.setForeground(isForeground = true)
         try {
             test(manager, attempts)
         } finally {
@@ -1471,7 +1487,7 @@ class CallSessionManagerTest {
         runCurrent()
         assertEquals(PronunciationState.PLAYING, manager.sessionState.value.pronunciation)
         assertEquals(0, media.pronunciationStops)
-        media.finishPronunciation(true)
+        media.finishPronunciation(isSuccess = true)
         runCurrent()
         assertEquals(PronunciationState.IDLE, manager.sessionState.value.pronunciation)
         assertTrue(media.isUplinkEnabled)
@@ -1491,7 +1507,7 @@ class CallSessionManagerTest {
         assertTrue(media.isUplinkEnabled)
         assertTrue(media.pronunciationStops > 0)
         media.startPronunciation()
-        media.finishPronunciation(true)
+        media.finishPronunciation(isSuccess = true)
         runCurrent()
         assertEquals(PronunciationState.FAILED, manager.sessionState.value.pronunciation)
         assertEquals(1, attempts.size)
@@ -1507,7 +1523,7 @@ class CallSessionManagerTest {
         runCurrent()
         val ended = manager.sessionState.value
         media.startPronunciation()
-        media.finishPronunciation(true)
+        media.finishPronunciation(isSuccess = true)
         advanceTimeBy(PRONUNCIATION_TIMEOUT_MILLIS)
         runCurrent()
         assertEquals(ended, manager.sessionState.value)
@@ -1518,7 +1534,7 @@ class CallSessionManagerTest {
     @Test
     fun microphoneRetryKeepsTheOriginalRecoveryDeadlineWhileStillBlocked() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.silenceMicrophone(true)
+        media.silenceMicrophone(isSilenced = true)
         runCurrent()
         advanceTimeBy(TEST_INTERVAL_MILLIS)
         manager.resumeCall()
@@ -1533,7 +1549,7 @@ class CallSessionManagerTest {
     @Test
     fun microphoneRetryUsesTheDeviceSnapshotWithoutOpeningAnotherSession() = withManager { manager, attempts ->
         val media = startActive(manager, attempts)
-        media.silenceMicrophone(true)
+        media.silenceMicrophone(isSilenced = true)
         runCurrent()
         val startedAt = manager.sessionState.value.startedAtMillis
         media.isMicrophoneBlocked = false
@@ -1563,8 +1579,75 @@ class CallSessionManagerTest {
         assertEquals(1, attempts.size)
     }
 
-    private fun TestScope.startActive(manager: CallSessionManager, attempts: List<FakeCallSessionMedia>): FakeCallSessionMedia {
-        manager.startCall(scenario, CallActivityType.FREE_PRACTICE, "")
+    @Test
+    fun startCallIgnoredWhileBackgroundedLeavesSessionReadyWithoutOpeningMedia() = withManager { manager, attempts ->
+        manager.setForeground(isForeground = false)
+        runCurrent()
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
+        runCurrent()
+
+        assertEquals(CallState.READY, manager.sessionState.value.state)
+        assertTrue(attempts.isEmpty())
+
+        manager.setForeground(isForeground = true)
+        runCurrent()
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
+        manager.setForeground(isForeground = false)
+        runCurrent()
+
+        assertEquals(CallState.READY, manager.sessionState.value.state)
+        assertTrue(attempts.isEmpty())
+    }
+
+    @Test
+    fun earlyStartFailureDoesNotCarryOverPreviousSessionState() = runTest {
+        var nextHasPermission = true
+        val attempts = mutableListOf<FakeCallSessionMedia>()
+        val manager =
+            CallSessionManager(
+                createMedia = {
+                    FakeCallSessionMedia().also {
+                        it.hasPermission = nextHasPermission
+                        attempts += it
+                    }
+                },
+                dispatcher = StandardTestDispatcher(testScheduler),
+                nowMillis = { testScheduler.currentTime },
+                epochMillis = { EPOCH_START_MILLIS + testScheduler.currentTime }
+            )
+        manager.setForeground(isForeground = true)
+        try {
+            val first = startAssessment(manager, attempts)
+            speak(first, LONG_SPEECH_MILLIS)
+            first.emitInputTranscription(text = "Previous turn", isFinished = true)
+            first.captureAudioLimitCallback().invoke()
+            runCurrent()
+            assertTrue(manager.sessionState.value.transcript.isNotEmpty())
+            assertTrue(manager.sessionState.value.hasReachedAssessmentAudioLimit)
+            assertNotNull(manager.sessionState.value.startedAtEpochMillis)
+
+            nextHasPermission = false
+            manager.startCall(scenario, CallActivityType.INITIAL_PLACEMENT)
+            runCurrent()
+
+            val failed = manager.sessionState.value
+            assertEquals(CallState.FAILED, failed.state)
+            assertEquals(CallFailure.MICROPHONE_PERMISSION, failed.failure)
+            assertTrue(failed.transcript.isEmpty())
+            assertNull(failed.startedAtMillis)
+            assertNull(failed.startedAtEpochMillis)
+            assertFalse(failed.hasReachedAssessmentAudioLimit)
+        } finally {
+            manager.close()
+            runCurrent()
+        }
+    }
+
+    private fun TestScope.startActive(
+        manager: CallSessionManager,
+        attempts: List<FakeCallSessionMedia>
+    ): FakeCallSessionMedia {
+        manager.startCall(scenario, CallActivityType.FREE_PRACTICE)
         runCurrent()
         val media = attempts.single()
         media.acknowledgeSetup()

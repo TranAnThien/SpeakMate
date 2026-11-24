@@ -1,7 +1,6 @@
 package com.project.speakmate.ui.training.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,7 +18,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.airbnb.lottie.compose.LottieConstants
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.AnimatedMascot
+import com.project.speakmate.ui.components.lottie.AnimatedMascot
+import com.project.speakmate.ui.components.lottie.MascotAnimation
+import com.project.speakmate.ui.components.state.StatusContent
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 
@@ -33,22 +34,42 @@ fun TrainingResultOutcome(
     modifier: Modifier = Modifier,
     isIntroduction: Boolean = false
 ) {
-    Column(modifier.fillMaxWidth().background(surface, RoundedCornerShape(24.dp)).padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally) {
-        if (isIntroduction) Icon(painterResource(R.drawable.ic_training_assessment_coffee), null, Modifier.size(56.dp), tint = DesignColor.Primary)
-        else AnimatedMascot(
-            animationRes = when {
-                isProcessing -> R.raw.lottie_assessing
-                isPassed -> R.raw.lottie_result_pass
-                else -> R.raw.lottie_result_encourage
-            },
-            fallbackRes = if (isProcessing) R.drawable.img_call_processing else R.drawable.img_call_listening,
-            modifier = Modifier.size(if (isProcessing) 160.dp else 120.dp),
-            iterations = if (isProcessing) LottieConstants.IterateForever else 1
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(title, style = DesignTypography.Heading, color = DesignColor.Text, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(12.dp))
-        Text(description, style = DesignTypography.Body, color = DesignColor.Muted, textAlign = TextAlign.Center)
-    }
+    StatusContent(
+        title = title,
+        titleStyle = DesignTypography.Heading,
+        titleColor = DesignColor.Text,
+        titleTextAlign = TextAlign.Center,
+        description = description,
+        descriptionStyle = DesignTypography.Body,
+        descriptionColor = DesignColor.Muted,
+        descriptionTextAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(surface, RoundedCornerShape(24.dp))
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        illustration = {
+            if (isIntroduction)
+                Icon(
+                    painter = painterResource(R.drawable.ic_training_assessment_coffee),
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = DesignColor.Primary
+                )
+            else
+                AnimatedMascot(
+                    animation =
+                        when {
+                            isProcessing -> MascotAnimation.ASSESSING
+                            isPassed -> MascotAnimation.RESULT_PASS
+                            else -> MascotAnimation.RESULT_ENCOURAGE
+                        },
+                    modifier = Modifier.size(if (isProcessing) 160.dp else 120.dp),
+                    fallbackRes = if (isProcessing) R.drawable.img_call_processing else R.drawable.img_call_listening,
+                    iterations = if (isProcessing) LottieConstants.IterateForever else 1
+                )
+            Spacer(Modifier.height(12.dp))
+        },
+        titleContent = { Spacer(Modifier.height(12.dp)) }
+    )
 }

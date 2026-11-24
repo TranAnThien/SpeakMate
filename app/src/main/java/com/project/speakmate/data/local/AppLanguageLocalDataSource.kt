@@ -6,9 +6,11 @@ import com.project.speakmate.utils.extension.default
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+@Singleton
 class AppLanguageLocalDataSource @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
@@ -18,11 +20,18 @@ class AppLanguageLocalDataSource @Inject constructor(
         private const val WRITE_FAILED = "App language write failed"
     }
 
+    @Volatile private var cachedLanguage: AppLanguage? = null
+
     suspend fun getLanguage(): AppLanguage = withContext(Dispatchers.IO) {
         getSavedLanguage()
     }
 
     fun getSavedLanguage(): AppLanguage {
+        cachedLanguage?.let { return it }
+        return readSavedLanguage().also { cachedLanguage = it }
+    }
+
+    fun readSavedLanguage(): AppLanguage {
         val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
         val tag = try { preferences.getString(LANGUAGE_TAG, null) } catch (_: ClassCastException) { null }
         return AppLanguage.entries.firstOrNull { it.languageTag == tag }.default(AppLanguage.VIETNAMESE)
@@ -31,5 +40,6 @@ class AppLanguageLocalDataSource @Inject constructor(
     suspend fun saveLanguage(language: AppLanguage): Unit = withContext(Dispatchers.IO) {
         val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
         if (!preferences.edit().putString(LANGUAGE_TAG, language.languageTag).commit()) throw IOException(WRITE_FAILED)
+        cachedLanguage = language
     }
 }

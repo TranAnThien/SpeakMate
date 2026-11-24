@@ -19,6 +19,7 @@ import com.project.speakmate.domain.model.TrainingProgress
 import com.project.speakmate.domain.model.TrainingStage
 import com.project.speakmate.domain.rules.ReassessmentTestFixtures.ASSESSED_AT_MILLIS
 import kotlin.random.Random
+import java.util.Date
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -27,6 +28,36 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReassessmentRulesTest {
+    @Test
+    fun evidenceExpiryKeepsTheExistingRetentionArithmetic() {
+        val startedAtMillis = ASSESSED_AT_MILLIS
+        assertEquals(
+            startedAtMillis + PracticeCompletionRules.AUDIO_RETENTION_MILLIS,
+            ReassessmentRules.getEvidenceExpiryMillis(startedAtMillis)
+        )
+        assertEquals(
+            PracticeCompletionRules.AUDIO_RETENTION_MILLIS,
+            ReassessmentRules.getEvidenceExpiryMillis(0L)
+        )
+    }
+
+    @Test
+    fun saveAllowsAnEligibleCurrentLevelOrAnExactPromotionReceipt() {
+        val profile = ReassessmentTestFixtures.getUser(A2)
+        val criteria = PlacementTestFixtures.getOutcome(AssessmentResult.PASS).criteria
+        val result = ReassessmentTransition.Promoted(B1, criteria, ASSESSED_AT_MILLIS)
+        assertTrue(ReassessmentRules.canSaveResult(profile, result, A2))
+        assertFalse(ReassessmentRules.canSaveResult(profile, result, A1))
+        assertFalse(ReassessmentRules.canSaveResult(profile.copy(trainingProgress = null), result, A2))
+        val receipt = profile.copy(
+            level = result.newLevel,
+            lastAssessedAt = Date(result.lastAssessedAtMillis),
+            latestAssessmentCriteria = criteria
+        )
+        assertTrue(ReassessmentRules.canSaveResult(receipt, result, A2))
+        assertFalse(ReassessmentRules.canSaveResult(receipt.copy(lastAssessedAt = Date(0L)), result, A2))
+    }
+
     private val rules = ReassessmentRules
     private val tasks = ReassessmentTestFixtures.getTasks()
     private val pass = PlacementTestFixtures.getOutcome(AssessmentResult.PASS)

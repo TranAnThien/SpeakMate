@@ -1,13 +1,14 @@
 package com.project.speakmate.ui.training.state
 
-import androidx.compose.runtime.Immutable
+import com.project.speakmate.domain.model.SpeakingLevel
 
-@Immutable
 data class PathCompletionUiState(
-    val levelLabel: String = "",
-    val nextLevelLabel: String = "",
-    val isHighestLevel: Boolean = false,
-    val description: String = "",
-    val noticeTitle: String = "",
-    val notice: String = ""
-)
+    val isLoading: Boolean = true,
+    val hasLoadError: Boolean = false,
+    val isCompleted: Boolean = false,
+    val level: SpeakingLevel = SpeakingLevel.NOT_ASSESSED,
+    val nextLevel: SpeakingLevel? = null
+) {
+    val isHighestLevel: Boolean
+        get() = level == SpeakingLevel.B2
+}

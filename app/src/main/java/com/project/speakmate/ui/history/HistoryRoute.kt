@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -11,6 +12,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.project.speakmate.ui.history.state.HistoryNavigation
 import com.project.speakmate.utils.AppConstant
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -27,39 +29,59 @@ fun HistoryRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val owner = LocalLifecycleOwner.current
+    val openPractice by rememberUpdatedState(onOpenPractice)
+    val openTrainingPath by rememberUpdatedState(onOpenTrainingPath)
+    LaunchedEffect(state.pendingNavigation, viewModel, owner) {
+        if (state.pendingNavigation != null) {
+            owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                when (viewModel.consumePendingNavigation()) {
+                    HistoryNavigation.OPEN_PRACTICE -> openPractice()
+                    HistoryNavigation.OPEN_TRAINING_PATH -> openTrainingPath()
+                    null -> Unit
+                }
+            }
+        }
+    }
     LaunchedEffect(viewModel, owner, listState) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             viewModel.onStarted()
             try {
-            combine(snapshotFlow {
-                val layout = listState.layoutInfo
-                val last = layout.visibleItemsInfo.lastOrNull()?.index
-                last to layout.totalItemsCount
-            }, viewModel.uiState) { (last, total), current ->
-                current.hasMore && !current.isLoadingMore && !current.hasLoadMoreError && !current.isRefreshing &&
-                    !current.hasRefreshError && last != null && last >= total - AppConstant.HISTORY_PREFETCH_ITEM_COUNT
-            }.distinctUntilChanged().filter { it }.collect { viewModel.loadMore() }
-            } finally { viewModel.onStopped() }
+                combine(
+                    snapshotFlow {
+                        val layout = listState.layoutInfo
+                        val last = layout.visibleItemsInfo.lastOrNull()?.index
+                        last to layout.totalItemsCount
+                    },
+                    viewModel.uiState
+                ) { (last, total), current ->
+                    current.hasMore &&
+                        !current.isLoadingMore &&
+                        !current.hasLoadMoreError &&
+                        !current.isRefreshing &&
+                        !current.hasRefreshError &&
+                        last != null &&
+                        last >= total - AppConstant.HISTORY_PREFETCH_ITEM_COUNT
+                }
+                    .distinctUntilChanged()
+                    .filter { it }
+                    .collect { viewModel.loadMore() }
+            } finally {
+                viewModel.onStopped()
+            }
         }
     }
-    LaunchedEffect(state.refreshVersion, state.selectedFilterId) {
-        listState.scrollToItem(0)
-    }
+    LaunchedEffect(state.refreshVersion, state.selectedFilterId) { listState.scrollToItem(0) }
     HistoryScreen(
         state = state,
         onSelectFilter = viewModel::selectFilter,
         onOpenSession = onOpenSession,
-        onStartPractice = {
-            if (viewModel.startPractice()) onOpenPractice()
-            else onOpenTrainingPath()
-        },
+        onStartPractice = viewModel::startPractice,
         onRetry = viewModel::reload,
         onRetrySave = viewModel::retrySave,
         onSaveUnassessed = viewModel::saveUnassessed,
         onRequestDiscard = viewModel::requestDiscard,
         onConfirmDiscard = viewModel::confirmDiscard,
         onCancelDiscard = viewModel::cancelDiscard,
-        onDismissError = viewModel::retry,
         onClearFilter = viewModel::clearFilter,
         onReturnToPath = onOpenTrainingPath,
         onLoadMore = viewModel::loadMore,

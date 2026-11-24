@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.project.speakmate.R
-import com.project.speakmate.ui.components.DialogActions
-import com.project.speakmate.ui.components.MessageDialog
+import com.project.speakmate.ui.components.button.DialogActions
+import com.project.speakmate.ui.components.dialog.MessageDialog
 
 @Composable
 fun CallEndConfirmation(
@@ -21,6 +21,12 @@ fun CallEndConfirmation(
         onDismiss = onContinueCall,
         modifier = modifier
     ) {
-        DialogActions(stringResource(R.string.call_confirm_end), dismissLabel, onConfirmEndCall, onContinueCall, isDestructive = true)
+        DialogActions(
+            primaryText = stringResource(R.string.call_confirm_end),
+            secondaryText = dismissLabel,
+            onPrimaryAction = onConfirmEndCall,
+            onSecondaryAction = onContinueCall,
+            isDestructive = true
+        )
     }
 }

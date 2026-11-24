@@ -1,12 +1,8 @@
 package com.project.speakmate.ui.placement.state
 
+import com.project.speakmate.domain.model.SpeakingLevel
 
 data class PromotionIntroductionUiState(
-    val title: String = "",
-    val description: String = "",
-    val steps: List<PromotionStepUiState> = emptyList(),
-    val conditionTitle: String = "",
-    val conditionDescription: String = "",
-    val note: String = "",
-    val currentLevelLabel: String = ""
+    val currentLevel: SpeakingLevel = SpeakingLevel.A1,
+    val nextLevel: SpeakingLevel = SpeakingLevel.A2
 )

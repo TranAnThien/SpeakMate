@@ -17,9 +17,4 @@ data class SavedVocabUiState(
     val deletingCount: Int = 0,
     val playback: PronunciationPlaybackState = PronunciationPlaybackState(),
     val pronunciationIdentity: SavedVocabularyIdentity? = null
-) {
-    val isEmpty: Boolean
-        get() = !isLoading && !hasLoadError && filteredVocabularies.isEmpty() && searchQuery.isBlank()
-    val hasNoMatches: Boolean
-        get() = !isLoading && !hasLoadError && filteredVocabularies.isEmpty() && searchQuery.isNotBlank()
-}
+) {}

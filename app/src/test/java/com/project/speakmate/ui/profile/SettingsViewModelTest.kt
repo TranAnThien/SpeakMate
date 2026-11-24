@@ -7,20 +7,18 @@ import com.project.speakmate.domain.repository.AppLanguageRepository
 import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.MainDispatcherRule
-import com.project.speakmate.ui.profile.state.SettingsEffect
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -64,14 +62,18 @@ class SettingsViewModelTest {
         every { completions.observePendingCompletions() } returns flowOf(emptyList())
         coEvery { languages.saveLanguage(AppLanguage.ENGLISH) } returns Result.success(Unit)
         val viewModel = createViewModel()
-        val effects = mutableListOf<SettingsEffect>()
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiEffect.collect { effects.add(it) } }
         advanceUntilIdle()
         viewModel.showLanguageNotice()
         viewModel.changeLanguage(AppLanguage.ENGLISH)
         advanceUntilIdle()
-        assertEquals(listOf(SettingsEffect.RecreateActivity), effects)
+        assertTrue(viewModel.uiState.value.isRecreateRequired)
         assertEquals(AppLanguage.ENGLISH, viewModel.uiState.value.selectedLanguage)
+        viewModel.changeLanguage(AppLanguage.VIETNAMESE)
+        advanceUntilIdle()
+        assertEquals(AppLanguage.ENGLISH, viewModel.uiState.value.selectedLanguage)
+        assertTrue(viewModel.consumeRecreateRequired())
+        assertFalse(viewModel.uiState.value.isRecreateRequired)
+        assertFalse(viewModel.consumeRecreateRequired())
     }
 
     @Test
@@ -79,15 +81,14 @@ class SettingsViewModelTest {
         every { completions.observePendingCompletions() } returns flowOf(emptyList())
         coEvery { languages.saveLanguage(AppLanguage.ENGLISH) } returns Result.failure(IllegalStateException())
         val viewModel = createViewModel()
-        val effects = mutableListOf<SettingsEffect>()
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiEffect.collect { effects.add(it) } }
         advanceUntilIdle()
         viewModel.showLanguageNotice()
         viewModel.changeLanguage(AppLanguage.ENGLISH)
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isLanguageSaveFailed)
         assertEquals(AppLanguage.VIETNAMESE, viewModel.uiState.value.selectedLanguage)
-        assertTrue(effects.isEmpty())
+        assertFalse(viewModel.uiState.value.isRecreateRequired)
+        assertFalse(viewModel.consumeRecreateRequired())
     }
 
     private fun createViewModel(): SettingsViewModel {

@@ -24,5 +24,6 @@ data class PlacementUiState(
     val recoveryProblem: PracticeRecoveryReason? = null,
     val currentTaskNumber: Int = 0,
     val taskRole: com.project.speakmate.domain.model.PlacementRole? = null,
-    val canRetryLoad: Boolean = false
+    val canRetryLoad: Boolean = false,
+    val pendingNavigation: PlacementNavigation? = null
 )

@@ -4,6 +4,7 @@ import com.project.speakmate.data.audio.PronunciationPlayer
 import com.project.speakmate.domain.model.PronunciationPlaybackState
 import com.project.speakmate.domain.model.PronunciationState
 import com.project.speakmate.domain.repository.PronunciationRepository
+import com.project.speakmate.utils.AppConstant
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -16,11 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class PronunciationRepositoryImpl @Inject constructor(private val player: PronunciationPlayer) : PronunciationRepository {
-    companion object {
-        private const val START_TIMEOUT_MILLIS = 10_000L
-    }
-
+class PronunciationRepositoryImpl @Inject constructor(private val player: PronunciationPlayer) :
+    PronunciationRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val revision = AtomicLong()
     private val state = MutableStateFlow(PronunciationPlaybackState())
@@ -30,7 +28,8 @@ class PronunciationRepositoryImpl @Inject constructor(private val player: Pronun
     override fun playText(text: String) {
         if (text.isBlank()) return
         val current = state.value
-        if (current.text == text && (current.status == PronunciationState.LOADING || current.status == PronunciationState.PLAYING)) {
+        if (current.text == text &&
+            (current.status == PronunciationState.LOADING || current.status == PronunciationState.PLAYING)) {
             stop()
             return
         }
@@ -38,26 +37,34 @@ class PronunciationRepositoryImpl @Inject constructor(private val player: Pronun
         timeoutJob?.cancel()
         player.stop()
         state.value = PronunciationPlaybackState(text, PronunciationState.LOADING)
-        timeoutJob = scope.launch {
-            delay(START_TIMEOUT_MILLIS)
-            if (revision.compareAndSet(request, request + 1)) {
-                player.stop()
-                state.value = PronunciationPlaybackState(text, PronunciationState.FAILED)
-            }
-        }
-        try {
-            player.speak(text, onStarted = {
-                if (revision.get() == request) {
-                    timeoutJob?.cancel()
-                    state.value = PronunciationPlaybackState(text, PronunciationState.PLAYING)
+        timeoutJob =
+            scope.launch {
+                delay(AppConstant.PRONUNCIATION_START_TIMEOUT_MILLIS)
+                if (revision.compareAndSet(request, request + 1)) {
+                    player.stop()
+                    state.value = PronunciationPlaybackState(text, PronunciationState.FAILED)
                 }
-            }) { isSuccess ->
+            }
+        try {
+            player.speak(
+                text,
+                onStarted = {
+                    if (revision.get() == request) {
+                        timeoutJob?.cancel()
+                        state.value = PronunciationPlaybackState(text, PronunciationState.PLAYING)
+                    }
+                }
+            ) { isSuccess ->
                 if (revision.compareAndSet(request, request + 1)) {
                     timeoutJob?.cancel()
-                    state.value = PronunciationPlaybackState(text, if (isSuccess) PronunciationState.IDLE else PronunciationState.FAILED)
+                    state.value =
+                        PronunciationPlaybackState(
+                            text,
+                            if (isSuccess) PronunciationState.IDLE else PronunciationState.FAILED
+                        )
                 }
             }
-        } catch (failure: RuntimeException) {
+        } catch (_: RuntimeException) {
             if (revision.compareAndSet(request, request + 1)) {
                 timeoutJob?.cancel()
                 state.value = PronunciationPlaybackState(text, PronunciationState.FAILED)

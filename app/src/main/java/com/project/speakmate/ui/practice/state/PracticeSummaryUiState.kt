@@ -2,7 +2,7 @@ package com.project.speakmate.ui.practice.state
 
 import com.project.speakmate.domain.model.PracticeSaveFailure
 import com.project.speakmate.domain.rules.PracticeSaveRetryRules
-import com.project.speakmate.ui.components.TranscriptMessageUiState
+import com.project.speakmate.ui.components.transcript.TranscriptMessageUiState
 
 data class PracticeSummaryUiState(
     val scenarioTitle: String = "",
@@ -14,5 +14,5 @@ data class PracticeSummaryUiState(
     val canReload: Boolean = true
 ) {
     val canRetrySave: Boolean
-        get() = saveFailure?.let(PracticeSaveRetryRules::canRetryManually) != false
+        get() = saveFailure?.let(PracticeSaveRetryRules::canRetry) != false
 }

@@ -145,10 +145,48 @@ class GeminiLiveClientTest {
     }
 
     @Test
+    fun setupFrameSucceedsEvenWhenLargerThanBacklogLimit() {
+        val longPromptScenario = scenario.copy(promptTemplate = "a".repeat(BACKLOG_LIMIT_BYTES.toInt() + 1_024))
+        every { socket.queueSize() } returns BACKLOG_LIMIT_BYTES
+        client.connect(longPromptScenario)
+        listener.captured.onOpen(socket, mockk<Response>())
+
+        assertEquals(1, sent.size)
+        assertTrue(JSONObject(sent.single()).has("setup"))
+        assertTrue(failures.isEmpty())
+    }
+
+    @Test
+    fun briefUplinkBacklogDropsChunksAndRecoversWhenQueueClears() {
+        open()
+        val generation = checkNotNull(client.enableAudio())
+        every { socket.queueSize() } returns BACKLOG_LIMIT_BYTES
+        repeat(4) {
+            assertFalse(client.sendAudio(generation, byteArrayOf(0, 0), true))
+        }
+        assertTrue(failures.isEmpty())
+        verify(exactly = 0) { socket.cancel() }
+
+        every { socket.queueSize() } returns 0L
+        assertTrue(client.sendAudio(generation, byteArrayOf(1, 2), true))
+        assertTrue(failures.isEmpty())
+
+        every { socket.queueSize() } returns BACKLOG_LIMIT_BYTES
+        repeat(4) {
+            assertFalse(client.sendAudio(generation, byteArrayOf(0, 0), true))
+        }
+        assertTrue(failures.isEmpty())
+    }
+
+    @Test
     fun uplinkBacklogClosesTransportAndReportsOnlyOnce() {
         open()
         every { socket.queueSize() } returns BACKLOG_LIMIT_BYTES
         val generation = checkNotNull(client.enableAudio())
+        repeat(4) {
+            assertFalse(client.sendAudio(generation, byteArrayOf(0, 0), true))
+        }
+        assertTrue(failures.isEmpty())
         assertFalse(client.sendAudio(generation, byteArrayOf(0, 0), true))
         listener.captured.onFailure(socket, IOException(), null)
         assertEquals(listOf(CallFailure.NETWORK), failures)

@@ -6,11 +6,9 @@ import com.project.speakmate.domain.model.PracticeType
 @Immutable
 data class HistorySessionUiState(
     val id: String = "",
-    val metadata: String = "",
     val title: String = "",
-    val resultLabel: String = "",
     val result: HistoryResultPresentation = HistoryResultPresentation.COMPLETED,
-    val practiceType: PracticeType? = null,
+    val practiceType: PracticeType = PracticeType.FREE_PRACTICE,
     val duration: String = "",
     val startedAtMillis: Long = 0L
 )

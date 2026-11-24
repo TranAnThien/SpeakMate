@@ -1,6 +1,9 @@
 package com.project.speakmate.data.repository
 
+import com.project.speakmate.data.remote.dictionary.DictionaryClient
+import com.project.speakmate.data.remote.dictionary.DictionaryResponseParser
 import com.project.speakmate.domain.model.DictionaryLookupResult
+import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -11,7 +14,6 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.IOException
 
 class DictionaryRepositoryImplTest {
 
@@ -20,10 +22,8 @@ class DictionaryRepositoryImplTest {
             val url = chain.request().url.toString()
             handler(url)
         }
-        val client = OkHttpClient.Builder()
-            .addInterceptor(interceptor)
-            .build()
-        return DictionaryRepositoryImpl(client)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+        return DictionaryRepositoryImpl(client = DictionaryClient(client), responseParser = DictionaryResponseParser())
     }
 
     private fun makeResponse(url: String, code: Int, json: String): Response {
@@ -39,48 +39,55 @@ class DictionaryRepositoryImplTest {
 
     @Test
     fun lookUpReturnsFoundWhenApisReturnValidData() = runTest {
-        val freeDictJson = """
-            [
-              {
-                "word": "service",
-                "phonetic": "/ˈsɜː.vɪs/",
-                "meanings": [
+        val freeDictJson =
+            """
+                [
                   {
-                    "partOfSpeech": "noun",
-                    "definitions": [
+                    "word": "service",
+                    "phonetic": "/ˈsɜː.vɪs/",
+                    "meanings": [
                       {
-                        "definition": "An act of assistance",
-                        "example": "He provided good service."
+                        "partOfSpeech": "noun",
+                        "definitions": [
+                          {
+                            "definition": "An act of assistance",
+                            "example": "He provided good service."
+                          }
+                        ]
                       }
                     ]
                   }
                 ]
-              }
-            ]
-        """.trimIndent()
+            """
+                .trimIndent()
 
-        val myMemoryWordJson = """
-            {
-              "responseData": {
-                "translatedText": "dịch vụ"
-              }
-            }
-        """.trimIndent()
+        val myMemoryWordJson =
+            """
+                {
+                  "responseData": {
+                    "translatedText": "dịch vụ"
+                  }
+                }
+            """
+                .trimIndent()
 
-        val myMemoryExJson = """
-            {
-              "responseData": {
-                "translatedText": "Anh ấy đã cung cấp dịch vụ tốt."
-              }
-            }
-        """.trimIndent()
+        val myMemoryExJson =
+            """
+                {
+                  "responseData": {
+                    "translatedText": "Anh ấy đã cung cấp dịch vụ tốt."
+                  }
+                }
+            """
+                .trimIndent()
 
         val repository = createRepositoryWithHandler { url ->
             when {
-                url.contains("dictionaryapi.dev") -> makeResponse(url, 200, freeDictJson)
-                url.contains("He+provided+good+service") || url.contains("He%20provided%20good%20service") -> makeResponse(url, 200, myMemoryExJson)
-                url.contains("mymemory") -> makeResponse(url, 200, myMemoryWordJson)
-                else -> makeResponse(url, 404, "")
+                url.contains("dictionaryapi.dev") -> makeResponse(url = url, code = 200, json = freeDictJson)
+                url.contains("He+provided+good+service") || url.contains("He%20provided%20good%20service") ->
+                    makeResponse(url = url, code = 200, json = myMemoryExJson)
+                url.contains("mymemory") -> makeResponse(url = url, code = 200, json = myMemoryWordJson)
+                else -> makeResponse(url = url, code = 404, json = "")
             }
         }
 
@@ -96,32 +103,34 @@ class DictionaryRepositoryImplTest {
 
     @Test
     fun lookUpFallsBackToContextSentenceWhenFreeDictHasNoExample() = runTest {
-        val freeDictJson = """
-            [
-              {
-                "word": "service",
-                "phonetic": "/ˈsɜː.vɪs/",
-                "meanings": [
+        val freeDictJson =
+            """
+                [
                   {
-                    "partOfSpeech": "noun",
-                    "definitions": [
+                    "word": "service",
+                    "phonetic": "/ˈsɜː.vɪs/",
+                    "meanings": [
                       {
-                        "definition": "An act of assistance"
+                        "partOfSpeech": "noun",
+                        "definitions": [
+                          {
+                            "definition": "An act of assistance"
+                          }
+                        ]
                       }
                     ]
                   }
                 ]
-              }
-            ]
-        """.trimIndent()
+            """
+                .trimIndent()
 
         val myMemoryWordJson = """{"responseData":{"translatedText":"dịch vụ"}}"""
 
         val repository = createRepositoryWithHandler { url ->
             when {
-                url.contains("dictionaryapi.dev") -> makeResponse(url, 200, freeDictJson)
-                url.contains("mymemory") -> makeResponse(url, 200, myMemoryWordJson)
-                else -> makeResponse(url, 404, "")
+                url.contains("dictionaryapi.dev") -> makeResponse(url = url, code = 200, json = freeDictJson)
+                url.contains("mymemory") -> makeResponse(url = url, code = 200, json = myMemoryWordJson)
+                else -> makeResponse(url = url, code = 404, json = "")
             }
         }
 
@@ -134,9 +143,7 @@ class DictionaryRepositoryImplTest {
 
     @Test
     fun lookUpReturnsNotFoundWhenBothApisFail() = runTest {
-        val repository = createRepositoryWithHandler { url ->
-            makeResponse(url, 404, "")
-        }
+        val repository = createRepositoryWithHandler { url -> makeResponse(url = url, code = 404, json = "") }
 
         val result = repository.lookUp("xyzunknown", "")
         assertTrue(result is DictionaryLookupResult.NotFound)
@@ -144,9 +151,7 @@ class DictionaryRepositoryImplTest {
 
     @Test
     fun lookUpReturnsNotFoundWhenWordIsBlank() = runTest {
-        val repository = createRepositoryWithHandler { url ->
-            makeResponse(url, 200, "{}")
-        }
+        val repository = createRepositoryWithHandler { url -> makeResponse(url = url, code = 200, json = "{}") }
 
         val result = repository.lookUp("   ", "")
         assertTrue(result is DictionaryLookupResult.NotFound)
@@ -154,11 +159,10 @@ class DictionaryRepositoryImplTest {
 
     @Test
     fun lookUpReturnsErrorWhenNetworkThrowsException() = runTest {
-        val interceptor = Interceptor {
-            throw IOException("Connection failed")
-        }
+        val interceptor = Interceptor { throw IOException("Connection failed") }
         val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
-        val repository = DictionaryRepositoryImpl(client)
+        val repository =
+            DictionaryRepositoryImpl(client = DictionaryClient(client), responseParser = DictionaryResponseParser())
 
         val result = repository.lookUp("test", "")
         assertTrue(result is DictionaryLookupResult.Error)

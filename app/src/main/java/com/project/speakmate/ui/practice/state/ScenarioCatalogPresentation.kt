@@ -5,6 +5,5 @@ enum class ScenarioCatalogPresentation {
     LOADING,
     EMPTY,
     UNCONFIGURED,
-    LOAD_ERROR,
-    ERROR_DIALOG
+    LOAD_ERROR
 }

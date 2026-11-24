@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,51 +23,79 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.project.speakmate.R
+import com.project.speakmate.ui.components.text.DetailText
+import com.project.speakmate.ui.components.text.TitleText
 import com.project.speakmate.ui.theme.DesignColor
 import com.project.speakmate.ui.theme.DesignTypography
 import com.project.speakmate.ui.training.state.TrainingProgressStatus
 import com.project.speakmate.ui.training.state.TrainingUnitUiState
 
 @Composable
-fun TrainingUnitRow(
-    unit: TrainingUnitUiState,
-    onOpen: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun TrainingUnitRow(unit: TrainingUnitUiState, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val isCurrent = unit.status == TrainingProgressStatus.CURRENT
-    val statusColor = when (unit.status) {
-        TrainingProgressStatus.COMPLETED -> DesignColor.Success
-        TrainingProgressStatus.CURRENT -> DesignColor.Primary
-        TrainingProgressStatus.LOCKED -> DesignColor.Muted
-    }
-    val iconRes = when {
-        unit.isAssessment -> R.drawable.ic_training_flag
-        unit.status == TrainingProgressStatus.COMPLETED -> R.drawable.ic_placement_passed
-        isCurrent -> R.drawable.ic_training_play
-        else -> R.drawable.ic_training_lock
-    }
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-        .background(if (isCurrent) DesignColor.PaleBlue else DesignColor.Surface)
-        .heightIn(min = 48.dp).clickable(enabled = unit.destination != null, onClick = onOpen)
-        .padding(horizontal = if (isCurrent) 8.dp else 0.dp, vertical = if (isCurrent) 8.dp else 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(32.dp).background(when (unit.status) {
-            TrainingProgressStatus.COMPLETED -> DesignColor.SuccessSurface
-            TrainingProgressStatus.CURRENT -> DesignColor.IconBlue
-            TrainingProgressStatus.LOCKED -> DesignColor.NeutralSurface
-        }, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-            Image(painterResource(iconRes), null, Modifier.size(20.dp), colorFilter = ColorFilter.tint(statusColor))
+    val statusColor =
+        when (unit.status) {
+            TrainingProgressStatus.COMPLETED -> DesignColor.Success
+            TrainingProgressStatus.CURRENT -> DesignColor.Primary
+            TrainingProgressStatus.LOCKED -> DesignColor.Muted
+        }
+    val iconRes =
+        when {
+            unit.isAssessment -> R.drawable.ic_training_flag
+            unit.status == TrainingProgressStatus.COMPLETED -> R.drawable.ic_placement_passed
+            isCurrent -> R.drawable.ic_training_play
+            else -> R.drawable.ic_training_lock
+        }
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (isCurrent) DesignColor.PrimaryContainer else DesignColor.Surface)
+                .heightIn(min = 48.dp)
+                .clickable(enabled = unit.destination != null, onClick = onOpen)
+                .padding(horizontal = if (isCurrent) 8.dp else 0.dp, vertical = if (isCurrent) 8.dp else 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(32.dp)
+                .background(
+                    when (unit.status) {
+                        TrainingProgressStatus.COMPLETED -> DesignColor.SuccessContainer
+                        TrainingProgressStatus.CURRENT -> DesignColor.PrimaryContainer
+                        TrainingProgressStatus.LOCKED -> DesignColor.NeutralSurface
+                    },
+                    RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                colorFilter = ColorFilter.tint(statusColor)
+            )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(unit.title, style = DesignTypography.Title, color = DesignColor.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(stringResource(when {
-                unit.status == TrainingProgressStatus.COMPLETED -> R.string.training_completed_replay
-                isCurrent -> R.string.training_current
-                unit.isAssessment -> R.string.training_assessment_locked
-                else -> R.string.training_locked
-            }), style = if (isCurrent) DesignTypography.Badge else DesignTypography.Small, color = statusColor)
+            TitleText(text = unit.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                text =
+                    stringResource(
+                        when {
+                            unit.status == TrainingProgressStatus.COMPLETED -> R.string.training_completed_replay
+                            isCurrent -> R.string.training_current
+                            unit.isAssessment -> R.string.training_assessment_locked
+                            else -> R.string.training_locked
+                        }
+                    ),
+                style = if (isCurrent) DesignTypography.Badge else DesignTypography.Small,
+                color = statusColor
+            )
             if (unit.description.isNotBlank() || unit.isAssessment) {
-                Text(unit.description.ifBlank { stringResource(R.string.training_assessment_description) }, style = DesignTypography.Detail, color = DesignColor.Muted)
+                DetailText(
+                    text = unit.description.ifBlank { stringResource(R.string.training_assessment_description) }
+                )
             }
         }
     }

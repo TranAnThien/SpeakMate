@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,13 +32,16 @@ import com.project.speakmate.ui.call.components.CallEndConfirmation
 import com.project.speakmate.ui.call.components.CallFailureContent
 import com.project.speakmate.ui.call.components.CallStatusHeader
 import com.project.speakmate.ui.call.components.CallTranscriptSheet
+import com.project.speakmate.ui.call.state.CallDialog
 import com.project.speakmate.ui.call.state.CallPresentation
 import com.project.speakmate.ui.call.state.CallUiState
-import com.project.speakmate.ui.components.MessageDialog
-import com.project.speakmate.ui.components.PrimaryButton
-import com.project.speakmate.ui.components.SecondaryButton
+import com.project.speakmate.ui.components.button.DialogActions
+import com.project.speakmate.ui.components.button.PrimaryButton
+import com.project.speakmate.ui.components.button.SecondaryButton
+import com.project.speakmate.ui.components.dialog.MessageDialog
+import com.project.speakmate.ui.components.text.BodyText
+import com.project.speakmate.ui.components.text.DetailText
 import com.project.speakmate.ui.theme.DesignColor
-import com.project.speakmate.ui.theme.DesignTypography
 
 @Composable
 fun CallScreen(
@@ -68,33 +70,47 @@ fun CallScreen(
     onShowTitle: () -> Unit = {},
     onHideTitle: () -> Unit = {},
     onStopDictionaryWord: () -> Unit = {},
-    title: String = state.title,
+    title: String = "",
     activityIndex: Int? = state.activityIndex,
-    activityLevel: SpeakingLevel? = state.activityLevel,
-    activityRole: PlacementRole? = state.activityRole
+    activityLevel: SpeakingLevel? = null,
+    activityRole: PlacementRole? = null
 ) {
     BoxWithConstraints(modifier.fillMaxSize().background(DesignColor.RoutingBackground)) {
         if (state.presentation == CallPresentation.FAILED) {
             CallFailureContent(
-                description = stringResource(if (state.hasCompletionError) R.string.call_completion_error else when (state.failure) {
-                    CallFailure.CONFIGURATION -> R.string.call_failure_configuration
-                    CallFailure.ACCESS -> R.string.call_failure_access
-                    CallFailure.QUOTA -> R.string.call_failure_quota
-                    CallFailure.MODEL -> R.string.call_failure_model
-                    CallFailure.TIMEOUT -> R.string.call_failure_timeout
-                    CallFailure.PROTOCOL -> R.string.call_failure_protocol
-                    CallFailure.MICROPHONE_PERMISSION -> R.string.call_failure_microphone
-                    CallFailure.AUDIO -> R.string.call_failure_audio
-                    CallFailure.PLAYBACK_BACKLOG -> R.string.call_failure_playback_backlog
-                    CallFailure.PAUSE_EXPIRED -> R.string.call_failure_pause_expired
-                    CallFailure.NETWORK, null -> R.string.call_failure_description
-                }),
-                isConnectionFailure = !state.hasCompletionError && (state.failure == CallFailure.NETWORK || state.failure == null),
-                retryLabel = if (state.hasCompletionError) stringResource(R.string.call_retry_completion) else when (state.failure) {
-                    CallFailure.CONFIGURATION, CallFailure.ACCESS, CallFailure.MODEL -> null
-                    CallFailure.MICROPHONE_PERMISSION -> stringResource(R.string.call_recheck_permission)
-                    else -> stringResource(R.string.call_retry_connection)
-                }, onRetry = onRetry, onExit = onExit
+                description =
+                    stringResource(
+                        if (state.hasCompletionError) R.string.call_completion_error
+                        else
+                            when (state.failure) {
+                                CallFailure.CONFIGURATION -> R.string.call_failure_configuration
+                                CallFailure.ACCESS -> R.string.call_failure_access
+                                CallFailure.QUOTA -> R.string.call_failure_quota
+                                CallFailure.MODEL -> R.string.call_failure_model
+                                CallFailure.TIMEOUT -> R.string.call_failure_timeout
+                                CallFailure.PROTOCOL -> R.string.call_failure_protocol
+                                CallFailure.MICROPHONE_PERMISSION -> R.string.call_failure_microphone
+                                CallFailure.AUDIO -> R.string.call_failure_audio
+                                CallFailure.PLAYBACK_BACKLOG -> R.string.call_failure_playback_backlog
+                                CallFailure.PAUSE_EXPIRED -> R.string.call_failure_pause_expired
+                                CallFailure.NETWORK,
+                                null -> R.string.call_failure_description
+                            }
+                    ),
+                isConnectionFailure =
+                    !state.hasCompletionError && (state.failure == CallFailure.NETWORK || state.failure == null),
+                retryLabel =
+                    if (state.hasCompletionError) stringResource(R.string.call_retry_completion)
+                    else
+                        when (state.failure) {
+                            CallFailure.CONFIGURATION,
+                            CallFailure.ACCESS,
+                            CallFailure.MODEL -> null
+                            CallFailure.MICROPHONE_PERMISSION -> stringResource(R.string.call_recheck_permission)
+                            else -> stringResource(R.string.call_retry_connection)
+                        },
+                onRetry = onRetry,
+                onExit = onExit
             )
         } else {
             val isConnecting = state.presentation == CallPresentation.CONNECTING
@@ -104,35 +120,84 @@ fun CallScreen(
             val isReady = state.presentation == CallPresentation.READY
             val headerHeight = maxHeight * if (state.isTranscriptVisible) 0.4f else 0.5f
             Column(Modifier.fillMaxSize()) {
-                CallStatusHeader(title, state.presentation, Modifier.heightIn(max = headerHeight).verticalScroll(rememberScrollState()),
-                    durationContent, state.isMuted, state.activityType, activityIndex, onShowTitle,
-                    isCompact = state.isTranscriptVisible, activityLevel = activityLevel, activityRole = activityRole)
+                CallStatusHeader(
+                    title = title,
+                    presentation = state.presentation,
+                    modifier = Modifier.heightIn(max = headerHeight).verticalScroll(rememberScrollState()),
+                    durationContent = durationContent,
+                    isMuted = state.isMuted,
+                    activityType = state.activityType,
+                    activityIndex = activityIndex,
+                    onShowTitle = onShowTitle,
+                    isCompact = state.isTranscriptVisible,
+                    activityLevel = activityLevel,
+                    activityRole = activityRole
+                )
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     if (state.isTranscriptAvailable && state.isTranscriptVisible) {
-                        CallTranscriptSheet(state.messages, state.dictionary, transcriptListState, onCloseTranscript, onSelectTranscriptWord,
-                            onCloseDictionary, onPlayDictionaryWord, onSaveDictionaryWord, onRetryDictionary,
-                            Modifier.fillMaxSize(), initialDictionaryAnchorTop, onStopPronunciation = onStopDictionaryWord)
+                        CallTranscriptSheet(
+                            messages = state.messages,
+                            dictionary = state.dictionary,
+                            listState = transcriptListState,
+                            onClose = onCloseTranscript,
+                            onSelectWord = onSelectTranscriptWord,
+                            onCloseDictionary = onCloseDictionary,
+                            onPlayDictionaryWord = onPlayDictionaryWord,
+                            onSaveDictionaryWord = onSaveDictionaryWord,
+                            onRetryDictionary = onRetryDictionary,
+                            modifier = Modifier.fillMaxSize(),
+                            initialDictionaryAnchorTop = initialDictionaryAnchorTop,
+                            onStopPronunciation = onStopDictionaryWord
+                        )
                     } else {
-                        val avatarSize = minOf(maxWidth - 48.dp, (maxHeight - 80.dp).coerceAtLeast(0.dp), 290.dp).coerceAtLeast(0.dp)
-                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            if (avatarSize > 0.dp) CallAvatar(state.presentation, Modifier.size(avatarSize), state.isMuted)
-                            if (!isReady && !isConnecting && !isPaused && !isFinalizing) audioMeter(Modifier.fillMaxWidth().height(32.dp))
-                            if (state.presentation == CallPresentation.MICROPHONE_BLOCKED) SecondaryButton(stringResource(R.string.call_continue), onResumeCall)
-                            if (isFinalizing || state.presentation == CallPresentation.MICROPHONE_BLOCKED || isPaused) {
-                                Text(stringResource(when {
-                                    isFinalizing -> R.string.call_finalizing_notice
-                                    state.presentation == CallPresentation.MICROPHONE_BLOCKED -> R.string.call_microphone_blocked_notice
-                                    isReconnecting -> R.string.call_reconnecting_notice
-                                    state.isResuming -> R.string.call_resuming
-                                    else -> R.string.call_paused
-                                }), Modifier.padding(vertical = 8.dp), style = DesignTypography.Detail, color = DesignColor.Muted)
+                        val avatarSize =
+                            minOf(maxWidth - 48.dp, (maxHeight - 80.dp).coerceAtLeast(0.dp), 290.dp).coerceAtLeast(0.dp)
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            if (avatarSize > 0.dp)
+                                CallAvatar(
+                                    presentation = state.presentation,
+                                    modifier = Modifier.size(avatarSize),
+                                    isMuted = state.isMuted
+                                )
+                            if (!isReady && !isConnecting && !isPaused && !isFinalizing)
+                                audioMeter(Modifier.fillMaxWidth().height(32.dp))
+                            if (state.presentation == CallPresentation.MICROPHONE_BLOCKED)
+                                SecondaryButton(stringResource(R.string.call_continue), onResumeCall)
+                            if (isFinalizing ||
+                                state.presentation == CallPresentation.MICROPHONE_BLOCKED ||
+                                isPaused) {
+                                DetailText(
+                                    text =
+                                        stringResource(
+                                            when {
+                                                isFinalizing -> R.string.call_finalizing_notice
+                                                state.presentation == CallPresentation.MICROPHONE_BLOCKED ->
+                                                    R.string.call_microphone_blocked_notice
+                                                isReconnecting -> R.string.call_reconnecting_notice
+                                                state.isResuming -> R.string.call_resuming
+                                                else -> R.string.call_paused
+                                            }
+                                        ),
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
                             }
                             if (state.isTranscriptAvailable && !isReady && !isConnecting && !isFinalizing) {
                                 SecondaryButton(stringResource(R.string.call_transcript), onOpenTranscript)
                                 state.messages.lastOrNull()?.let { message ->
-                                    Text(message.text, Modifier.padding(vertical = 8.dp), style = DesignTypography.Detail, color = DesignColor.Muted,
-                                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    DetailText(
+                                        text = message.text,
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }
@@ -140,34 +205,68 @@ fun CallScreen(
                 }
                 if (isReady) {
                     Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(stringResource(R.string.call_ready), style = DesignTypography.Body, color = DesignColor.Primary)
+                        BodyText(text = stringResource(R.string.call_ready), color = DesignColor.Primary)
                         SecondaryButton(stringResource(R.string.call_return_to_preparation), onReturnToPreparation)
                     }
                 } else if (isPaused) {
                     Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (!isReconnecting) PrimaryButton(stringResource(R.string.call_continue), onResumeCall, enabled = !state.isResuming)
+                        if (!isReconnecting)
+                            PrimaryButton(
+                                text = stringResource(R.string.call_continue),
+                                onClick = onResumeCall,
+                                enabled = !state.isResuming
+                            )
                         SecondaryButton(stringResource(R.string.call_end), onEndCall)
                     }
                 } else {
-                    CallControls(state.isMuted, isConnecting, onToggleMute, onEndCall, onOpenTranscript,
-                        isTranscriptAvailable = state.isTranscriptAvailable, isEnabled = !isFinalizing)
+                    CallControls(
+                        isMuted = state.isMuted,
+                        isConnecting = isConnecting,
+                        onToggleMute = onToggleMute,
+                        onEndCall = onEndCall,
+                        onOpenTranscript = onOpenTranscript,
+                        isTranscriptAvailable = state.isTranscriptAvailable,
+                        isEnabled = !isFinalizing
+                    )
                 }
             }
-            if (state.isEndConfirmationVisible) CallEndConfirmation(
-                description = stringResource(when {
-                    !state.hasUserSpeech -> R.string.call_end_silent_description
-                    state.activityType == CallActivityType.FREE_PRACTICE -> R.string.call_end_free_spoken_description
-                    state.activityType == CallActivityType.TRAINING_UNIT -> R.string.call_end_confirmation_description
-                    else -> R.string.call_end_assessment_description
-                }),
-                dismissLabel = stringResource(if (isPaused) R.string.call_back else R.string.call_continue),
-                onConfirmEndCall = onConfirmEndCall, onContinueCall = onContinueCall
-            )
         }
-        if (state.isTitleVisible) MessageDialog(
-            stringResource(R.string.call_show_full_title), title, onHideTitle
-        ) {
-            PrimaryButton(stringResource(R.string.content_close), onHideTitle)
+        when (state.activeDialog) {
+            CallDialog.EndConfirmation ->
+                CallEndConfirmation(
+                    description =
+                        stringResource(
+                            when {
+                                !state.hasUserSpeech -> R.string.call_end_silent_description
+                                state.activityType == CallActivityType.FREE_PRACTICE ->
+                                    R.string.call_end_free_spoken_description
+                                state.activityType == CallActivityType.TRAINING_UNIT ->
+                                    R.string.call_end_confirmation_description
+                                else -> R.string.call_end_assessment_description
+                            }
+                        ),
+                    dismissLabel =
+                        stringResource(
+                            if (state.presentation == CallPresentation.PAUSED ||
+                                state.presentation == CallPresentation.RECONNECTING)
+                                R.string.call_back
+                            else R.string.call_continue
+                        ),
+                    onConfirmEndCall = onConfirmEndCall,
+                    onContinueCall = onContinueCall
+                )
+            CallDialog.Title ->
+                MessageDialog(
+                    title = stringResource(R.string.call_show_full_title),
+                    description = title,
+                    onDismiss = onHideTitle
+                ) {
+                    DialogActions(
+                        primaryText = stringResource(R.string.content_close),
+                        onPrimaryAction = onHideTitle
+                    )
+                }
+            null -> Unit
         }
     }
 }

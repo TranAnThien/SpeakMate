@@ -18,9 +18,11 @@ import com.project.speakmate.domain.repository.AssessmentTaskRepository
 import com.project.speakmate.domain.repository.ScenarioRepository
 import com.project.speakmate.domain.rules.PlacementRules
 import com.project.speakmate.domain.rules.PlacementTestFixtures
+import com.project.speakmate.domain.rules.PracticeCompletionRules
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.FakeUserRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.placement.state.PlacementNavigation
 import com.project.speakmate.ui.placement.state.PlacementPhase
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -33,7 +35,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -52,11 +53,12 @@ class PlacementViewModelTest {
         private const val AUDIO_ID = "audio"
         private const val VIEW_MODEL_KEY = "placement"
         private const val OTHER_USER_ID = "other-user"
-        private const val NAVIGATION_WAIT_MILLIS = 1_001L
     }
 
+    private val testDispatcher = StandardTestDispatcher()
+
     @get:Rule
-    val mainDispatcherRule = MainDispatcherRule(StandardTestDispatcher())
+    val mainDispatcherRule = MainDispatcherRule(testDispatcher)
 
     private val auth = FakeAuthRepository(PlacementTestFixtures.USER_ID)
     private val users = FakeUserRepository(User(PlacementTestFixtures.USER_ID, "Sample", "sample@example.com", ""))
@@ -241,18 +243,17 @@ class PlacementViewModelTest {
     }
 
     @Test
-    fun leaveStopsWaitingWhenThereIsNoEffectCollector() = runTest {
+    fun exitPublishesPendingHomeNavigationAndConsumeClearsItOnce() = runTest {
         checkpoints.saved = null
         val viewModel = createViewModel()
         advanceUntilIdle()
         viewModel.exit()
-        runCurrent()
-        advanceTimeBy(NAVIGATION_WAIT_MILLIS)
-        runCurrent()
-        viewModel.start()
         advanceUntilIdle()
 
-        assertEquals(PlacementPhase.CALLING, viewModel.uiState.value.phase)
+        assertEquals(PlacementNavigation.HOME, viewModel.uiState.value.pendingNavigation)
+        assertEquals(PlacementNavigation.HOME, viewModel.consumePendingNavigation())
+        assertNull(viewModel.uiState.value.pendingNavigation)
+        assertNull(viewModel.consumePendingNavigation())
     }
 
     @Test
@@ -275,7 +276,7 @@ class PlacementViewModelTest {
     }
 
     @Test
-    fun leavingDuringGradingWithoutACollectorReturnsToAResumableState() = runTest {
+    fun leavingDuringGradingPublishesPendingHomeNavigationAndReleasesAudio() = runTest {
         assessments.gate = CompletableDeferred()
         val viewModel = createViewModel()
         advanceUntilIdle()
@@ -287,9 +288,26 @@ class PlacementViewModelTest {
         viewModel.exit()
         advanceUntilIdle()
 
-        assertEquals(PlacementPhase.RESUME_PROMPT, viewModel.uiState.value.phase)
+        assertEquals(PlacementNavigation.HOME, viewModel.uiState.value.pendingNavigation)
         assertEquals(listOf(AUDIO_ID), assessments.clearedAudioIds)
         assertEquals(0, users.saveCalls)
+    }
+
+    @Test
+    fun skipAndAlreadyAssessedSetPendingHomeNavigation() = runTest {
+        checkpoints.saved = null
+        val skipViewModel = createViewModel()
+        advanceUntilIdle()
+        skipViewModel.skip()
+        advanceUntilIdle()
+        assertEquals(PlacementNavigation.HOME, skipViewModel.consumePendingNavigation())
+        assertNull(skipViewModel.consumePendingNavigation())
+
+        users.setUser(User(PlacementTestFixtures.USER_ID, "Sample", "sample@example.com", "", SpeakingLevel.A2))
+        val assessedViewModel = createViewModel()
+        advanceUntilIdle()
+        assertEquals(PlacementNavigation.HOME, assessedViewModel.consumePendingNavigation())
+        assertNull(assessedViewModel.consumePendingNavigation())
     }
 
     @Test
@@ -329,6 +347,105 @@ class PlacementViewModelTest {
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.phase != PlacementPhase.LOADING)
         assertEquals(0, users.saveCalls)
+    }
+
+    @Test
+    fun leavingAfterSaveFailureBeforeResultExpiryDoesNotCrashOrChangeState() = runTest {
+        users.saveFailure = IllegalStateException()
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.resume()
+        advanceUntilIdle()
+        viewModel.submitCallResult(completedSession())
+        runCurrent()
+        assertTrue(viewModel.uiState.value.saveFailed)
+
+        viewModel.exit()
+        runCurrent()
+        testDispatcher.scheduler.advanceTimeBy(PracticeCompletionRules.AUDIO_RETENTION_MILLIS + 1L)
+        advanceUntilIdle()
+
+        assertEquals(PlacementPhase.RESULT, viewModel.uiState.value.phase)
+        assertNull(viewModel.uiState.value.recoveryProblem)
+        assertEquals(PlacementNavigation.HOME, viewModel.uiState.value.pendingNavigation)
+    }
+
+    @Test
+    fun switchingAccountBeforeResultExpiryDoesNotCrash() = runTest {
+        users.saveFailure = IllegalStateException()
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.resume()
+        advanceUntilIdle()
+        viewModel.submitCallResult(completedSession())
+        runCurrent()
+        assertTrue(viewModel.uiState.value.saveFailed)
+
+        users.setUser(User(OTHER_USER_ID, "Sample", "sample@example.com", ""))
+        auth.signedInUserId.value = OTHER_USER_ID
+        runCurrent()
+        testDispatcher.scheduler.advanceTimeBy(PracticeCompletionRules.AUDIO_RETENTION_MILLIS + 1L)
+        advanceUntilIdle()
+
+        assertEquals(PlacementPhase.INTRODUCTION, viewModel.uiState.value.phase)
+        assertNull(viewModel.uiState.value.recoveryProblem)
+    }
+
+    @Test
+    fun passingInitialTaskPublishesNextTaskAndGradesTheSameCallEvidence() = runTest {
+        checkpoints.saved = PlacementTestFixtures.getCheckpoint(PlacementStep.INITIAL_A2)
+        assessments.outcome = PlacementTestFixtures.getOutcome(AssessmentResult.PASS)
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.resume()
+        advanceUntilIdle()
+        val task = requireNotNull(viewModel.uiState.value.currentTask)
+        val expiresAtMillis = requireNotNull(checkpoints.saved).expiresAtMillis
+        val call = completedSession().copy(assessmentAudioDurationMillis = NOW_MILLIS)
+        viewModel.submitCallResult(call)
+        runCurrent()
+        val evidence = assessments.evidence.single()
+        assertEquals(task.targetLevel, evidence.targetLevel)
+        assertEquals(task.communicativeGoal, evidence.communicativeGoal)
+        assertEquals(task.taskId, evidence.taskId)
+        assertEquals(PlacementTestFixtures.USER_ID, evidence.userId)
+        assertEquals(expiresAtMillis, evidence.expiresAtMillis)
+        assertEquals(call.outcome, evidence.callOutcome)
+        assertEquals(call.assessmentAudioId, evidence.assessmentAudioId)
+        assertEquals(call.assessmentAudioDurationMillis, evidence.audioDurationMillis)
+        assertTrue(evidence.requiredActions.isEmpty())
+        assertTrue(!evidence.operationId.isNullOrBlank())
+        assertEquals(PlacementPhase.NEXT_TASK, viewModel.uiState.value.phase)
+        assertEquals(PlacementStep.B1_PROBE.role, viewModel.uiState.value.taskRole)
+        assertEquals(2, viewModel.uiState.value.currentTaskNumber)
+        assertNull(viewModel.uiState.value.scenario)
+        assertEquals(0, users.saveCalls)
+    }
+
+    @Test
+    fun failedResultExpiresAtTheAudioRetentionLimitEvenWhenCheckpointLivesLonger() = runTest {
+        users.saveFailure = IllegalStateException()
+        checkpoints.saved = requireNotNull(checkpoints.saved).copy(
+            expiresAtMillis = NOW_MILLIS + PracticeCompletionRules.AUDIO_RETENTION_MILLIS + 1L
+        )
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.resume()
+        advanceUntilIdle()
+        viewModel.submitCallResult(completedSession())
+        runCurrent()
+        assertEquals(PlacementPhase.RESULT, viewModel.uiState.value.phase)
+        testDispatcher.scheduler.advanceTimeBy(PracticeCompletionRules.AUDIO_RETENTION_MILLIS - 1L)
+        runCurrent()
+        assertEquals(PlacementPhase.RESULT, viewModel.uiState.value.phase)
+        testDispatcher.scheduler.advanceTimeBy(1L)
+        runCurrent()
+        assertEquals(PlacementPhase.INTRODUCTION, viewModel.uiState.value.phase)
+        assertEquals(
+            com.project.speakmate.domain.model.PracticeRecoveryReason.ASSESSMENT_EXPIRED,
+            viewModel.uiState.value.recoveryProblem
+        )
+        assertNull(checkpoints.saved)
     }
 
     private fun createViewModel(shouldConfigureClock: Boolean = true): PlacementViewModel {

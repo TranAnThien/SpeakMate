@@ -1,8 +1,5 @@
 package com.project.speakmate.ui.auth
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -14,10 +11,10 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.project.speakmate.R
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -28,35 +25,41 @@ fun AuthRoute(viewModel: AuthViewModel, modifier: Modifier = Modifier) {
     val manager = remember(context) { CredentialManager.create(context) }
     val clientId = stringResource(R.string.default_web_client_id)
     val scope = rememberCoroutineScope()
-    val signIn = remember(context, manager, clientId, scope, viewModel) {
-        {
-            if (!isNetworkAvailable(context)) {
-                viewModel.showOffline()
-            } else if (viewModel.startSignIn()) {
-                scope.launch {
-                    try {
-                        val request = GetCredentialRequest.Builder()
-                            .addCredentialOption(GetSignInWithGoogleOption.Builder(clientId).build()).build()
-                        val credential = manager.getCredential(context, request).credential
-                        check(credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)
-                        val token = GoogleIdTokenCredential.createFrom(credential.data)
-                        viewModel.handleGoogleSignIn(token.idToken, token.displayName, token.id, token.profilePictureUri?.toString())
-                    } catch (_: GetCredentialCancellationException) {
-                        viewModel.cancelSignIn()
-                    } catch (cancelled: CancellationException) {
-                        viewModel.cancelSignIn()
-                        throw cancelled
-                    } catch (error: Exception) {
-                        if (isNetworkAvailable(context)) viewModel.showSignInError(error) else {
+    val signIn =
+        remember(context, manager, clientId, scope, viewModel) {
+            {
+                if (viewModel.startSignIn()) {
+                    scope.launch {
+                        try {
+                            val request =
+                                GetCredentialRequest.Builder()
+                                    .addCredentialOption(GetSignInWithGoogleOption.Builder(clientId).build())
+                                    .build()
+                            val credential = manager.getCredential(context, request).credential
+                            check(
+                                credential is CustomCredential &&
+                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                            )
+                            val token = GoogleIdTokenCredential.createFrom(credential.data)
+                            viewModel.handleGoogleSignIn(
+                                idToken = token.idToken,
+                                displayName = token.displayName,
+                                email = token.id,
+                                photoUrl = token.profilePictureUri?.toString()
+                            )
+                        } catch (_: GetCredentialCancellationException) {
                             viewModel.cancelSignIn()
-                            viewModel.showOffline()
+                        } catch (cancelled: CancellationException) {
+                            viewModel.cancelSignIn()
+                            throw cancelled
+                        } catch (error: Exception) {
+                            viewModel.showSignInError(error)
                         }
                     }
                 }
+                Unit
             }
-            Unit
         }
-    }
     GoogleSignInScreen(
         state = state,
         onSignIn = signIn,
@@ -67,12 +70,4 @@ fun AuthRoute(viewModel: AuthViewModel, modifier: Modifier = Modifier) {
         onDismissLegalInformation = viewModel::dismissLegalInformation,
         modifier = modifier
     )
-}
-
-private fun isNetworkAvailable(context: Context): Boolean {
-    val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
-    val network = manager.activeNetwork ?: return false
-    val capabilities = manager.getNetworkCapabilities(network) ?: return false
-    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }

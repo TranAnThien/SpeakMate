@@ -24,11 +24,9 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GoalAssessmentViewModelTest {
-    @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    @get:Rule val mainDispatcherRule = MainDispatcherRule()
 
-    @get:Rule
-    val savedStateHandleRule = SavedStateHandleRule()
+    @get:Rule val savedStateHandleRule = SavedStateHandleRule()
     private val store = ViewModelStore()
     private val training = FakeGoalTrainingRepository()
     private val auth = FakeAuthRepository()
@@ -49,13 +47,17 @@ class GoalAssessmentViewModelTest {
         assertEquals(goal.goalAssessment.requiredActions, activity.requiredActions)
         assertEquals(goal.canDoDescription, activity.communicativeGoal)
         assertEquals(training.path.targetLevel, activity.targetLevel)
-        assertEquals(TrainingActivity.GoalAssessmentActivity(0), activity.activity)
+        assertEquals(TrainingActivity.GoalAssessmentActivity(goalIndex = 0), activity.activity)
         assertFalse(state.isReplay)
     }
 
     @Test
     fun goalAssessmentRemainsLockedBeforeTheLastUnitPasses() = runTest {
-        users.setUser(GoalAssessmentTestFixtures.user(TrainingProgress(0, 0, TrainingStage.UNIT)))
+        users.setUser(
+            GoalAssessmentTestFixtures.user(
+                TrainingProgress(currentGoalOrder = 0, currentUnitOrder = 0, stage = TrainingStage.UNIT)
+            )
+        )
         val state = createViewModel().uiState.value
         assertTrue(state.isLocked)
         assertNull(state.activity)
@@ -64,26 +66,19 @@ class GoalAssessmentViewModelTest {
 
     @Test
     fun laterGoalAssessmentRemainsLocked() = runTest {
-        val state = createViewModel(GoalAssessmentTestFixtures.arguments(1)).uiState.value
+        val state = createViewModel(GoalAssessmentTestFixtures.arguments(goalIndex = 1)).uiState.value
         assertTrue(state.isLocked)
         assertTrue(training.requestedScenarioIds.isEmpty())
     }
 
     @Test
-    fun previousGoalReplayKeepsItsConfiguredActionsAndFallsBackWithoutVariants() = runTest {
-        users.setUser(GoalAssessmentTestFixtures.user(TrainingProgress(1, 0, TrainingStage.UNIT)))
-        val viewModel = createViewModel()
-        val original = viewModel.uiState.value.activity
-        assertTrue(viewModel.uiState.value.isReplay)
-        viewModel.prepareRetry()
-        assertEquals(original, viewModel.uiState.value.activity)
-        assertEquals(0, users.saveCalls)
-    }
-
-    @Test
     fun completedPathStillAllowsLastGoalReplay() = runTest {
-        users.setUser(GoalAssessmentTestFixtures.user(TrainingProgress(1, 0, TrainingStage.PATH_COMPLETED)))
-        val state = createViewModel(GoalAssessmentTestFixtures.arguments(1)).uiState.value
+        users.setUser(
+            GoalAssessmentTestFixtures.user(
+                TrainingProgress(currentGoalOrder = 1, currentUnitOrder = 0, stage = TrainingStage.PATH_COMPLETED)
+            )
+        )
+        val state = createViewModel(GoalAssessmentTestFixtures.arguments(goalIndex = 1)).uiState.value
         assertTrue(state.isReplay)
         assertNotNull(state.activity)
     }
@@ -127,6 +122,60 @@ class GoalAssessmentViewModelTest {
         assertEquals(TrainingContentStatus.CONTENT, viewModel.uiState.value.status)
     }
 
+    @Test
+    fun userUpdateWhileInContentKeepsContentAndStartReadiness() = runTest {
+        val viewModel = createViewModel()
+        viewModel.prepareStart()
+        assertTrue(viewModel.uiState.value.isStarting)
+        assertTrue(viewModel.uiState.value.isStartReady)
+
+        users.setUser(GoalAssessmentTestFixtures.user().copy(displayName = "Updated Student"))
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertEquals(TrainingContentStatus.CONTENT, state.status)
+        assertTrue(state.isStarting)
+        assertTrue(state.isStartReady)
+    }
+
+    @Test
+    fun prepareCallLocksActiveCallAndStopsObservingUntilPreparationResumes() = runTest {
+        val viewModel = createViewModel()
+        assertEquals(1, users.activeObservers)
+
+        viewModel.prepareCall(isRetry = false)
+        runCurrent()
+
+        assertNotNull(viewModel.uiState.value.activeCallActivity)
+        assertFalse(viewModel.uiState.value.activeCallIsReplay)
+        assertEquals(0, users.activeObservers)
+
+        viewModel.resumePreparation()
+        runCurrent()
+
+        assertNull(viewModel.uiState.value.activeCallActivity)
+        assertEquals(1, users.activeObservers)
+    }
+
+    @Test
+    fun prepareCallWithRetryReloadsAndLocksActiveCall() = runTest {
+        val viewModel = createViewModel()
+        val startsBefore = users.observationStarts
+
+        viewModel.prepareCall(isRetry = true)
+        runCurrent()
+
+        assertTrue(users.observationStarts > startsBefore)
+        assertNotNull(viewModel.uiState.value.activeCallActivity)
+        assertEquals(0, users.activeObservers)
+    }
+
     private fun createViewModel(arguments: SavedStateHandle = GoalAssessmentTestFixtures.arguments()) =
-        GoalAssessmentViewModel(arguments, training, auth, users).also { store.put(GoalAssessmentTestFixtures.VIEW_MODEL_KEY, it) }
+        GoalAssessmentViewModel(
+            savedStateHandle = arguments,
+            trainingRepository = training,
+            authRepository = auth,
+            userRepository = users
+        )
+            .also { store.put(GoalAssessmentTestFixtures.VIEW_MODEL_KEY, it) }
 }

@@ -10,82 +10,73 @@ import com.project.speakmate.domain.model.InsufficientEvidenceReason
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.SpeakingAssessmentRepository
 import com.project.speakmate.domain.rules.AssessmentRules
-import com.project.speakmate.domain.rules.PracticeCompletionRules
 import java.io.IOException
 import java.time.Clock
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
-class SpeakingAssessmentRepositoryImpl @Inject constructor(
+class SpeakingAssessmentRepositoryImpl
+@Inject
+constructor(
     private val audioFiles: AssessmentAudioFileProvider,
     private val client: GeminiAssessmentClient,
     private val authRepository: AuthRepository,
     private val clock: Clock
 ) : SpeakingAssessmentRepository {
-    override suspend fun evaluate(evidence: AssessmentEvidence): AssessmentOutcome = withContext(Dispatchers.IO) {
-        val uid = authRepository.requireCurrentUserId()
-        if (evidence.userId != null && evidence.userId != uid) throw AssessmentOwnershipException()
-        val audioId = evidence.assessmentAudioId
-        val outcome = try {
-            val problem = AssessmentRules.findEvidenceProblem(evidence)
-            if (problem != null) AssessmentOutcome.InsufficientEvidence(problem)
-            else {
-                when {
-                    audioId == null || audioFiles.getAudioFile(audioId) == null ->
-                        AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
-                    evidence.expiresAtMillis?.let { clock.millis() >= it } == true ->
-                        AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
-                    else -> evaluateEvidence(evidence)
+    override suspend fun evaluate(evidence: AssessmentEvidence): AssessmentOutcome =
+        withContext(Dispatchers.IO) {
+            val uid = requireOwner(evidence)
+            val outcome =
+                try {
+                    evaluateEvidence(evidence)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (stale: AssessmentOwnershipException) {
+                    throw stale
+                } catch (_: Exception) {
+                    AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED)
                 }
-            }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED)
+            if (requireOwner(evidence) != uid) throw AssessmentOwnershipException()
+            outcome
         }
-        if (authRepository.requireCurrentUserId() != uid) throw AssessmentOwnershipException()
-        if (outcome !is AssessmentOutcome.InsufficientEvidence || !PracticeCompletionRules.canRetryGrading(outcome.reason)) {
-            deleteEvidenceAudio(evidence)
-        }
-        outcome
-    }
 
-    override suspend fun clearAudioEvidence(audioId: String): Unit = withContext(Dispatchers.IO) {
-        audioFiles.deleteAudio(audioId)
-    }
+    override suspend fun clearAudioEvidence(audioId: String): Unit =
+        withContext(Dispatchers.IO) { audioFiles.deleteAudio(audioId) }
 
     private suspend fun evaluateEvidence(evidence: AssessmentEvidence): AssessmentOutcome {
         val problem = AssessmentRules.findEvidenceProblem(evidence)
         if (problem != null) return AssessmentOutcome.InsufficientEvidence(problem)
-        val audioId = evidence.assessmentAudioId ?: return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
-        val file = audioFiles.getAudioFile(audioId)
-            ?: return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
-        val wav = try {
-            AssessmentAudioRecorder.getAudioBytes(file)
-        } catch (_: IOException) {
-            return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
-        } ?: return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
-        val userId = authRepository.requireCurrentUserId()
-        if (evidence.userId != null && evidence.userId != userId) throw AssessmentOwnershipException()
+        if (isExpired(evidence)) return unavailable()
+        val audioId = evidence.assessmentAudioId ?: return unavailable()
+        val file =
+            audioFiles.getAudioFile(audioId)
+                ?: return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+        val wav =
+            try {
+                AssessmentAudioRecorder.getAudioBytes(file)
+            } catch (_: IOException) {
+                return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
+            } ?: return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
         val evaluation = client.evaluate(evidence, wav)
-        if (authRepository.requireCurrentUserId() != userId) throw AssessmentOwnershipException()
-        if (evidence.expiresAtMillis?.let { clock.millis() >= it } == true) {
-            return AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
-        }
+        if (isExpired(evidence)) return unavailable()
         return AssessmentRules.assess(evidence, evaluation)
     }
 
-    private suspend fun deleteEvidenceAudio(evidence: AssessmentEvidence): Boolean = withContext(NonCancellable) {
-        try {
-            evidence.assessmentAudioId?.let { audioFiles.deleteAudio(it) }
-            true
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            false
-        }
+    private fun requireOwner(evidence: AssessmentEvidence): String {
+        val uid =
+            try {
+                authRepository.requireCurrentUserId()
+            } catch (_: IllegalStateException) {
+                throw AssessmentOwnershipException()
+            }
+        if (evidence.userId != null && evidence.userId != uid) throw AssessmentOwnershipException()
+        return uid
     }
+
+    private fun isExpired(evidence: AssessmentEvidence): Boolean =
+        evidence.expiresAtMillis?.let { clock.millis() >= it } == true
+
+    private fun unavailable() = AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.AUDIO_UNAVAILABLE)
 }

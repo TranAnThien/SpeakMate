@@ -1,7 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="practice_category_all">Tất cả</string>
-    <string name="home_goal_assessment_description">Hoàn thành bài kiểm tra để mở khóa mục tiêu tiếp theo.</string>
     <string name="profile_default_display_name">Người dùng SpeakMate</string>
     <string name="preparation_context_prefix">Bối cảnh:</string>
     <string name="accessibility_back">Quay lại</string>
@@ -30,7 +29,6 @@
     <string name="placement_a1_assigned_disclaimer">Bạn bắt đầu ở lộ trình A1 vì đây là mức thấp nhất được hỗ trợ. Kết quả bài xác nhận chưa đạt đầy đủ yêu cầu. Đây là mức học ước lượng.</string>
     <string name="placement_criterion_met_feedback">Bạn đã đáp ứng tiêu chí này trong bài xác nhận.</string>
     <string name="placement_criterion_unmet_feedback">Bạn cần luyện thêm tiêu chí này trong bài xác nhận.</string>
-    <string name="placement_estimated_level">TRÌNH ĐỘ NÓI ƯỚC LƯỢNG</string>
     <string name="placement_a2_label">TIỀN TRUNG CẤP</string>
     <string name="placement_a1_label">SƠ CẤP</string>
     <string name="placement_b1_label">TRUNG CẤP</string>
@@ -64,31 +62,8 @@
     <string name="navigation_profile">Cá nhân</string>
     <string name="content_retry">Thử lại</string>
     <string name="home_unassessed">Chưa đánh giá</string>
-    <string name="home_assessment_summary">Hoàn thành bài đánh giá đầu vào để mở lộ trình phù hợp.</string>
-    <string name="home_assessment_title">Đánh giá trình độ đầu vào</string>
-    <string name="home_assessment_description">Nói chuyện với AI trong một bài đánh giá ngắn. Bạn cũng có thể bỏ qua và vào học sau.</string>
-    <string name="home_current_learning">TIẾP TỤC HỌC</string>
-    <string name="home_current_unit">BÀI HIỆN TẠI</string>
     <string name="home_continue_path">Tiếp tục lộ trình</string>
     <string name="home_free_practice">Luyện tập tự do</string>
-    <string name="home_free_practice_description">Chọn tình huống và bắt đầu cuộc gọi luyện nói.</string>
-    <string name="home_free_practice_notice">Luyện tự do không thay đổi trình độ hoặc tiến độ lộ trình.</string>
-    <string name="home_select_scenario">Chọn tình huống →</string>
-    <string name="home_path_completed">Lộ trình %1$s đã hoàn tất</string>
-    <string name="home_path_completed_description">Hoàn thành lộ trình chưa tự tăng trình độ. Bạn có thể đánh giá lên %1$s hoặc ôn lại nội dung.</string>
-    <string name="home_reassess">Đánh giá lên %1$s</string>
-    <string name="home_review_content">Luyện lại nội dung</string>
-    <string name="home_review_description">Ôn lại các Unit và bài đánh giá đã hoàn tất trong lộ trình.</string>
-    <string name="home_view_path">Xem lộ trình →</string>
-    <string name="home_highest_level_description">B2 là cấp cao nhất hiện tại. Tiến trình hiện tại được giữ nguyên.</string>
-    <string name="home_loading">Đang tải thông tin tài khoản và tiến trình…</string>
-    <string name="home_error_title">Chưa tải được thông tin</string>
-    <string name="home_error_description">Kiểm tra kết nối mạng và thử lại.</string>
-    <string name="home_retry">Thử tải lại</string>
-    <string name="home_empty_title">Chưa có nội dung để hiển thị</string>
-    <string name="home_empty_description">Thông tin tiến độ sẽ xuất hiện ở đây\nsau khi dữ liệu tải thành công.</string>
-    <string name="home_error_dialog_title">Không thể tải trang chủ</string>
-    <string name="home_error_dialog_description">Kiểm tra kết nối mạng\nvà thử tải lại.</string>
     <string name="training_estimated_level">Trình độ nói ước lượng</string>
     <string name="training_goals_heading">MỤC TIÊU TRONG LỘ TRÌNH</string>
     <string name="training_current">ĐANG HỌC</string>
@@ -142,7 +117,6 @@
     <string name="call_paused">Đã tạm dừng</string>
     <string name="call_resuming">Đang chuẩn bị tiếp tục cuộc gọi…</string>
     <string name="call_barge_in">Đang nghe bạn nói</string>
-    <string name="call_audio_unclear">Chưa nghe rõ bạn nói</string>
     <string name="call_timer_after_connection">Bắt đầu tính giờ sau khi kết nối</string>
     <string name="call_return_to_preparation">Quay lại ôn tập</string>
     <string name="call_mute">Tắt mic</string>
@@ -191,7 +165,7 @@
     <string name="call_permission_revoked_header">Quyền micro bị thu hồi</string>
     <string name="call_permission_revoked_title">Không thể dùng micro</string>
     <string name="call_permission_revoked_description">Quyền micro đã bị thu hồi. SpeakMate đã dừng nhận âm thanh. Cấp lại quyền trong Cài đặt để thử gọi lại.</string>
-    <string name="call_transcript_title">Live Transcript</string>
+    <string name="call_transcript_title">Hội thoại trực tiếp</string>
     <string name="call_transcript_hint">Nhấn giữ một từ để tra nghĩa. Cuộc gọi vẫn tiếp tục.</string>
     <string name="call_transcript_ai">AI</string>
     <string name="call_transcript_user">BẠN</string>
@@ -219,7 +193,7 @@
     <string name="unit_result_required_actions">Yêu cầu giao tiếp</string>
     <string name="unit_result_action_completed">Hoàn thành</string>
     <string name="unit_result_action_incomplete">Chưa hoàn thành</string>
-    <string name="unit_result_retry">Thử lại nhiệm vụ</string>
+    <string name="unit_result_retry">Ôn lại bài</string>
     <string name="unit_result_replay">Luyện lại bài</string>
     <string name="unit_result_review">Ôn lại bài học</string>
     <string name="unit_result_next">Tiếp theo</string>
@@ -279,7 +253,6 @@
     <string name="path_completion_a2_notice_title">Bước tiếp theo</string>
     <string name="path_completion_b2_notice_title">Tiếp tục luyện tập</string>
     <string name="path_completion_b2_notice">B2 là mức cao nhất hiện tại. Bạn có thể luyện lại Unit, bài đánh giá mục tiêu hoặc luyện tập tự do.</string>
-    <string name="promotion_introduction_note">Chọn nơi yên tĩnh và cho phép dùng micro. Mỗi bài là một cuộc gọi riêng, không có Hội thoại, Tra từ và không lưu vào Lịch sử.</string>
     <string name="promotion_insufficient_compact_title">Chưa đủ dữ liệu đánh giá</string>
     <string name="content_reload">Thử tải lại</string>
     <string name="content_dismiss_notice">Đóng thông báo</string>
@@ -293,7 +266,6 @@
     <string name="practice_unconfigured_description">Các tình huống chưa sẵn sàng. Bạn có thể quay lại sau hoặc tiếp tục học trong lộ trình.</string>
     <string name="practice_error_title">Không tải được tình huống</string>
     <string name="practice_error_description">Kiểm tra kết nối mạng rồi thử tải lại. Bạn vẫn có thể quay về lộ trình.</string>
-    <string name="practice_error_dialog_description">Kiểm tra kết nối mạng rồi thử tải lại danh sách.</string>
     <string name="practice_preparation_header">Chuẩn bị nhập vai</string>
     <string name="practice_context_heading">Bối cảnh</string>
     <string name="practice_ai_role_heading">Vai trò của AI</string>
@@ -616,4 +588,7 @@
     <string name="assessment_recovery_title">Khôi phục bài đánh giá</string>
     <string name="content_back">Quay lại</string>
     <string name="goal_assessment_runtime_feedback">Hãy xem lại mục tiêu giao tiếp và các yêu cầu trước khi luyện tập tiếp.</string>
+    <string name="accessibility_expanded">Đã mở rộng</string>
+    <string name="accessibility_collapsed">Đã thu gọn</string>
+    <string name="practice_summary_close_transcript">Đóng</string>
 </resources>

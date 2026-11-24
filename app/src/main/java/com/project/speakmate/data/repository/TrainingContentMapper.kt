@@ -13,21 +13,29 @@ import com.project.speakmate.domain.model.SentencePattern
 import com.project.speakmate.domain.model.UnitPreparation
 import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.utils.extension.defaultEmpty
+import javax.inject.Inject
 
-class TrainingContentMapper {
+class TrainingContentMapper @Inject constructor() {
     companion object {
         private const val MISSING_PREPARATION = "Unit has no valid preparation content."
     }
 
     fun validatePreparation(preparation: UnitPreparation) {
-        check(preparation.vocabulary.isNotEmpty() || preparation.grammarPoints.isNotEmpty() ||
-            preparation.sentencePatterns.isNotEmpty()) { MISSING_PREPARATION }
+        check(
+            preparation.vocabulary.isNotEmpty() ||
+                preparation.grammarPoints.isNotEmpty() ||
+                preparation.sentencePatterns.isNotEmpty()
+        ) {
+            MISSING_PREPARATION
+        }
     }
 
     fun getPreparationReferenceIds(preparation: Any?, field: String): List<String> =
         (((preparation as? Map<*, *>)?.get(field) as? List<*>)?.mapNotNull { reference ->
             ((reference as? Map<*, *>)?.get(FirestoreField.ID) as? String)?.takeIf { it.isNotBlank() }
-        }).defaultEmpty().distinct()
+        })
+            .defaultEmpty()
+            .distinct()
 
     fun toAssessment(document: DocumentSnapshot): GoalAssessment {
         return GoalAssessment(
@@ -65,5 +73,4 @@ class TrainingContentMapper {
             examples = document.requiredExampleList(FirestoreField.EXAMPLES, "Sentence pattern $id")
         )
     }
-
 }

@@ -28,16 +28,19 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GoalAssessmentResultViewModelTest {
-    @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    @get:Rule val mainDispatcherRule = MainDispatcherRule()
 
-    @get:Rule
-    val savedStateHandleRule = SavedStateHandleRule()
+    @get:Rule val savedStateHandleRule = SavedStateHandleRule()
     private val store = ViewModelStore()
     private val completion = FakePracticeCompletionRepository()
     private val training = FakeGoalTrainingRepository()
     private val auth = FakeAuthRepository()
-    private val users = FakeUserRepository(GoalAssessmentTestFixtures.user(TrainingProgress(1, 0, TrainingStage.UNIT)))
+    private val users =
+        FakeUserRepository(
+            GoalAssessmentTestFixtures.user(
+                TrainingProgress(currentGoalOrder = 1, currentUnitOrder = 0, stage = TrainingStage.UNIT)
+            )
+        )
 
     @After
     fun clearViewModel() {
@@ -77,17 +80,24 @@ class GoalAssessmentResultViewModelTest {
 
     @Test
     fun savedLastGoalPassShowsPathCompletionWithoutPromotingTheLevel() = runTest {
-        users.setUser(GoalAssessmentTestFixtures.user(TrainingProgress(1, 0, TrainingStage.PATH_COMPLETED)))
-        completion.state.value = PracticeCompletionState.Saved(GoalAssessmentTestFixtures.completion(1))
-        val state = createViewModel(GoalAssessmentTestFixtures.arguments(1)).uiState.value
+        users.setUser(
+            GoalAssessmentTestFixtures.user(
+                TrainingProgress(currentGoalOrder = 1, currentUnitOrder = 0, stage = TrainingStage.PATH_COMPLETED)
+            )
+        )
+        completion.state.value = PracticeCompletionState.Saved(GoalAssessmentTestFixtures.completion(goalIndex = 1))
+        val state = createViewModel(GoalAssessmentTestFixtures.arguments(goalIndex = 1)).uiState.value
         assertEquals(GoalAssessmentPresentation.PATH_COMPLETED, state.presentation)
-        assertEquals(training.path.targetLevel, state.level)
         assertEquals(0, users.saveCalls)
     }
 
     @Test
     fun earlierGoalDoesNotClaimToBeTheFinalGoalWhenAnotherSessionCompletedThePath() = runTest {
-        users.setUser(GoalAssessmentTestFixtures.user(TrainingProgress(1, 0, TrainingStage.PATH_COMPLETED)))
+        users.setUser(
+            GoalAssessmentTestFixtures.user(
+                TrainingProgress(currentGoalOrder = 1, currentUnitOrder = 0, stage = TrainingStage.PATH_COMPLETED)
+            )
+        )
         completion.state.value = PracticeCompletionState.Saved(GoalAssessmentTestFixtures.completion())
         val state = createViewModel().uiState.value
         assertEquals(GoalAssessmentPresentation.NEXT_GOAL, state.presentation)
@@ -96,7 +106,11 @@ class GoalAssessmentResultViewModelTest {
 
     @Test
     fun replayPassDoesNotPresentAnotherGoalAsNewlyOpened() = runTest {
-        users.setUser(GoalAssessmentTestFixtures.user(TrainingProgress(1, 0, TrainingStage.PATH_COMPLETED)))
+        users.setUser(
+            GoalAssessmentTestFixtures.user(
+                TrainingProgress(currentGoalOrder = 1, currentUnitOrder = 0, stage = TrainingStage.PATH_COMPLETED)
+            )
+        )
         completion.state.value = PracticeCompletionState.Saved(GoalAssessmentTestFixtures.completion())
         val state = createViewModel(GoalAssessmentTestFixtures.arguments(isReplay = true)).uiState.value
         assertEquals(GoalAssessmentPresentation.REPLAY_COMPLETED, state.presentation)
@@ -125,7 +139,10 @@ class GoalAssessmentResultViewModelTest {
 
     @Test
     fun insufficientEvidenceHasNoProgressAction() = runTest {
-        val graded = GoalAssessmentTestFixtures.completion(outcome = AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED))
+        val graded =
+            GoalAssessmentTestFixtures.completion(
+                outcome = AssessmentOutcome.InsufficientEvidence(InsufficientEvidenceReason.EVALUATION_FAILED)
+            )
         completion.state.value = PracticeCompletionState.Saved(graded)
         val state = createViewModel().uiState.value
         assertEquals(GoalAssessmentPresentation.INSUFFICIENT_EVIDENCE, state.presentation)
@@ -135,14 +152,33 @@ class GoalAssessmentResultViewModelTest {
 
     @Test
     fun partialAndBothFailureKindsUseTheirOwnResultPresentations() = runTest {
-        val cases = listOf(
-            PracticeCompletionTestFixtures.evaluated(SpeakingCriteriaResult(true, true, true, false, false)) to GoalAssessmentPresentation.PARTIAL,
-            PracticeCompletionTestFixtures.evaluated(SpeakingCriteriaResult(true, true, false, false, false)) to GoalAssessmentPresentation.FAIL_CRITERIA,
-            PracticeCompletionTestFixtures.evaluated(isActionCompleted = false) to GoalAssessmentPresentation.FAIL_REQUIRED_ACTION
-        )
+        val cases =
+            listOf(
+                PracticeCompletionTestFixtures.evaluated(
+                    SpeakingCriteriaResult(
+                        rangeMet = true,
+                        accuracyMet = true,
+                        fluencyMet = true,
+                        interactionMet = false,
+                        coherenceMet = false
+                    )
+                ) to GoalAssessmentPresentation.PARTIAL,
+                PracticeCompletionTestFixtures.evaluated(
+                    SpeakingCriteriaResult(
+                        rangeMet = true,
+                        accuracyMet = true,
+                        fluencyMet = false,
+                        interactionMet = false,
+                        coherenceMet = false
+                    )
+                ) to GoalAssessmentPresentation.FAIL_CRITERIA,
+                PracticeCompletionTestFixtures.evaluated(isActionCompleted = false) to
+                    GoalAssessmentPresentation.FAIL_REQUIRED_ACTION
+            )
         val viewModel = createViewModel()
         for ((outcome, expected) in cases) {
-            completion.state.value = PracticeCompletionState.Saved(GoalAssessmentTestFixtures.completion(outcome = outcome))
+            completion.state.value =
+                PracticeCompletionState.Saved(GoalAssessmentTestFixtures.completion(outcome = outcome))
             runCurrent()
             assertEquals(expected, viewModel.uiState.value.presentation)
             assertNull(viewModel.uiState.value.nextGoalId)
@@ -185,7 +221,12 @@ class GoalAssessmentResultViewModelTest {
     }
 
     private fun createViewModel(arguments: SavedStateHandle = GoalAssessmentTestFixtures.arguments()) =
-        GoalAssessmentResultViewModel(arguments, completion, training, auth, users).also {
-            store.put(GoalAssessmentTestFixtures.VIEW_MODEL_KEY, it)
-        }
+        GoalAssessmentResultViewModel(
+            savedStateHandle = arguments,
+            completionRepository = completion,
+            trainingRepository = training,
+            authRepository = auth,
+            userRepository = users
+        )
+            .also { store.put(GoalAssessmentTestFixtures.VIEW_MODEL_KEY, it) }
 }

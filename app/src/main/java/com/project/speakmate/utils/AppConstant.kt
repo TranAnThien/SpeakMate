@@ -1,8 +1,8 @@
 package com.project.speakmate.utils
 
-
-
 object AppConstant {
+    const val HISTORY_FILTER_ALL = "all"
+    const val PRONUNCIATION_START_TIMEOUT_MILLIS = 10_000L
     const val STATUS_CONTAINER_ALPHA = 0.12f
     const val HISTORY_PREFETCH_ITEM_COUNT = 4
     const val TRANSCRIPT_ACCESSIBILITY_WORDS_PER_PAGE = 28
@@ -20,9 +20,7 @@ object AppConstant {
     const val BITS_PER_BYTE = 8
     const val MILLIS_PER_SECOND = 1_000
     const val SECONDS_PER_MINUTE = 60L
-    const val STATE_SUBSCRIPTION_TIMEOUT_MILLIS = 5_000L
     const val TOO_MANY_REQUESTS = 429
-    const val HISTORY_FILTER_ALL = "all"
     const val PRACTICE_CATEGORY_ALL = "ALL"
     const val HISTORY_FILTER_GOALS = "goal_assessment"
     const val HISTORY_FILTER_LESSONS = "training_unit"
@@ -31,8 +29,5 @@ object AppConstant {
     const val DISPLAY_TIME_PATTERN = "HH:mm"
     const val DISPLAY_DATE_TIME_PATTERN = "dd/MM/yyyy HH:mm"
     const val DURATION_FORMAT = "%02d:%02d"
-    const val GOAL_ID_ARGUMENT = "goalId"
-    const val IS_REPLAY_ARGUMENT = "isReplay"
-    const val UNIT_ID_ARGUMENT = "unitId"
-    const val ATTEMPT_ID_ARGUMENT = "attemptId"
+    const val PACKAGE_URI_SCHEME = "package"
 }

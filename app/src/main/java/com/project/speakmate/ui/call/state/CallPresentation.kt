@@ -1,7 +1,5 @@
 package com.project.speakmate.ui.call.state
 
-
-
 enum class CallPresentation {
     READY,
     CONNECTING,
@@ -14,6 +12,5 @@ enum class CallPresentation {
     RECONNECTING,
     MICROPHONE_BLOCKED,
     BARGE_IN,
-    AUDIO_UNCLEAR,
     FAILED
 }

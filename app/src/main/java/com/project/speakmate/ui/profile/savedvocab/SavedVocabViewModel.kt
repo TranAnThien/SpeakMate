@@ -2,8 +2,9 @@ package com.project.speakmate.ui.profile.savedvocab
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.project.speakmate.domain.model.SavedVocabularyIdentity
 import com.project.speakmate.domain.model.PronunciationState
+import com.project.speakmate.domain.model.SavedVocabularyIdentity
+import com.project.speakmate.domain.model.VocabularyItem
 import com.project.speakmate.domain.repository.AuthRepository
 import com.project.speakmate.domain.repository.PronunciationRepository
 import com.project.speakmate.domain.repository.SavedVocabularyRepository
@@ -22,7 +23,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class SavedVocabViewModel @Inject constructor(
+class SavedVocabViewModel
+@Inject
+constructor(
     private val savedVocabularyRepository: SavedVocabularyRepository,
     private val pronunciationRepository: PronunciationRepository,
     private val authRepository: AuthRepository
@@ -37,8 +40,27 @@ class SavedVocabViewModel @Inject constructor(
     init {
         observeVocabulary()
         viewModelScope.launch {
-            pronunciationRepository.playback.collect { playback ->
-                _uiState.update { it.copy(playback = playback, pronunciationIdentity = if (playback.status == PronunciationState.IDLE) null else it.pronunciationIdentity) }
+            try {
+                pronunciationRepository.playback.collect { playback ->
+                    _uiState.update {
+                        it.copy(
+                            playback = playback,
+                            pronunciationIdentity =
+                                if (playback.status == PronunciationState.IDLE) {
+                                    null
+                                } else it.pronunciationIdentity
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _uiState.update {
+                    it.copy(
+                        pronunciationIdentity = null,
+                        playback = it.playback.copy(status = PronunciationState.FAILED)
+                    )
+                }
             }
         }
     }
@@ -53,6 +75,18 @@ class SavedVocabViewModel @Inject constructor(
         observeVocabulary()
     }
 
+    fun clearSearch() {
+        updateSearchQuery("")
+    }
+
+    fun playWord(item: VocabularyItem) {
+        playWord(item.word, item.partOfSpeech)
+    }
+
+    fun removeVocabulary(item: VocabularyItem) {
+        removeVocabulary(item.word, item.partOfSpeech)
+    }
+
     fun updateSearchQuery(query: String) {
         _uiState.update { refresh(it.copy(searchQuery = query)) }
     }
@@ -63,7 +97,9 @@ class SavedVocabViewModel @Inject constructor(
         val revision = userRevision
         val identity = SavedVocabularyRules.getIdentity(word, partOfSpeech)
         val state = _uiState.value
-        if (state.allVocabularies.none { SavedVocabularyRules.getIdentity(it) == identity } || !deletingIdentities.add(identity)) return
+        if (state.allVocabularies.none { SavedVocabularyRules.getIdentity(it) == identity } ||
+            !deletingIdentities.add(identity))
+            return
         if (state.pronunciationIdentity == identity) stopPronunciation()
         _uiState.update { refresh(it.copy(hasDeleteError = false, failedDeletionIdentity = null)) }
         viewModelScope.launch {
@@ -71,9 +107,19 @@ class SavedVocabViewModel @Inject constructor(
                 savedVocabularyRepository.removeVocabularies(uid, listOf(identity)).getOrThrow()
                 if (revision != userRevision || !isCurrentUser(uid)) return@launch
                 deletingIdentities.remove(identity)
-                _uiState.update { refresh(it.copy(allVocabularies = it.allVocabularies.filterNot { item -> SavedVocabularyRules.getIdentity(item) == identity })) }
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) {
+                _uiState.update {
+                    refresh(
+                        it.copy(
+                            allVocabularies =
+                                it.allVocabularies.filterNot { item ->
+                                    SavedVocabularyRules.getIdentity(item) == identity
+                                }
+                        )
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
                 if (revision != userRevision || !isCurrentUser(uid)) return@launch
                 deletingIdentities.remove(identity)
                 _uiState.update { refresh(it.copy(hasDeleteError = true, failedDeletionIdentity = identity)) }
@@ -111,59 +157,74 @@ class SavedVocabViewModel @Inject constructor(
     private fun observeVocabulary() {
         observationJob?.cancel()
         _uiState.update { it.copy(isLoading = true, hasLoadError = false) }
-        observationJob = viewModelScope.launch {
-            try {
-                authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
-                    if (uid != observedUserId) {
+        observationJob =
+            viewModelScope.launch {
+                try {
+                    authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
+                        if (uid != observedUserId) {
+                            userRevision++
+                            deletingIdentities.clear()
+                            pronunciationRepository.stop()
+                            observedUserId = uid
+                            _uiState.value = SavedVocabUiState(isLoading = uid != null)
+                        }
+                        if (uid == null) {
+                            _uiState.value = SavedVocabUiState(isLoading = false)
+                            return@collectLatest
+                        }
+                        try {
+                            savedVocabularyRepository.observeSavedVocabularies().collect { vocabulary ->
+                                if (!isCurrentUser(uid)) return@collect
+                                _uiState.update {
+                                    refresh(
+                                        it.copy(
+                                            isLoading = false,
+                                            hasLoaded = true,
+                                            hasLoadError = false,
+                                            allVocabularies = vocabulary.toList()
+                                        )
+                                    )
+                                }
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            if (isCurrentUser(uid)) _uiState.update { it.copy(isLoading = false, hasLoadError = true) }
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    leaveScreen()
+                    val uid = observedUserId
+                    if (uid != null && isCurrentUser(uid)) {
+                        _uiState.update { it.copy(isLoading = false, hasLoadError = true) }
+                    } else {
+                        observedUserId = null
                         userRevision++
                         deletingIdentities.clear()
-                        pronunciationRepository.stop()
-                        observedUserId = uid
-                        _uiState.value = SavedVocabUiState(isLoading = uid != null)
+                        _uiState.value = SavedVocabUiState(isLoading = false, hasLoadError = true)
                     }
-                    if (uid == null) {
-                        _uiState.value = SavedVocabUiState(isLoading = false)
-                        return@collectLatest
-                    }
-                    try {
-                        savedVocabularyRepository.observeSavedVocabularies().collect { vocabulary ->
-                            if (!isCurrentUser(uid)) return@collect
-                            _uiState.update { refresh(it.copy(isLoading = false, hasLoaded = true,
-                                hasLoadError = false, allVocabularies = vocabulary.toList())) }
-                        }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        if (isCurrentUser(uid)) _uiState.update { it.copy(isLoading = false, hasLoadError = true) }
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                leaveScreen()
-                val uid = observedUserId
-                if (uid != null && isCurrentUser(uid)) {
-                    _uiState.update { it.copy(isLoading = false, hasLoadError = true) }
-                } else {
-                    observedUserId = null
-                    userRevision++
-                    deletingIdentities.clear()
-                    _uiState.value = SavedVocabUiState(isLoading = false, hasLoadError = true)
                 }
             }
-        }
     }
 
-    private fun isCurrentUser(uid: String): Boolean = try {
-        observedUserId == uid && authRepository.requireCurrentUserId() == uid
-    } catch (_: IllegalStateException) {
-        false
-    }
+    private fun isCurrentUser(uid: String): Boolean =
+        try {
+            observedUserId == uid && authRepository.requireCurrentUserId() == uid
+        } catch (_: IllegalStateException) {
+            false
+        }
 
     private fun refresh(state: SavedVocabUiState): SavedVocabUiState {
         val excluded = deletingIdentities.toSet()
-        val visible = SavedVocabularyRules.getVisibleItems(state.allVocabularies, excluded, "")
-        return state.copy(visibleCount = visible.size, deletingCount = deletingIdentities.size,
-            filteredVocabularies = SavedVocabularyRules.getVisibleItems(visible, emptySet(), state.searchQuery))
+        val visible =
+            SavedVocabularyRules.getVisibleItems(items = state.allVocabularies, excluded = excluded, query = "")
+        return state.copy(
+            visibleCount = visible.size,
+            deletingCount = deletingIdentities.size,
+            filteredVocabularies =
+                SavedVocabularyRules.getVisibleItems(items = visible, excluded = emptySet(), query = state.searchQuery)
+        )
     }
 }

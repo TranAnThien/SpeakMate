@@ -1,7 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="practice_category_all">All</string>
-    <string name="home_goal_assessment_description">Complete the assessment to unlock the next goal.</string>
     <string name="profile_default_display_name">SpeakMate learner</string>
     <string name="preparation_context_prefix">Context:</string>
     <string name="accessibility_back">Back</string>
@@ -30,7 +29,6 @@
     <string name="placement_a1_assigned_disclaimer">You will start on the A1 path, the lowest level supported. Your confirmation task did not meet all requirements. This is an estimated learning level.</string>
     <string name="placement_criterion_met_feedback">You met this criterion in the confirmation task.</string>
     <string name="placement_criterion_unmet_feedback">Keep practicing this criterion based on your confirmation task.</string>
-    <string name="placement_estimated_level">ESTIMATED SPEAKING LEVEL</string>
     <string name="placement_a2_label">PRE-INTERMEDIATE</string>
     <string name="placement_a1_label">BEGINNER</string>
     <string name="placement_b1_label">INTERMEDIATE</string>
@@ -64,31 +62,8 @@
     <string name="navigation_profile">Profile</string>
     <string name="content_retry">Retry</string>
     <string name="home_unassessed">Not assessed</string>
-    <string name="home_assessment_summary">Complete the initial assessment to open a suitable learning path.</string>
-    <string name="home_assessment_title">Initial level assessment</string>
-    <string name="home_assessment_description">Talk with AI in a short assessment. You can also skip it and start learning later.</string>
-    <string name="home_current_learning">CONTINUE LEARNING</string>
-    <string name="home_current_unit">CURRENT UNIT</string>
     <string name="home_continue_path">Continue learning path</string>
     <string name="home_free_practice">Free practice</string>
-    <string name="home_free_practice_description">Choose a scenario and start a speaking practice call.</string>
-    <string name="home_free_practice_notice">Free practice does not change your level or learning progress.</string>
-    <string name="home_select_scenario">Choose a scenario →</string>
-    <string name="home_path_completed">Your %1$s path is complete</string>
-    <string name="home_path_completed_description">Completing a path does not automatically raise your level. You can assess for %1$s or review the content.</string>
-    <string name="home_reassess">Assess for %1$s</string>
-    <string name="home_review_content">Review content</string>
-    <string name="home_review_description">Review completed units and assessments in your path.</string>
-    <string name="home_view_path">View learning path →</string>
-    <string name="home_highest_level_description">B2 is the highest level currently supported. Your progress is unchanged.</string>
-    <string name="home_loading">Loading your account and progress…</string>
-    <string name="home_error_title">Unable to load information</string>
-    <string name="home_error_description">Check your connection and try again.</string>
-    <string name="home_retry">Retry loading</string>
-    <string name="home_empty_title">No content to display yet</string>
-    <string name="home_empty_description">Your progress will appear here\nafter the data loads successfully.</string>
-    <string name="home_error_dialog_title">Unable to load home</string>
-    <string name="home_error_dialog_description">Check your connection\nand try loading again.</string>
     <string name="training_estimated_level">Estimated speaking level</string>
     <string name="training_goals_heading">GOALS IN YOUR PATH</string>
     <string name="training_current">IN PROGRESS</string>
@@ -142,7 +117,6 @@
     <string name="call_paused">Paused</string>
     <string name="call_resuming">Preparing to resume the call…</string>
     <string name="call_barge_in">Listening to you</string>
-    <string name="call_audio_unclear">Unable to hear you clearly</string>
     <string name="call_timer_after_connection">The timer starts after connection</string>
     <string name="call_return_to_preparation">Back to preparation</string>
     <string name="call_mute">Mute</string>
@@ -219,7 +193,7 @@
     <string name="unit_result_required_actions">Communication requirements</string>
     <string name="unit_result_action_completed">Completed</string>
     <string name="unit_result_action_incomplete">Incomplete</string>
-    <string name="unit_result_retry">Retry task</string>
+    <string name="unit_result_retry">Review lesson</string>
     <string name="unit_result_replay">Practice again</string>
     <string name="unit_result_review">Review lesson</string>
     <string name="unit_result_next">Next</string>
@@ -279,7 +253,6 @@
     <string name="path_completion_a2_notice_title">Next step</string>
     <string name="path_completion_b2_notice_title">Keep practicing</string>
     <string name="path_completion_b2_notice">B2 is the highest level currently supported. You can repeat units, goal assessments or free practice.</string>
-    <string name="promotion_introduction_note">Choose a quiet place and allow microphone access. Each task is a separate call, with no transcript or dictionary tools, and is not saved to History.</string>
     <string name="promotion_insufficient_compact_title">Insufficient assessment data</string>
     <string name="content_reload">Retry loading</string>
     <string name="content_dismiss_notice">Dismiss notice</string>
@@ -293,7 +266,6 @@
     <string name="practice_unconfigured_description">Scenarios are not ready yet. Come back later or continue learning on your path.</string>
     <string name="practice_error_title">Unable to load scenarios</string>
     <string name="practice_error_description">Check your connection and retry loading. You can still return to your learning path.</string>
-    <string name="practice_error_dialog_description">Check your connection and retry loading the list.</string>
     <string name="practice_preparation_header">Roleplay preparation</string>
     <string name="practice_context_heading">Context</string>
     <string name="practice_ai_role_heading">AI role</string>
@@ -625,4 +597,7 @@
     <string name="assessment_recovery_title">Resume your assessment</string>
     <string name="content_back">Back</string>
     <string name="goal_assessment_runtime_feedback">Review the communicative goal and required actions before continuing your practice.</string>
+    <string name="accessibility_expanded">Expanded</string>
+    <string name="accessibility_collapsed">Collapsed</string>
+    <string name="practice_summary_close_transcript">Close</string>
 </resources>

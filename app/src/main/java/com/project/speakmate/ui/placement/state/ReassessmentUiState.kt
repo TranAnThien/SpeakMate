@@ -19,5 +19,6 @@ data class ReassessmentUiState(
     val isSaveFailed: Boolean = false,
     val hasReachedAudioLimit: Boolean = false,
     val pendingGradingReason: InsufficientEvidenceReason? = null,
-    val recoveryProblem: PracticeRecoveryReason? = null
+    val recoveryProblem: PracticeRecoveryReason? = null,
+    val pendingNavigation: ReassessmentNavigation? = null
 )

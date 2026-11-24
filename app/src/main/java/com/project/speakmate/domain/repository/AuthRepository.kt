@@ -4,7 +4,12 @@ import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
     suspend fun signInWithGoogle(idToken: String): Result<String>
+
     suspend fun signOut(): Result<Unit>
+
     fun observeSignedInUserId(): Flow<String?>
+
     fun requireCurrentUserId(): String
+
+    fun isNetworkAvailable(): Boolean
 }

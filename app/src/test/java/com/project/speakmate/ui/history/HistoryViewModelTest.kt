@@ -7,6 +7,7 @@ import com.project.speakmate.domain.model.PendingPracticeCompletion
 import com.project.speakmate.domain.model.PracticeAttempt
 import com.project.speakmate.domain.model.PracticeCompletionStatus
 import com.project.speakmate.domain.model.PracticeHistoryPage
+import com.project.speakmate.domain.model.PracticeHistoryCursor
 import com.project.speakmate.domain.model.PracticeType
 import com.project.speakmate.domain.model.Scenario
 import com.project.speakmate.domain.repository.HistoryRepository
@@ -14,6 +15,7 @@ import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.test.FakeAuthRepository
 import com.project.speakmate.test.MainDispatcherRule
+import com.project.speakmate.ui.history.state.HistoryNavigation
 import com.project.speakmate.ui.history.state.HistoryPresentation
 import com.project.speakmate.ui.history.state.HistoryResultPresentation
 import io.mockk.coEvery
@@ -31,11 +33,13 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -45,7 +49,7 @@ import org.junit.Test
 class HistoryViewModelTest {
 
     @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
+    val mainDispatcherRule = MainDispatcherRule(StandardTestDispatcher())
 
     private val historyListFlow = MutableStateFlow<List<PracticeAttempt>>(emptyList())
     private val viewModelStore = ViewModelStore()
@@ -363,6 +367,75 @@ class HistoryViewModelTest {
         advanceUntilIdle()
         assertTrue(viewModel.uiState.first { it.pendingSessions.isEmpty() }.pendingSessions.isEmpty())
         assertEquals("same", viewModel.uiState.first { it.groups.flatMap { group -> group.sessions }.any { it.id == "same" } }.groups.single().sessions.single().id)
+    }
+
+    @Test
+    fun startPracticeSetsPendingNavigationAndConsumeClearsItOnce() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+        viewModel.uiState.first { !it.isRefreshing }
+
+        viewModel.startPractice()
+        assertEquals(
+            HistoryNavigation.OPEN_TRAINING_PATH,
+            viewModel.uiState.first { it.pendingNavigation == HistoryNavigation.OPEN_TRAINING_PATH }.pendingNavigation
+        )
+        assertEquals(HistoryNavigation.OPEN_TRAINING_PATH, viewModel.consumePendingNavigation())
+        assertNull(viewModel.uiState.first { it.pendingNavigation == null }.pendingNavigation)
+        assertNull(viewModel.consumePendingNavigation())
+
+        viewModel.selectFilter("free_practice")
+        viewModel.uiState.first { it.selectedFilterId == "free_practice" && !it.isRefreshing }
+        viewModel.startPractice()
+        assertEquals(
+            HistoryNavigation.OPEN_PRACTICE,
+            viewModel.uiState.first { it.pendingNavigation == HistoryNavigation.OPEN_PRACTICE }.pendingNavigation
+        )
+        assertEquals(HistoryNavigation.OPEN_PRACTICE, viewModel.consumePendingNavigation())
+        assertNull(viewModel.uiState.first { it.pendingNavigation == null }.pendingNavigation)
+        assertNull(viewModel.consumePendingNavigation())
+    }
+
+    @Test
+    fun paginationMergesDuplicateAttemptsAndFilterResetsCursor() = runTest {
+        val cursor = PracticeHistoryCursor("user-1", null, 1L, 0, "first")
+        coEvery { historyRepository.getPracticeHistoryPage(null, null) } returns Result.success(
+            PracticeHistoryPage(listOf(makeAttempt("first", PracticeType.FREE_PRACTICE)), cursor, true)
+        )
+        coEvery { historyRepository.getPracticeHistoryPage(null, cursor) } returns Result.success(
+            PracticeHistoryPage(listOf(
+                makeAttempt("first", PracticeType.FREE_PRACTICE),
+                makeAttempt("second", PracticeType.TRAINING_UNIT)
+            ))
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        viewModel.retry()
+        viewModel.uiState.first { it.hasMore && !it.isRefreshing }
+        viewModel.loadMore()
+        val page = viewModel.uiState.first { it.groups.sumOf { group -> group.sessions.size } == 2 }
+        assertEquals(listOf("first", "second"), page.groups.flatMap { it.sessions }.map { it.id })
+        assertFalse(page.hasMore)
+        viewModel.selectFilter("training_unit")
+        val filtered = viewModel.uiState.first { it.selectedFilterId == "training_unit" && !it.isRefreshing }
+        assertTrue(filtered.groups.isEmpty())
+        io.mockk.coVerify { historyRepository.getPracticeHistoryPage(PracticeType.TRAINING_UNIT, null) }
+    }
+
+    @Test
+    fun removedPendingRemainsSavingUntilRefreshAcknowledgesIt() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        pendingFlow.value = listOf(pending("bridge", PracticeType.FREE_PRACTICE, PracticeCompletionStatus.SAVING))
+        viewModel.uiState.first { it.pendingSessions.isNotEmpty() }
+        viewModel.uiState.first { !it.isRefreshing }
+        val gate = CompletableDeferred<PracticeHistoryPage>()
+        coEvery { historyRepository.getPracticeHistoryPage(any(), any()) } coAnswers { Result.success(gate.await()) }
+        pendingFlow.value = emptyList()
+        val bridge = viewModel.uiState.first { it.isRefreshing }
+        assertEquals("bridge", bridge.pendingSessions.single().id)
+        assertEquals(PracticeCompletionStatus.SAVING, bridge.pendingSessions.single().status)
+        gate.complete(PracticeHistoryPage(listOf(makeAttempt("bridge", PracticeType.FREE_PRACTICE))))
+        val saved = viewModel.uiState.first { !it.isRefreshing && it.pendingSessions.isEmpty() }
+        assertEquals("bridge", saved.groups.single().sessions.single().id)
     }
 
     private fun pending(id: String, type: PracticeType, status: PracticeCompletionStatus) = PendingPracticeCompletion(

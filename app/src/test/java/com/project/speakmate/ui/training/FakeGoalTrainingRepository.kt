@@ -18,13 +18,8 @@ class FakeGoalTrainingRepository : TrainingRepository {
         return if (exception != null) Result.failure(exception) else Result.success(path)
     }
 
-    override suspend fun getTrainingPathStructure(level: SpeakingLevel) = getTrainingPath(level, true)
-
-    override suspend fun getTrainingGoal(goalId: String) =
-        Result.success(path.goals.first { it.goalId == goalId })
-
-    override suspend fun getTrainingUnit(unitId: String) =
-        Result.success(path.goals.flatMap { it.units }.first { it.unitId == unitId })
+    override suspend fun getTrainingPathStructure(level: SpeakingLevel) =
+        getTrainingPath(level = level, requireServer = true)
 
     override suspend fun getScenario(scenarioId: String, requireServer: Boolean): Result<Scenario> {
         requestedScenarioIds += scenarioId

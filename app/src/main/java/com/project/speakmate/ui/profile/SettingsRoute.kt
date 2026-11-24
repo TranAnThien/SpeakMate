@@ -14,23 +14,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.speakmate.R
 import com.project.speakmate.domain.model.AppLanguage
-import com.project.speakmate.ui.profile.state.SettingsEffect
 
 @Composable
-fun SettingsRoute(
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    viewModel: SettingsViewModel = hiltViewModel()
-) {
+fun SettingsRoute(onBack: () -> Unit, modifier: Modifier = Modifier, viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(viewModel, lifecycleOwner, activity) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            viewModel.uiEffect.collect { effect ->
-                when (effect) {
-                    SettingsEffect.RecreateActivity -> activity?.recreate()
-                }
+    LaunchedEffect(state.isRecreateRequired, viewModel, lifecycleOwner, activity) {
+        if (state.isRecreateRequired && activity != null) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                if (viewModel.consumeRecreateRequired()) activity.recreate()
             }
         }
     }
@@ -38,9 +31,12 @@ fun SettingsRoute(
     BackHandler(enabled = state.isLanguageSelectionVisible, onBack = viewModel::hideLanguageSelection)
     SettingsScreen(
         state = state,
-        languageLabel = stringResource(if (state.selectedLanguage == AppLanguage.ENGLISH)
-            R.string.settings_language_english else R.string.settings_language_vietnamese),
-        onBack = { if (!viewModel.uiState.value.isSigningOut) onBack() },
+        languageLabel =
+            stringResource(
+                if (state.selectedLanguage == AppLanguage.ENGLISH) R.string.settings_language_english
+                else R.string.settings_language_vietnamese
+            ),
+        onBack = { if (!state.isSigningOut) onBack() },
         onSelectLanguage = viewModel::showLanguageNotice,
         onOpenPrivacyPolicy = viewModel::showPrivacyNotice,
         onOpenTerms = viewModel::showTermsNotice,
