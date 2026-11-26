@@ -242,10 +242,31 @@ constructor(
                             Timestamp(cursor.startedAtSeconds, cursor.startedAtNanoseconds),
                             cursor.attemptId
                         )
-                val snapshot = paged.limit(HISTORY_PAGE_SIZE.toLong()).get(Source.SERVER).await()
+                var usedFallback = false
+                val snapshot =
+                    try {
+                        paged.limit(HISTORY_PAGE_SIZE.toLong()).get(Source.SERVER).await()
+                    } catch (e: FirebaseFirestoreException) {
+                        if (e.code == FirebaseFirestoreException.Code.FAILED_PRECONDITION && practiceType != null) {
+                            Log.w(TAG, "Missing composite index for practiceType $practiceType, falling back to all-type query", e)
+                            usedFallback = true
+                            val fallbackQuery = getHistoryQuery(uid, null)
+                            val fallbackPaged =
+                                if (cursor == null) fallbackQuery
+                                else
+                                    fallbackQuery.startAfter(
+                                        Timestamp(cursor.startedAtSeconds, cursor.startedAtNanoseconds),
+                                        cursor.attemptId
+                                    )
+                            fallbackPaged.limit(HISTORY_PAGE_SIZE.toLong()).get(Source.SERVER).await()
+                        } else throw e
+                    }
                 check(authDataSource.requireCurrentUserId() == uid)
                 if (!snapshot.metadata.isServerConfirmed()) throw HistoryReadException(HistoryReadFailure.NETWORK)
-                toHistoryPage(snapshot = snapshot, userId = uid, practiceType = practiceType)
+                val page = toHistoryPage(snapshot = snapshot, userId = uid, practiceType = practiceType)
+                if (usedFallback && practiceType != null) {
+                    page.copy(attempts = page.attempts.filter { it.practiceType == practiceType })
+                } else page
             }
                 .fold(
                     onSuccess = { Result.success(it) },
