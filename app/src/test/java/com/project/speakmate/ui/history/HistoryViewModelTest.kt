@@ -184,7 +184,7 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun defaultFiltersHasThreeFilters() = runTest {
+    fun defaultFiltersHasFourFilters() = runTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         historyListFlow.value = emptyList()
         viewModel.retry()
@@ -196,6 +196,39 @@ class HistoryViewModelTest {
         assertEquals("training_unit", state.filters[1].id)
         assertEquals("goal_assessment", state.filters[2].id)
         assertEquals("free_practice", state.filters[3].id)
+    }
+
+    @Test
+    fun switchingTabsReusesPagingCacheWithoutCallingRepositoryAgain() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        val attempts = listOf(
+            makeAttempt("1", PracticeType.FREE_PRACTICE, null),
+            makeAttempt("2", PracticeType.TRAINING_UNIT, AssessmentResult.PASS)
+        )
+        historyListFlow.value = attempts
+        viewModel.retry()
+
+        // Tab "all" loaded once
+        viewModel.uiState.first { it.presentation == HistoryPresentation.POPULATED }
+        io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(null, null) }
+
+        // Switch to "training_unit" (Tab B) -> loads once
+        viewModel.selectFilter("training_unit")
+        viewModel.uiState.first { it.selectedFilterId == "training_unit" && it.presentation == HistoryPresentation.POPULATED }
+        io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(PracticeType.TRAINING_UNIT, null) }
+
+        // Switch back to "all" (Tab A) -> reuses cache, repository NOT called again
+        viewModel.selectFilter("all")
+        val stateAll = viewModel.uiState.first { it.selectedFilterId == "all" && it.presentation == HistoryPresentation.POPULATED }
+        assertEquals("all", stateAll.selectedFilterId)
+        assertEquals(HistoryPresentation.POPULATED, stateAll.presentation)
+        io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(null, null) }
+
+        // Switch back to "training_unit" (Tab B) -> reuses cache, repository NOT called again
+        viewModel.selectFilter("training_unit")
+        val stateTu = viewModel.uiState.first { it.selectedFilterId == "training_unit" && it.presentation == HistoryPresentation.POPULATED }
+        assertEquals("training_unit", stateTu.selectedFilterId)
+        io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(PracticeType.TRAINING_UNIT, null) }
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.project.speakmate.domain.repository.HistoryRepository
 import com.project.speakmate.domain.repository.PracticeCompletionRepository
 import com.project.speakmate.domain.repository.PracticeRepository
 import com.project.speakmate.domain.rules.PracticeHistoryRules
+import com.project.speakmate.ui.history.state.HistoryGroupUiState
 import com.project.speakmate.ui.history.state.HistoryNavigation
 import com.project.speakmate.ui.history.state.HistoryPresentation
 import com.project.speakmate.ui.history.state.HistoryUiState
@@ -51,7 +52,22 @@ constructor(
         private const val TITLE_TIMEOUT_MILLIS = 3_000L
     }
 
-    private var paging = PagingState()
+    private data class TabPagingCache(
+        val attempts: List<PracticeAttempt> = emptyList(),
+        val nextCursor: PracticeHistoryCursor? = null,
+        val hasMore: Boolean = false,
+        val isLoaded: Boolean = false,
+        val groups: List<HistoryGroupUiState> = emptyList()
+    )
+
+    private val tabCaches = mutableMapOf<String, TabPagingCache>()
+    private val scenarioTitles = mutableMapOf<String, String>()
+    private var previousPending = emptyList<PendingPracticeCompletion>()
+    private val pendingBridge = linkedMapOf<String, PendingPracticeCompletion>()
+    private var historyGeneration = 0
+    private var pageJob: Job? = null
+    private var titlesJob: Job? = null
+    private var shouldRefreshPending = false
 
     private val savedState = MutableStateFlow(
         HistoryUiState(presentation = HistoryPresentation.LOADING, filters = HistoryUiMapper.defaultFilters())
@@ -86,10 +102,10 @@ constructor(
                     authRepository.observeSignedInUserId().distinctUntilChanged().collectLatest { uid ->
                         try {
                             hasObserverError = false
-                            paging.historyGeneration++
-                            paging.pageJob?.cancel()
-                            paging.titlesJob?.cancel()
-                            paging = PagingState(historyGeneration = paging.historyGeneration)
+                            historyGeneration++
+                            pageJob?.cancel()
+                            titlesJob?.cancel()
+                            tabCaches.clear()
                             currentUserId = uid
                             pending.value = emptyList()
                             pendingDiscardId.value = null
@@ -104,15 +120,17 @@ constructor(
                             completionRepository.observePendingCompletions().collect { latest ->
                                 if (!isCurrentUser(uid)) return@collect
                                 val removed =
-                                    paging.previousPending.filter { previous ->
+                                    previousPending.filter { previous ->
                                         latest.none { it.attemptId == previous.attemptId }
                                     }
-                                val bridge = PracticeHistoryRules.getPendingBridge(removed, paging.attempts)
-                                paging.previousPending = latest.toList()
-                                bridge.forEach { paging.pendingBridge[it.attemptId] = it }
-                                pending.value = (latest + paging.pendingBridge.values).distinctBy { it.attemptId }
+                                val currentAttempts = tabCaches[savedState.value.selectedFilterId]?.attempts.orEmpty()
+                                val bridge = PracticeHistoryRules.getPendingBridge(removed, currentAttempts)
+                                previousPending = latest.toList()
+                                bridge.forEach { pendingBridge[it.attemptId] = it }
+                                pending.value = (latest + pendingBridge.values).distinctBy { it.attemptId }
                                 if (removed.isNotEmpty()) {
-                                    paging.shouldRefreshPending = true
+                                    shouldRefreshPending = true
+                                    tabCaches.clear()
                                     if (isStarted && !savedState.value.isRefreshing) retry()
                                 }
                             }
@@ -132,13 +150,15 @@ constructor(
 
     private fun showObserverError() {
         hasObserverError = true
-        paging.historyGeneration++
-        paging.pageJob?.cancel()
-        paging.titlesJob?.cancel()
+        historyGeneration++
+        pageJob?.cancel()
+        titlesJob?.cancel()
         pending.value = emptyList()
+        tabCaches.clear()
         savedState.value = HistoryUiState(
             presentation = HistoryPresentation.LOAD_ERROR,
-            filters = HistoryUiMapper.defaultFilters()
+            filters = HistoryUiMapper.defaultFilters(),
+            selectedFilterId = AppConstant.HISTORY_FILTER_ALL
         )
     }
 
@@ -150,9 +170,9 @@ constructor(
 
     fun onStopped() {
         isStarted = false
-        paging.historyGeneration++
-        paging.pageJob?.cancel()
-        paging.titlesJob?.cancel()
+        historyGeneration++
+        pageJob?.cancel()
+        titlesJob?.cancel()
         savedState.update { it.copy(isRefreshing = false, isLoadingMore = false) }
     }
 
@@ -160,21 +180,43 @@ constructor(
         if (HistoryUiMapper.defaultFilters().none { it.id == filterId } ||
             savedState.value.selectedFilterId == filterId)
             return
-        paging.historyGeneration++
-        paging.pageJob?.cancel()
-        paging.titlesJob?.cancel()
-        paging.attempts = emptyList()
-        paging.nextCursor = null
-        paging.hasLoadedHistory = false
-        savedState.update {
-            HistoryUiState(
-                presentation = HistoryPresentation.LOADING,
-                filters = HistoryUiMapper.defaultFilters(),
-                selectedFilterId = filterId,
-                refreshVersion = it.refreshVersion
-            )
+
+        historyGeneration++
+        pageJob?.cancel()
+        titlesJob?.cancel()
+
+        val cached = tabCaches[filterId]
+        if (cached != null && cached.isLoaded) {
+            savedState.update {
+                HistoryUiState(
+                    presentation =
+                        if (cached.attempts.isEmpty() && !cached.hasMore) HistoryPresentation.EMPTY
+                        else HistoryPresentation.POPULATED,
+                    filters = HistoryUiMapper.defaultFilters(),
+                    selectedFilterId = filterId,
+                    groups = cached.groups,
+                    refreshVersion = it.refreshVersion,
+                    hasMore = cached.hasMore,
+                    isRefreshing = false,
+                    isLoadingMore = false,
+                    hasRefreshError = false,
+                    hasLoadMoreError = false
+                )
+            }
+            currentUserId?.let { uid ->
+                resolveTitles(uid = uid, generation = historyGeneration, shouldRefresh = false)
+            }
+        } else {
+            savedState.update {
+                HistoryUiState(
+                    presentation = HistoryPresentation.LOADING,
+                    filters = HistoryUiMapper.defaultFilters(),
+                    selectedFilterId = filterId,
+                    refreshVersion = it.refreshVersion
+                )
+            }
+            retry()
         }
-        retry()
     }
 
     fun clearFilter() = selectFilter(AppConstant.HISTORY_FILTER_ALL)
@@ -190,12 +232,13 @@ constructor(
 
     fun confirmDiscard() {
         val id = uiState.value.pendingDiscardId ?: return
-        paging.previousPending = paging.previousPending.filterNot { it.attemptId == id }
+        previousPending = previousPending.filterNot { it.attemptId == id }
         completionRepository.discardCompletion(id)
         pendingDiscardId.value = null
     }
 
     fun reload() {
+        tabCaches.clear()
         savedState.update { it.copy(refreshVersion = it.refreshVersion + 1) }
         retry()
     }
@@ -232,24 +275,27 @@ constructor(
         val uid = currentUserId ?: return
         val before = savedState.value
         if (!isStarted || !isCurrentUser(uid)) return
-        if (!isRefresh && (!before.hasMore || before.isLoadingMore || before.isRefreshing || before.hasRefreshError))
+        val filterId = before.selectedFilterId
+        val currentTab = tabCaches[filterId]
+        if (!isRefresh && (currentTab == null || !currentTab.hasMore || before.isLoadingMore || before.isRefreshing || before.hasRefreshError))
             return
         if (isRefresh && before.isRefreshing) return
-        val cursor = if (isRefresh) null else paging.nextCursor ?: return
-        val bridgeAtRequest = paging.pendingBridge.keys.toSet()
-        val type = HistoryUiMapper.getPracticeType(before.selectedFilterId)
-        paging.pageJob?.cancel()
-        paging.titlesJob?.cancel()
-        val generation = ++paging.historyGeneration
-        if (isRefresh) paging.shouldRefreshPending = false
+        val cursor = if (isRefresh) null else currentTab?.nextCursor ?: return
+        val bridgeAtRequest = pendingBridge.keys.toSet()
+        val type = HistoryUiMapper.getPracticeType(filterId)
+        pageJob?.cancel()
+        titlesJob?.cancel()
+        val generation = ++historyGeneration
+        if (isRefresh) shouldRefreshPending = false
         savedState.update {
-            HistoryUiMapper.toPageLoading(state = it, hasLoadedHistory = paging.hasLoadedHistory, isRefresh = isRefresh)
+            HistoryUiMapper.toPageLoading(state = it, hasLoadedHistory = currentTab?.isLoaded == true, isRefresh = isRefresh)
         }
-        paging.pageJob =
+        pageJob =
             viewModelScope.launch {
                 try {
                     readPageResult(
                         uid = uid,
+                        filterId = filterId,
                         type = type,
                         cursor = cursor,
                         generation = generation,
@@ -261,25 +307,29 @@ constructor(
                 } catch (_: Exception) {
                     showPageError(uid = uid, generation = generation, isRefresh = isRefresh)
                 } finally {
-                    if (generation == paging.historyGeneration && paging.shouldRefreshPending && isStarted) retry()
+                    if (generation == historyGeneration && shouldRefreshPending && isStarted) retry()
                 }
             }
     }
 
     private fun showPageError(uid: String, generation: Int, isRefresh: Boolean) {
-        if (generation == paging.historyGeneration && isCurrentUser(uid))
+        val filterId = savedState.value.selectedFilterId
+        val currentTab = tabCaches[filterId]
+        val hasLoaded = currentTab?.isLoaded == true
+        if (generation == historyGeneration && isCurrentUser(uid))
             savedState.update {
                 HistoryUiMapper.toPageFailure(
                     state = it,
-                    hasLoadedHistory = paging.hasLoadedHistory,
+                    hasLoadedHistory = hasLoaded,
                     isRefresh = isRefresh
                 )
             }
-        paging.shouldRefreshPending = false
+        shouldRefreshPending = false
     }
 
     private suspend fun readPageResult(
         uid: String,
+        filterId: String,
         type: PracticeType?,
         cursor: PracticeHistoryCursor?,
         generation: Int,
@@ -288,42 +338,54 @@ constructor(
     ) {
         val page = historyRepository.getPracticeHistoryPage(type, cursor).getOrThrow()
         currentCoroutineContext().ensureActive()
-        if (generation != paging.historyGeneration || !isCurrentUser(uid)) return
+        if (generation != historyGeneration || !isCurrentUser(uid)) return
+        val currentTab = tabCaches[filterId]
+        val previousAttempts = if (isRefresh) emptyList() else currentTab?.attempts.orEmpty()
         val merged = PracticeHistoryRules.mergePage(
-            attempts = paging.attempts,
+            attempts = previousAttempts,
             page = page,
             cursor = cursor,
             isRefresh = isRefresh
         )
-        val groups = HistoryUiMapper.toGroups(merged.attempts, paging.scenarioTitles)
-        if (generation != paging.historyGeneration || !isCurrentUser(uid)) return
-        paging.attempts = merged.attempts
-        paging.nextCursor = merged.nextCursor
-        paging.hasLoadedHistory = true
-        savedState.update {
-            HistoryUiMapper.toPageLoaded(
-                state = it,
-                page = merged,
-                groups = groups,
-                isPageEmpty = page.attempts.isEmpty()
-            )
+        val groups = HistoryUiMapper.toGroups(merged.attempts, scenarioTitles)
+        if (generation != historyGeneration || !isCurrentUser(uid)) return
+
+        tabCaches[filterId] = TabPagingCache(
+            attempts = merged.attempts,
+            nextCursor = merged.nextCursor,
+            hasMore = merged.hasMore,
+            isLoaded = true,
+            groups = groups
+        )
+
+        if (savedState.value.selectedFilterId == filterId) {
+            savedState.update {
+                HistoryUiMapper.toPageLoaded(
+                    state = it,
+                    page = merged,
+                    groups = groups,
+                    isPageEmpty = page.attempts.isEmpty()
+                )
+            }
         }
         if (isRefresh) {
-            bridgeAtRequest.forEach(paging.pendingBridge::remove)
+            bridgeAtRequest.forEach(pendingBridge::remove)
             pending.value =
-                (paging.previousPending + paging.pendingBridge.values).distinctBy { it.attemptId }
+                (previousPending + pendingBridge.values).distinctBy { it.attemptId }
         }
         resolveTitles(uid = uid, generation = generation, shouldRefresh = isRefresh)
     }
 
     private fun resolveTitles(uid: String, generation: Int, shouldRefresh: Boolean) {
-        paging.titlesJob =
+        val filterId = savedState.value.selectedFilterId
+        val currentTab = tabCaches[filterId] ?: return
+        titlesJob =
             viewModelScope.launch {
-                paging.attempts
+                currentTab.attempts
                     .map { it.scenarioId }
                     .filter(String::isNotBlank)
                     .distinct()
-                    .filter { shouldRefresh || it !in paging.scenarioTitles }
+                    .filter { shouldRefresh || it !in scenarioTitles }
                     .chunked(TITLE_CONCURRENCY)
                     .forEach { batch ->
                         val titles = coroutineScope {
@@ -349,11 +411,15 @@ constructor(
                                 }
                                 .awaitAll()
                         }
-                        if (generation != paging.historyGeneration || !isCurrentUser(uid)) return@launch
-                        titles.forEach { (id, title) -> if (title != null) paging.scenarioTitles[id] = title }
-                        val groups = HistoryUiMapper.toGroups(paging.attempts, paging.scenarioTitles)
-                        if (generation != paging.historyGeneration || !isCurrentUser(uid)) return@launch
-                        savedState.update { it.copy(groups = groups) }
+                        if (generation != historyGeneration || !isCurrentUser(uid)) return@launch
+                        titles.forEach { (id, title) -> if (title != null) scenarioTitles[id] = title }
+                        val activeTab = tabCaches[filterId] ?: return@launch
+                        val groups = HistoryUiMapper.toGroups(activeTab.attempts, scenarioTitles)
+                        if (generation != historyGeneration || !isCurrentUser(uid)) return@launch
+                        tabCaches[filterId] = activeTab.copy(groups = groups)
+                        if (savedState.value.selectedFilterId == filterId) {
+                            savedState.update { it.copy(groups = groups) }
+                        }
                     }
             }
     }
@@ -378,16 +444,4 @@ constructor(
         } catch (_: IllegalStateException) {
             false
         }
-
-    private class PagingState(var historyGeneration: Int = 0) {
-        val scenarioTitles = mutableMapOf<String, String>()
-        var previousPending = emptyList<PendingPracticeCompletion>()
-        val pendingBridge = linkedMapOf<String, PendingPracticeCompletion>()
-        var attempts = emptyList<PracticeAttempt>()
-        var nextCursor: PracticeHistoryCursor? = null
-        var pageJob: Job? = null
-        var titlesJob: Job? = null
-        var hasLoadedHistory = false
-        var shouldRefreshPending = false
-    }
 }
