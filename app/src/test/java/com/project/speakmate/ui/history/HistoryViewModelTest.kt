@@ -207,29 +207,27 @@ class HistoryViewModelTest {
         )
         historyListFlow.value = attempts
         viewModel.retry()
-        advanceUntilIdle()
 
         // Tab "all" loaded once
-        assertEquals(HistoryPresentation.POPULATED, viewModel.uiState.value.presentation)
+        viewModel.uiState.first { it.presentation == HistoryPresentation.POPULATED }
         io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(null, null) }
 
         // Switch to "training_unit" (Tab B) -> loads once
         viewModel.selectFilter("training_unit")
-        advanceUntilIdle()
-        assertEquals("training_unit", viewModel.uiState.value.selectedFilterId)
+        viewModel.uiState.first { it.selectedFilterId == "training_unit" && it.presentation == HistoryPresentation.POPULATED }
         io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(PracticeType.TRAINING_UNIT, null) }
 
         // Switch back to "all" (Tab A) -> reuses cache, repository NOT called again
         viewModel.selectFilter("all")
-        advanceUntilIdle()
-        assertEquals("all", viewModel.uiState.value.selectedFilterId)
-        assertEquals(HistoryPresentation.POPULATED, viewModel.uiState.value.presentation)
+        val stateAll = viewModel.uiState.first { it.selectedFilterId == "all" && it.presentation == HistoryPresentation.POPULATED }
+        assertEquals("all", stateAll.selectedFilterId)
+        assertEquals(HistoryPresentation.POPULATED, stateAll.presentation)
         io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(null, null) }
 
         // Switch back to "training_unit" (Tab B) -> reuses cache, repository NOT called again
         viewModel.selectFilter("training_unit")
-        advanceUntilIdle()
-        assertEquals("training_unit", viewModel.uiState.value.selectedFilterId)
+        val stateTu = viewModel.uiState.first { it.selectedFilterId == "training_unit" && it.presentation == HistoryPresentation.POPULATED }
+        assertEquals("training_unit", stateTu.selectedFilterId)
         io.mockk.coVerify(exactly = 1) { historyRepository.getPracticeHistoryPage(PracticeType.TRAINING_UNIT, null) }
     }
 
